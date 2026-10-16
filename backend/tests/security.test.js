@@ -1,0 +1,56 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createPrivacy, hashPassword, verifyPassword, tokenHash, newToken } from '../src/security/crypto.js';
+import { assertPermission, stationScope, assertAssignable } from '../src/security/access.js';
+import { loadEnv } from '../src/config/env.js';
+import { period } from '../src/shared/validation.js';
+import { env, actor } from './fixtures.js';
+
+test('scrypt usa sal y rechaza contraseñas incorrectas o formatos desconocidos', async () => {
+  const password = 'A-valid-test-password', encoded = await hashPassword(password);
+  assert(!encoded.includes(password));
+  assert.equal(await verifyPassword(password, encoded), true);
+  assert.equal(await verifyPassword('wrong', encoded), false);
+  assert.equal(await verifyPassword(password, password), false);
+  assert.notEqual(encoded, await hashPassword(password));
+});
+test('datos personales cifrados, autenticados y separados por campo', () => {
+  const privacy = createPrivacy(env), value = 'persona@example.com';
+  const encrypted = privacy.encrypt(value, 'email');
+  assert(!encrypted.includes(value));
+  assert.equal(privacy.decrypt(encrypted, 'email'), value);
+  assert.notEqual(privacy.encrypt(value, 'email'), encrypted);
+  assert.throws(() => privacy.decrypt(encrypted, 'dni'));
+  const bytes = Buffer.from(encrypted.slice(7), 'base64'); bytes[15] ^= 1;
+  assert.throws(() => privacy.decrypt(`enc:v1:${bytes.toString('base64')}`, 'email'));
+  assert.notEqual(privacy.hash(value, 'email'), privacy.hash(value, 'dni'));
+  assert.equal(privacy.hash(value, 'email'), privacy.hash(value, 'email'));
+});
+test('tokens aleatorios con hash persistible', () => {
+  const token = newToken();
+  assert.match(token, /^[\w-]{43}$/);
+  assert.notEqual(token, newToken());
+  assert.match(tokenHash(token), /^[a-f\d]{64}$/);
+  assert.notEqual(tokenHash(token), token);
+});
+test('alcance nulo de cliente/empleado no habilita acceso global', () => {
+  assert.equal(stationScope(actor('dueno')), null);
+  assert.equal(stationScope(actor('secretario'), '99'), '99');
+  assert.equal(stationScope(actor('encargado')), '10');
+  assert.throws(() => stationScope(actor('encargado'), '11'), { status: 403 });
+  assert.throws(() => stationScope(actor('cliente', { stationId: null })), { status: 403 });
+  assert.throws(() => assertPermission(actor('dueno'), 'photos.upload'), { status: 403 });
+  assert.throws(() => assertAssignable(actor('encargado'), 'dueno', '10'), { status: 403 });
+  assert.throws(() => assertAssignable(actor('encargado'), 'vendedor', '11'), { status: 403 });
+});
+test('validación rechaza fechas falsas, períodos invertidos e identificadores maliciosos', () => {
+  const base = { from: '2026-10-14', to: '2026-10-15' };
+  assert.equal(period.safeParse(base).success, true);
+  for (const input of [{ ...base, from: '2026-02-30' }, { ...base, to: '2026-10-01' },
+    { ...base, stationId: '1 OR 1=1' }, { ...base, limit: 101 }, { ...base, to: '2028-01-01' }])
+    assert.equal(period.safeParse(input).success, false);
+});
+test('configuración falla sin claves independientes y no revela sus valores', () => {
+  assert.throws(() => loadEnv({ ...env, DATA_ENCRYPTION_KEY: 'secret-value' }), error => !error.message.includes('secret-value'));
+  assert.throws(() => loadEnv({ ...env, LOOKUP_HASH_KEY: env.DATA_ENCRYPTION_KEY }));
+});
