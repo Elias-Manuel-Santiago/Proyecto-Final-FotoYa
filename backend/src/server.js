@@ -1,12 +1,11 @@
 import { createApp } from './app.js';
-import { loadEnv } from './config/env.js';
-import { createDatabase } from './config/database.js';
+import { env } from './config/env.js';
+import { db } from './config/database.js';
 
-const env = loadEnv(), db = createDatabase(env);
 try {
   const [[row]] = await db.query("SELECT COUNT(*) AS count FROM usuarios WHERE nombre LIKE 'enc:v1:%' OR apellido LIKE 'enc:v1:%' OR email LIKE 'enc:v1:%' OR dni LIKE 'enc:v1:%' OR password NOT LIKE 'scrypt$%'");
   if (Number(row.count)) throw new Error('Ejecutá npm run db:migrate para actualizar los datos y hashear las contraseñas.');
-  const app = await createApp({ db, env });
+  const app = createApp();
   const server = app.listen(env.PORT, env.HOST, () => console.log(`Foto Ya disponible en http://${env.HOST}:${env.PORT}`));
   const stop = () => {
     server.close(async () => { await db.end(); process.exit(0); });

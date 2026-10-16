@@ -1,11 +1,15 @@
-import type { AppData, Employee, EmployeeInput } from '../../domain/models';
-import { operationId } from '../../domain/format';
+import type {
+  AppData,
+  Employee,
+  EmployeeInput,
+} from '../../../src/domain/models';
+import { operationId } from '../../../src/domain/format';
 import {
   assignableRoles,
   requirePermission,
   requireStation,
-} from '../../domain/permissions';
-import { validateEmployee } from '../../domain/validation';
+} from '../../../src/domain/permissions';
+import { validateEmployee } from '../../../src/domain/validation';
 
 export function saveEmployee(
   data: AppData,

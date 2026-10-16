@@ -1,12 +1,15 @@
-import { businessDate } from '../../domain/dates';
-import { errorMessage, operationId } from '../../domain/format';
+import { businessDate } from '../../../src/domain/dates';
+import { errorMessage, operationId } from '../../../src/domain/format';
 import type {
   AppData,
   Employee,
   PhotoFile,
   UploadResult,
-} from '../../domain/models';
-import { requirePermission, requireStation } from '../../domain/permissions';
+} from '../../../src/domain/models';
+import {
+  requirePermission,
+  requireStation,
+} from '../../../src/domain/permissions';
 
 export function uploadPhotos(
   data: AppData,

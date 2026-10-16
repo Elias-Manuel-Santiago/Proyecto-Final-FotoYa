@@ -36,7 +36,7 @@ export function EmployeeForm({
 
   function save() {
     void action.run(async () => {
-      await repository.saveEmployee(employee.id, input);
+      await repository.saveEmployee(input);
       if (input.id === employee.id) {
         await logout().catch(() => undefined);
       } else await refresh();

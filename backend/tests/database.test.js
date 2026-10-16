@@ -1,9 +1,10 @@
-import test from 'node:test';
+import test, { mock, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import mysql from 'mysql2';
-import { createDatabase } from '../src/config/database.js';
+import { env as runtimeEnv } from '../src/config/env.js';
+import { db as sharedDb } from '../src/config/database.js';
 import { loadEnv } from '../src/config/env.js';
 import { transaction } from '../src/shared/transaction.js';
 import { env } from './fixtures.js';
@@ -54,10 +55,13 @@ for (const limit of [1, 2]) {
     });
     server.listen(0, '127.0.0.1');
     await once(server._server, 'listening');
-    db = createDatabase({
+    Object.assign(runtimeEnv, {
       ...env, DB_HOST: '127.0.0.1', DB_PORT: server._server.address().port,
       DB_SSL_CA_PATH: undefined, DB_CONNECTION_LIMIT: limit, DB_IDLE_TIMEOUT_MS: 50,
     });
+    ({ db } = await import(`../src/config/database.js?limit=${limit}`));
+    const replacement = mock.method(sharedDb, 'getConnection', () => db.getConnection());
+    t.after(() => replacement.mock.restore());
 
     const held = await Promise.all(Array.from({ length: limit }, () => db.getConnection()));
     const queued = once(db, 'enqueue');
@@ -71,8 +75,8 @@ for (const limit of [1, 2]) {
     for (const connection of held) connection.release();
 
     await assert.rejects(db.query('FAIL'), { code: 'ER_PARSE_ERROR' });
-    await assert.rejects(transaction(db, connection => connection.query('FAIL')), { code: 'ER_PARSE_ERROR' });
-    await transaction(db, connection => connection.query('SELECT 1'));
+    await assert.rejects(transaction(connection => connection.query('FAIL')), { code: 'ER_PARSE_ERROR' });
+    await transaction(connection => connection.query('SELECT 1'));
     assert.equal(opened, limit);
     assert.equal(peak, limit);
 
@@ -84,3 +88,5 @@ for (const limit of [1, 2]) {
     assert.equal(opened, limit + 1, 'queries reconnect after idle cleanup');
   });
 }
+
+after(() => sharedDb.end());

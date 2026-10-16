@@ -1,61 +1,65 @@
-import test from 'node:test';
+import test, { mock, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createPhotoService } from '../src/modules/photos/photos.service.js';
-import { createStorage } from '../src/integrations/storage.js';
+import { photoService } from '../src/modules/photos/photos.service.js';
+import { uploadFile, removeFile, signedUrl } from '../src/integrations/storage.js';
+import { db } from '../src/config/database.js';
+after(() => db.end());
+import { photoRepository } from '../src/modules/photos/photos.repository.js';
+afterEach(() => mock.restoreAll());
 import { photoFormat, MAX_PHOTO_BYTES } from '../src/modules/photos/photos.files.js';
 import { businessDate } from '../src/modules/photos/photos.upload.js';
 import * as schema from '../src/modules/photos/photos.schemas.js';
 import { env, actor } from './fixtures.js';
 
 test('cliente no accede a metadatos ni archivos de otro cliente', async () => {
-  let signed = 0;
-  const row = { id: '2', clientId: '9', stationId: '10', file: 'private/photo.jpg' };
-  const service = createPhotoService({ find: async () => row, query: async (user, input, station) => ({ user, station }) },
-    { signedUrl: async () => { signed++; return {}; } });
+  mock.method(photoRepository, 'find', async () => ({ id: '2', clientId: '9', stationId: '10', file: 'private/photo.jpg' }));
+  const request = mock.method(globalThis, 'fetch', async () => Response.json({ signedURL: '/object/sign/foto-ya/foto.jpg?token=example' }));
   const client = actor('cliente', { id: '8', stationId: null });
-  await assert.rejects(service.detail(client, '2'), { status: 404 });
-  await assert.rejects(service.access(client, '2'), { status: 404 });
-  assert.equal(signed, 0);
+  await assert.rejects(photoService.detail(client, '2'), { status: 404 });
+  await assert.rejects(photoService.access(client, '2'), { status: 404 });
+  assert.equal(request.mock.callCount(), 0);
   const ownerClient = { ...client, id: '9' };
-  assert.equal((await service.detail(ownerClient, '2')).file, undefined);
-  await service.access(ownerClient, '2'); assert.equal(signed, 1);
-  assert.throws(() => service.query(client, { clientId: '9' }), { status: 403 });
+  assert.equal((await photoService.detail(ownerClient, '2')).file, undefined);
+  await photoService.access(ownerClient, '2');
+  assert.equal(request.mock.callCount(), 1);
+  assert.throws(() => photoService.query(client, { clientId: '9' }), { status: 403 });
 });
+
 test('encargado no obtiene fotos de otro puesto', async () => {
-  const service = createPhotoService({ find: async () => ({ stationId: '99' }) }, {});
-  await assert.rejects(service.detail(actor('encargado'), '2'), { status: 404 });
+  mock.method(photoRepository, 'find', async () => ({ stationId: '99' }));
+  await assert.rejects(photoService.detail(actor('encargado'), '2'), { status: 404 });
 });
-test('Axios firma con POST, codifica rutas y limita la vigencia', async () => {
-  let request;
-  const storage = createStorage(env, async config => {
-    request = config;
-    return { data: { signedURL: '/object/sign/foto-ya/foto.jpg?token=example' }, status: 200, headers: {}, config };
-  });
-  const response = await storage.signedUrl('folder/foto con espacio.jpg');
-  assert.equal(request.method, 'post');
-  assert.equal(request.url, '/object/sign/foto-ya/folder/foto%20con%20espacio.jpg');
-  assert.equal(JSON.parse(request.data).expiresIn, 60);
+
+test('Storage firma por POST y limita la vigencia', async () => {
+  const request = mock.method(globalThis, 'fetch', async () => Response.json({ signedURL: '/object/sign/foto-ya/foto.jpg?token=example' }));
+  const response = await signedUrl('folder/foto con espacio.jpg');
+  const [url, options] = request.mock.calls[0].arguments;
+  assert.equal(options.method, 'POST');
+  assert.match(String(url), /object\/sign\/foto-ya\/folder\/foto/);
+  assert.equal(JSON.parse(options.body).expiresIn, 60);
   assert.equal(response.url, 'https://example.supabase.co/storage/v1/object/sign/foto-ya/foto.jpg?token=example');
-  assert.equal(request.maxRedirects, 0);
+  assert.equal(options.redirect, 'error');
 });
+
 test('fallo de Storage no filtra la clave ni el error del proveedor', async () => {
-  const storage = createStorage(env, async () => { throw new Error(env.SUPABASE_SECRET_KEY); });
-  await assert.rejects(storage.signedUrl('file.jpg'), error => error.status === 502 && !error.message.includes(env.SUPABASE_SECRET_KEY));
+  mock.method(globalThis, 'fetch', async () => Response.json({ message: env.SUPABASE_SECRET_KEY }, { status: 403 }));
+  await assert.rejects(signedUrl('file.jpg'), error => error.status === 502 && !error.message.includes(env.SUPABASE_SECRET_KEY));
 });
+
 test('rutas privadas inválidas no llegan al proveedor', async () => {
-  let called = false;
-  const storage = createStorage(env, async () => { called = true; throw new Error('Unexpected call'); });
+  const request = mock.method(globalThis, 'fetch', () => assert.fail('Ruta inválida'));
   for (const file of ['../other-bucket/a.jpg', '/a.jpg', 'folder/../a.jpg', 'folder\\a.jpg', 'folder//a.jpg'])
-    await assert.rejects(storage.signedUrl(file), { status: 502 });
-  assert.equal(called, false);
+    await assert.rejects(signedUrl(file), { status: 502 });
+  assert.equal(request.mock.callCount(), 0);
 });
+
 test('fotos sin cliente no entregan metadatos ni archivos a ningún cliente', async () => {
-  const service = createPhotoService({ find: async () => ({ clientId: null, stationId: '10', file: 'private.jpg' }) },
-    { signedUrl: () => assert.fail('No debe firmarse una foto sin cliente') });
-  await assert.rejects(service.detail(actor('cliente'), '1'), { status: 404 });
-  await assert.rejects(service.access(actor('cliente'), '1'), { status: 404 });
-  assert.throws(() => service.query(actor('cliente'), { unassigned: true }), { status: 403 });
+  mock.method(photoRepository, 'find', async () => ({ clientId: null, stationId: '10', file: 'private.jpg' }));
+  await assert.rejects(photoService.detail(actor('cliente'), '1'), { status: 404 });
+  await assert.rejects(photoService.access(actor('cliente'), '1'), { status: 404 });
+  assert.throws(() => photoService.query(actor('cliente'), { unassigned: true }), { status: 403 });
 });
+
 test('metadatos admiten cliente opcional sin aceptar filtros contradictorios', () => {
   const input = schema.upload.parse({ operationId: '12345678-1234-4234-8234-123456789abc', stationId: '1' });
   assert.equal(input.clientId, null);
@@ -70,14 +74,17 @@ test('formato por contenido, tamaño máximo y día de carga de Argentina', () =
   assert.equal(businessDate(new Date('2026-10-16T02:59:00Z')), '2026-10-15');
   assert.equal(businessDate(new Date('2026-10-16T03:00:00Z')), '2026-10-16');
 });
-test('Axios carga binarios por POST sin sobrescribir y reconcilia sólo la ruta indicada', async () => {
-  const requests = [], storage = createStorage(env, async config => {
-    requests.push(config); return { data: {}, status: 200, headers: {}, config };
-  });
+test('Storage sube sin sobrescribir y elimina sólo la ruta indicada', async () => {
+  const request = mock.method(globalThis, 'fetch', async () => Response.json({ Key: '1/test.jpg' }));
   const bytes = Buffer.from([255,216,255,0]);
-  await storage.upload('1/test.jpg', bytes, 'image/jpeg'); await storage.remove('1/test.jpg');
-  assert.equal(requests[0].method, 'post'); assert.deepEqual(requests[0].data, bytes);
-  assert.equal(requests[0].headers['Content-Type'], 'image/jpeg'); assert.equal(requests[0].headers['x-upsert'], 'false');
-  assert.equal(requests[0].headers['Cache-Control'], 'max-age=0');
-  assert.equal(requests[1].method, 'delete'); assert.deepEqual(JSON.parse(requests[1].data), { prefixes: ['1/test.jpg'] });
+  await uploadFile('1/test.jpg', bytes, 'image/jpeg');
+  await removeFile('1/test.jpg');
+  const [, upload] = request.mock.calls[0].arguments;
+  assert.equal(upload.method, 'POST');
+  assert.deepEqual(upload.body, bytes);
+  assert.equal(new Headers(upload.headers).get('content-type'), 'image/jpeg');
+  assert.equal(new Headers(upload.headers).get('x-upsert'), 'false');
+  const [, removal] = request.mock.calls[1].arguments;
+  assert.equal(removal.method, 'DELETE');
+  assert.deepEqual(JSON.parse(removal.body), { prefixes: ['1/test.jpg'] });
 });

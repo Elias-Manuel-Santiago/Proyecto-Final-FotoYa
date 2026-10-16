@@ -1,6 +1,6 @@
-import { businessDate } from '../../domain/dates';
-import type { AppData, Employee } from '../../domain/models';
-import { requirePermission } from '../../domain/permissions';
+import { businessDate } from '../../../src/domain/dates';
+import type { AppData, Employee } from '../../../src/domain/models';
+import { requirePermission } from '../../../src/domain/permissions';
 
 export function checkIn(data: AppData, actor: Employee, id: string, now: Date) {
   requirePermission(actor, 'attendance.self');

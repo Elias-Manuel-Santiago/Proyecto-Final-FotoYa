@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MockFotoYaRepository } from '../src/data/mock-repository';
+import { MockFotoYaRepository } from './support/mock-repository';
 import { businessDate, duration, validDate } from '../src/domain/dates';
 import { repository } from './fixtures';
 

@@ -11,7 +11,6 @@ import { AppState } from 'react-native';
 import type { AppData, Employee } from '../domain/models';
 import { ApiClient } from '../data/api-client';
 import { HttpFotoYaRepository } from '../data/http-repository';
-import { photoForm } from '../data/photo-form';
 import { errorMessage } from '../domain/format';
 
 interface AppContextValue {
@@ -34,7 +33,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         new ApiClient(
           process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api',
         ),
-        photoForm,
       ),
   );
   const [data, setData] = useState<AppData | null>(null);

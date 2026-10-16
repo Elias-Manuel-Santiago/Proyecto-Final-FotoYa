@@ -1,7 +1,5 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { loadEnv } from '../src/config/env.js';
-import { createDatabase } from '../src/config/database.js';
 import { protectUsers } from './lib/protect-users.js';
 import { seedPermissions } from './lib/seed-permissions.js';
 
@@ -88,7 +86,9 @@ export async function migrate(db, env, { init = false } = {}) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const env = { ...loadEnv(), DATA_ENCRYPTION_KEY: process.env.DATA_ENCRYPTION_KEY }, db = createDatabase(env);
+  const { env: config } = await import('../src/config/env.js');
+  const { db } = await import('../src/config/database.js');
+  const env = { ...config, DATA_ENCRYPTION_KEY: process.env.DATA_ENCRYPTION_KEY };
   try { await migrate(db, env, { init: process.argv.includes('--init') }); console.log('Esquema actualizado; sólo las contraseñas se guardan hasheadas.'); }
   catch (error) { console.error({ code: error.code ?? 'MIGRATION_ERROR', message: error.code ? 'La migración falló. Revisá el esquema y sus restricciones.' : error.message }); process.exitCode = 1; }
   finally { await db.end(); }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MockFotoYaRepository } from '../src/data/mock-repository';
-import { createSeed } from '../src/data/seed';
+import { MockFotoYaRepository } from './support/mock-repository';
+import { createSeed } from './support/seed';
 import { can } from '../src/domain/permissions';
 import { visibleStations } from '../src/domain/metrics';
 import { image, now, repository, sale, today } from './fixtures';

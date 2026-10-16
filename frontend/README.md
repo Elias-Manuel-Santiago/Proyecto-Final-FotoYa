@@ -35,7 +35,7 @@ El registro de ventas y las marcaciones de entrada/salida responden `501 BUSINES
 
 ## Organización y validación
 
-`src/data/api-client.ts` implementa POST, Bearer, errores, timeouts y paginación. `http-repository.ts` adapta los contratos. `photo-form.ts` arma multipart para web y móvil. `AppProvider` gestiona la sesión y `usePeriodData` las consultas por período. `MockFotoYaRepository`, `seed` y sus operaciones quedan como fixtures aislados de tests; ninguna pantalla los utiliza. `src101026` es un backup excluido de los checks.
+`src/data/api-client.ts` implementa POST, Bearer, errores, timeouts y paginación. `http-repository.ts` adapta los contratos. `photo-form.ts` arma multipart para web y móvil. `AppProvider` gestiona la sesión y `usePeriodData` las consultas por período. `tests/support` contiene `MockFotoYaRepository`, `seed` y sus operaciones; ninguna pantalla los utiliza. `src101026` es un backup excluido de los checks.
 
 ```powershell
 npm run check

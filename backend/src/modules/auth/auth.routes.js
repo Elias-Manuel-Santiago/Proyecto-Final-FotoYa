@@ -1,9 +1,13 @@
+import { authService } from './auth.service.js';
+import { authRepository } from './auth.repository.js';
+import { userService } from '../users/users.service.js';
+import { authenticate } from '../../security/authenticate.js';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { endpoint, paged, validate } from '../../shared/validation.js';
 import * as schema from './auth.schemas.js';
 
-export function authRoutes({ authService, authRepository, authenticate, userService }) {
+export function authRoutes() {
   const router = Router();
   const sensitive = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: { code: 'RATE_LIMIT', message: 'Demasiados intentos. Probá más tarde.' } } });

@@ -14,8 +14,8 @@ import type {
 } from '../domain/models';
 import { businessDate, periodError, utcInstant } from '../domain/dates';
 import { errorMessage } from '../domain/format';
-import type { FotoYaRepository } from './repository';
 import { ApiClient } from './api-client';
+import { photoForm } from './photo-form';
 
 const roles: Record<string, RoleId> = {
   dueno: 'owner',
@@ -80,15 +80,12 @@ function user(row: UserRow): Employee {
   };
 }
 
-export class HttpFotoYaRepository implements FotoYaRepository {
+export class HttpFotoYaRepository {
   onProfile?: (employee: Employee) => void;
   setOnProfile(listener?: (employee: Employee) => void) {
     this.onProfile = listener;
   }
-  constructor(
-    public api: ApiClient,
-    private photoForm: (file: PhotoFile) => Promise<FormData>,
-  ) {}
+  constructor(public api: ApiClient) {}
 
   async login(email: string, password: string) {
     const result = await this.api.post<{ token: string }>('auth/login', {
@@ -262,15 +259,15 @@ export class HttpFotoYaRepository implements FotoYaRepository {
     };
   }
 
-  async createStation(_actorId: string, input: StationInput) {
+  async createStation(input: StationInput) {
     await this.api.post('catalog/stations/create', input);
   }
 
-  async setStationActive(_actorId: string, stationId: string, active: boolean) {
+  async setStationActive(stationId: string, active: boolean) {
     await this.api.post('catalog/stations/availability', { stationId, active });
   }
 
-  async saveEmployee(_actorId: string, input: EmployeeInput) {
+  async saveEmployee(input: EmployeeInput) {
     const catalog = await this.api.post<
       { id: number | string; name: string }[]
     >('catalog/query', { resource: 'roles' });
@@ -292,7 +289,7 @@ export class HttpFotoYaRepository implements FotoYaRepository {
     );
   }
 
-  async setEmployeeActive(_actorId: string, userId: string, active: boolean) {
+  async setEmployeeActive(userId: string, active: boolean) {
     await this.api.post('users/availability', { userId, active });
   }
   async recordSale(): Promise<void> {
@@ -312,7 +309,6 @@ export class HttpFotoYaRepository implements FotoYaRepository {
   }
 
   async uploadPhotos(
-    _actorId: string,
     stationId: string,
     files: PhotoFile[],
   ): Promise<UploadResult[]> {
@@ -325,7 +321,7 @@ export class HttpFotoYaRepository implements FotoYaRepository {
           (file.size <= 0 || file.size > 6 * 1024 * 1024)
         )
           throw new Error('La foto debe pesar entre 1 byte y 6 MiB.');
-        const form = await this.photoForm(file);
+        const form = await photoForm(file);
         form.append('operationId', file.key);
         form.append('stationId', stationId);
         if (file.clientId) form.append('clientId', file.clientId);

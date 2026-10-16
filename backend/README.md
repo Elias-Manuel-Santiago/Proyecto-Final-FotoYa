@@ -1,6 +1,6 @@
 # Backend Foto Ya
 
-Node.js 22+, Express 5, MySQL 8.0.16+ (InnoDB) y Supabase Storage. Conexiones HTTP mediante Axios; MySQL utiliza su protocolo nativo con `mysql2`. Todas las rutas de la API reciben `POST`: JSON, excepto la carga de fotos que utiliza `multipart/form-data`.
+Node.js 22+, Express 5, MySQL 8.0.16+ (InnoDB) y Supabase Storage. Supabase Storage utiliza su cliente oficial; MySQL utiliza su protocolo nativo con `mysql2`. Todas las rutas de la API reciben `POST`: JSON, excepto la carga de fotos que utiliza `multipart/form-data`.
 
 ## Inicio
 
@@ -137,7 +137,7 @@ Contraseñas con scrypt (sal aleatoria, N=131072, r=8, p=1). Tokens de sesión a
 
 Los roles iniciales son `dueno`, `encargado`, `secretario`, `camarografo`, `vendedor` y `cliente`. Los permisos efectivos se consultan en `permisos_rol` en cada petición. Dueño y secretario tienen el alcance global definido para sus consultas; encargado y personal operativo quedan limitados a su puesto. El cliente sólo consulta sus fotos. Un puesto NULL nunca concede alcance global. El encargado no asigna roles globales ni administra usuarios fuera de su puesto. La API impide cambiar la propia asignación o desactivar la propia cuenta. Cambiar permisos en MySQL tiene efecto en la siguiente solicitud; el seed inicial no restablece asignaciones en cada migración.
 
-El `.env.example` usa el proyecto Supabase **Foto Ya**, con bucket privado existente **Fotos**. La clave secreta sólo pertenece al backend. La autorización se hace en MySQL antes de pedir la firma; no crear políticas de lectura pública ni hacer público el bucket. Las URLs firmadas son capacidades temporales: duran 60 segundos por defecto (máximo configurable 300) y una URL ya emitida no se revoca al cerrar la sesión. La firma y carga usan POST con Axios; el navegador carga la imagen mediante GET propio de Supabase. Los archivos nuevos se suben con caché de cero segundos. [Referencia de acceso a archivos privados](https://supabase.com/docs/guides/storage/serving/downloads).
+El `.env.example` usa el proyecto Supabase **Foto Ya**, con bucket privado existente **Fotos**. La clave secreta sólo pertenece al backend. La autorización se hace en MySQL antes de pedir la firma; no crear políticas de lectura pública ni hacer público el bucket. Las URLs firmadas son capacidades temporales: duran 60 segundos por defecto (máximo configurable 300) y una URL ya emitida no se revoca al cerrar la sesión. La firma y carga usan el cliente oficial de Supabase; el navegador carga la imagen mediante GET propio de Supabase. Los archivos nuevos se suben con caché de cero segundos. [Referencia de acceso a archivos privados](https://supabase.com/docs/guides/storage/serving/downloads).
 
 ## Carga y asignación de fotos
 
@@ -173,7 +173,7 @@ Estas rutas están protegidas y responden **501 `BUSINESS_RULES_PENDING`**, sin 
 - `/api/sales/create`: falta definir las ventas repetidas/copias y el alcance temporal de las fotos vendidas; requerirá transacción con cabecera, fotos y tarifas históricas.
 - `/api/attendance/check-in` y `/api/attendance/check-out`: falta definir quién marca, turnos/pausas y día de referencia al cruzar medianoche.
 
-También quedan por definir ganancias netas, recuperación de contraseña y entrega de tokens de un solo uso, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend conserva su adaptador de prueba actual; la conexión con esta API es un paso posterior.
+También quedan por definir ganancias netas, recuperación de contraseña y entrega de tokens de un solo uso, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API. Las simulaciones quedan en `frontend/tests/support`.
 
 ## Pruebas
 
@@ -187,3 +187,13 @@ npm run test:integration
 ```
 
 La integración crea una base `foto_ya_test_<aleatorio>` y la elimina al terminar; ignora `DB_NAME` del entorno de la aplicación. Sin `TEST_DB_PORT`, los casos de integración se omiten explícitamente. Se verifican permisos, aislamiento de clientes, sesiones, datos sin hash, bajas reversibles, precios históricos, conteos, migraciones, cargas con/sin cliente, asignación concurrente, reintentos y fallos parciales (incluida la pérdida de confirmación de COMMIT). Storage se simula en estas pruebas; no se afirma probar archivos reales en Supabase sin la clave de servidor. Se validó SQL sobre MariaDB 10.4.32 local compatible; resta ejecutar la suite en el servidor MySQL de destino.
+
+## Cómo seguir el código
+
+`server.js` inicia el servidor y `app.js` conecta las rutas. Cada archivo de rutas importa el servicio que usa; los servicios importan sus repositorios. No hay que crear servicios ni pasar `db`, `storage` o `env` entre capas.
+
+`src/config/env.js` valida y exporta la configuración una sola vez. `src/config/database.js` exporta el pool compartido `db`. `src/integrations/storage.js` exporta `uploadFile`, `removeFile` y `signedUrl`, siguiendo las operaciones del [cliente de Supabase](https://supabase.com/docs/reference/javascript/storage-from-upload).
+
+`transaction(callback)` abre una transacción y entrega su conexión al callback. Esa conexión sí se pasa a las consultas que deben confirmarse juntas; es necesaria para la consistencia de los datos. Las migraciones también reciben la conexión sobre la que trabajan.
+
+Los reemplazos de red, base de datos y reloj usados para probar pertenecen a `tests`; no se agregan parámetros a los servicios para permitirlos.

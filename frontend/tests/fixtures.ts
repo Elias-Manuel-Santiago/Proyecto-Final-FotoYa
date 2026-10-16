@@ -1,6 +1,6 @@
 import { businessDate } from '../src/domain/dates';
-import { createSeed } from '../src/data/seed';
-import { MockFotoYaRepository } from '../src/data/mock-repository';
+import { createSeed } from './support/seed';
+import { MockFotoYaRepository } from './support/mock-repository';
 import type { PhotoFile } from '../src/domain/models';
 
 export const today = businessDate();

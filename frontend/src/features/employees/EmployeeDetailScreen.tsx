@@ -38,11 +38,7 @@ export function EmployeeDetailScreen() {
 
   async function toggleActive() {
     await action.run(async () => {
-      await repository.setEmployeeActive(
-        employee.id,
-        target!.id,
-        !target!.active,
-      );
+      await repository.setEmployeeActive(target!.id, !target!.active);
       await refresh();
     }, 'Estado actualizado.');
   }

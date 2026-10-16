@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { before, test } from 'node:test';
+import { before, test, mock, afterEach } from 'node:test';
 import { ApiClient, ApiError } from '../src/data/api-client';
 import { HttpFotoYaRepository } from '../src/data/http-repository';
 import { periodError, utcInstant, displayInstant } from '../src/domain/dates';
@@ -9,6 +9,13 @@ import type { PhotoFile } from '../src/domain/models';
 
 // Se usan los validadores reales: las reglas del backend son el contrato.
 const backend = '../../backend/src/';
+afterEach(() => mock.restoreAll());
+
+function testApi(baseUrl: string, transport: typeof fetch) {
+  mock.method(globalThis, 'fetch', transport);
+  return new ApiClient(baseUrl);
+}
+
 interface Parser {
   parse(value: unknown): unknown;
 }
@@ -78,6 +85,11 @@ const file: PhotoFile = {
   key: '915fa2b7-41ad-4af1-87bd-4285db10bff1',
   name: 'foto.png',
   uri: 'file:///foto.png',
+  file: new File(
+    [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])],
+    'foto.png',
+    { type: 'image/png' },
+  ),
   mimeType: 'image/png',
   size: 12,
 };
@@ -189,18 +201,8 @@ function fixture(
       path === 'catalog/query' ? data[`catalog/${body.resource}`] : data[path];
     return Response.json({ data: value ?? { ok: true } });
   };
-  const api = new ApiClient('http://localhost:3000/api/', transport);
-  const repo = new HttpFotoYaRepository(api, async () => {
-    const form = new FormData();
-    form.append(
-      'photo',
-      new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], {
-        type: 'image/png',
-      }),
-      'foto.png',
-    );
-    return form;
-  });
+  const api = testApi('http://localhost:3000/api/', transport);
+  const repo = new HttpFotoYaRepository(api);
   return { api, repo, requests };
 }
 
@@ -292,28 +294,28 @@ test('el alta resuelve rol numérico, conserva password y envía puesto NULL; ed
     stationId: '',
     password: 'Contraseña-123456',
   };
-  await repo.saveEmployee('no-enviar', input);
+  await repo.saveEmployee(input);
   assert.deepEqual(requests.find((row) => row.path === 'users/create')?.body, {
     ...input,
     roleId: '6',
     stationId: null,
   });
-  await repo.saveEmployee('no-enviar', { ...input, id: '90' });
+  await repo.saveEmployee({ ...input, id: '90' });
   const update = requests.find((row) => row.path === 'users/update')!.body;
   assert.equal(update.userId, '90');
   assert(!('password' in update));
-  await repo.setEmployeeActive('no-enviar', '90', false);
+  await repo.setEmployeeActive('90', false);
   assert.deepEqual(requests.at(-1)?.body, { userId: '90', active: false });
 });
 
 test('carga multipart conserva UUID y cliente en reintentos, y respeta el tamaño máximo', async () => {
   const { repo, requests } = fixture();
-  await repo.uploadPhotos('actor', '1', [{ ...file, clientId: '42' }]);
-  await repo.uploadPhotos('actor', '1', [{ ...file, clientId: '42' }]);
+  await repo.uploadPhotos('1', [{ ...file, clientId: '42' }]);
+  await repo.uploadPhotos('1', [{ ...file, clientId: '42' }]);
   assert.equal(requests[0].body.operationId, file.key);
   assert.equal(requests[1].body.operationId, file.key);
   assert.equal(requests[0].body.clientId, '42');
-  const results = await repo.uploadPhotos('actor', '1', [
+  const results = await repo.uploadPhotos('1', [
     { ...file, size: 0 },
     { ...file, size: 6 * 1024 * 1024 + 1 },
   ]);
@@ -324,7 +326,7 @@ test('carga multipart conserva UUID y cliente en reintentos, y respeta el tamañ
 test('fallo parcial no se presenta como éxito y el UUID se conserva al reintentar', async () => {
   let attempt = 0;
   const requests: FormData[] = [];
-  const api = new ApiClient('http://api.test/api', async (_url, init) => {
+  const api = testApi('http://api.test/api', async (_url, init) => {
     requests.push(init?.body as FormData);
     attempt++;
     return attempt === 1
@@ -339,9 +341,9 @@ test('fallo parcial no se presenta como éxito y el UUID se conserva al reintent
         )
       : Response.json({ data: { id: '1' } });
   });
-  const repo = new HttpFotoYaRepository(api, async () => new FormData());
-  assert((await repo.uploadPhotos('7', '1', [file]))[0].error);
-  assert.equal((await repo.uploadPhotos('7', '1', [file]))[0].error, undefined);
+  const repo = new HttpFotoYaRepository(api);
+  assert((await repo.uploadPhotos('1', [file]))[0].error);
+  assert.equal((await repo.uploadPhotos('1', [file]))[0].error, undefined);
   assert.equal(requests[0].get('operationId'), requests[1].get('operationId'));
 });
 
@@ -358,7 +360,7 @@ test('cada apertura obtiene acceso temporal; asignación no envía metadatos inv
 
 test('paginación recorre todos los bloques y conserva filtros sin truncar totales', async () => {
   const bodies: Record<string, unknown>[] = [];
-  const api = new ApiClient('http://api.test/api', async (_input, init) => {
+  const api = testApi('http://api.test/api', async (_input, init) => {
     const body = JSON.parse(String(init?.body));
     bodies.push(body);
     paged.parse({ limit: body.limit, offset: body.offset });
@@ -381,7 +383,7 @@ test('paginación recorre todos los bloques y conserva filtros sin truncar total
 });
 
 test('un fallo de página no devuelve una lista parcial', async () => {
-  const api = new ApiClient('http://api.test/api', async (_input, init) =>
+  const api = testApi('http://api.test/api', async (_input, init) =>
     JSON.parse(String(init?.body)).offset === 0
       ? Response.json({ data: new Array(100).fill({ id: '1' }) })
       : Response.json(
@@ -395,7 +397,7 @@ test('un fallo de página no devuelve una lista parcial', async () => {
 test('solo una sesión inválida borra el token; contraseña actual incorrecta no desloguea', async () => {
   let code = 'REQUEST_ERROR',
     invalidated = 0;
-  const api = new ApiClient('http://api.test/api', async () =>
+  const api = testApi('http://api.test/api', async () =>
     Response.json(
       { error: { code, message: 'Error de prueba' } },
       { status: 401 },
@@ -413,7 +415,7 @@ test('solo una sesión inválida borra el token; contraseña actual incorrecta n
 
 test('respuestas en vuelo de una sesión anterior no restauran sus datos', async () => {
   let finish!: (response: Response) => void;
-  const api = new ApiClient(
+  const api = testApi(
     'http://api.test/api',
     () =>
       new Promise((resolve) => {
@@ -543,7 +545,7 @@ test('filtros por IDs distinguen ciudades y eventos con el mismo nombre', async 
 
 test('una imagen válida no se rechaza solo por su extensión o MIME declarado', async () => {
   const { repo, requests } = fixture();
-  const results = await repo.uploadPhotos('7', '1', [
+  const results = await repo.uploadPhotos('1', [
     { ...file, name: 'imagen.dat', mimeType: 'application/octet-stream' },
   ]);
   assert.equal(results[0].error, undefined);

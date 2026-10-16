@@ -6,7 +6,7 @@ import {
   reportRows,
 } from '../src/domain/metrics';
 import { saleAmounts } from '../src/domain/validation';
-import { createSeed } from '../src/data/seed';
+import { createSeed } from './support/seed';
 import { sumAmounts } from '../src/domain/amounts';
 import { repository, sale, today } from './fixtures';
 

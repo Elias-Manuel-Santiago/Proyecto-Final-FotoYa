@@ -52,7 +52,6 @@ export function usePhotoQueue() {
       const pending = queue.filter((row) => row.status !== 'done');
       if (!pending.length) return;
       const results = await repository.uploadPhotos(
-        employee.id,
         employee.stationId,
         pending,
       );

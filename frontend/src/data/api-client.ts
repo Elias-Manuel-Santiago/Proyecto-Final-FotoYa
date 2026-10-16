@@ -15,11 +15,7 @@ export class ApiClient {
     this.onUnauthorized = listener;
   }
 
-  constructor(
-    private baseUrl: string,
-    // Evitar que el navegador reciba ApiClient como `this` de su fetch nativo.
-    private transport: typeof fetch = (...args) => fetch(...args),
-  ) {
+  constructor(private baseUrl: string) {
     if (!/^https?:\/\//.test(baseUrl))
       throw new Error(
         'Configurá EXPO_PUBLIC_API_URL con la URL HTTP(S) del backend.',
@@ -42,7 +38,7 @@ export class ApiClient {
       multipart ? 90000 : 20000,
     );
     try {
-      const response = await this.transport(
+      const response = await fetch(
         `${this.baseUrl.replace(/\/$/, '')}/${path}`,
         {
           method: 'POST',

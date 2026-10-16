@@ -1,10 +1,13 @@
-import { Platform } from 'react-native';
 import type { PhotoFile } from '../domain/models';
 
 export async function photoForm(file: PhotoFile) {
   const form = new FormData();
-  if (Platform.OS === 'web') {
-    const blob = file.file ?? (await (await fetch(file.uri)).blob());
+  let blob: Blob | undefined = file.file;
+  if (!blob) {
+    const { Platform } = await import('react-native');
+    if (Platform.OS === 'web') blob = await (await fetch(file.uri)).blob();
+  }
+  if (blob) {
     form.append('photo', blob, file.name);
   } else {
     // React Native serializa descriptores URI como archivos multipart.

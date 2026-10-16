@@ -13,7 +13,7 @@ import { useWorkspace } from '../../providers/AppProvider';
 const empty = { name: '', address: '', city: '', event: '' };
 
 export function StationsScreen() {
-  const { data, employee, repository, refresh } = useWorkspace();
+  const { data, repository, refresh } = useWorkspace();
   const [input, setInput] = useState(empty);
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
@@ -29,7 +29,7 @@ export function StationsScreen() {
   const changeAvailability = (stationId: string, active: boolean) =>
     action.run(
       async () => {
-        await repository.setStationActive(employee.id, stationId, active);
+        await repository.setStationActive(stationId, active);
         await refresh();
       },
       active
@@ -85,7 +85,7 @@ export function StationsScreen() {
                   !input.city.trim()
                 )
                   throw new Error('Completá nombre, dirección y ciudad.');
-                await repository.createStation(employee.id, input);
+                await repository.createStation(input);
                 setInput(empty);
                 setCreating(false);
                 await refresh();

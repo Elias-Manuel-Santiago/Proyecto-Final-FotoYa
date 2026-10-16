@@ -5,7 +5,7 @@ import type {
   UploadResult,
   Period,
   StationInput,
-} from '../domain/models';
+} from '../../src/domain/models';
 
 export interface SaleInput {
   operationId: string;
@@ -14,8 +14,7 @@ export interface SaleInput {
   unitPrice: string;
 }
 
-// Todos los métodos reciben un actor para reflejar permisos también en el adaptador de prueba.
-// El adaptador HTTP deberá obtener el actor de la sesión validada en el servidor.
+// Contrato exclusivo de la simulación de pruebas.
 export interface FotoYaRepository {
   snapshot(period?: Period): Promise<AppData>;
   createStation(actorId: string, input: StationInput): Promise<void>;

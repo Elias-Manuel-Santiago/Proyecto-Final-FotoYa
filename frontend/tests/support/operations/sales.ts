@@ -1,8 +1,11 @@
-import { businessDate } from '../../domain/dates';
-import { operationId } from '../../domain/format';
-import type { AppData, Employee } from '../../domain/models';
-import { requirePermission, requireStation } from '../../domain/permissions';
-import { saleAmounts } from '../../domain/validation';
+import { businessDate } from '../../../src/domain/dates';
+import { operationId } from '../../../src/domain/format';
+import type { AppData, Employee } from '../../../src/domain/models';
+import {
+  requirePermission,
+  requireStation,
+} from '../../../src/domain/permissions';
+import { saleAmounts } from '../../../src/domain/validation';
 import type { SaleInput } from '../repository';
 
 export function recordSale(

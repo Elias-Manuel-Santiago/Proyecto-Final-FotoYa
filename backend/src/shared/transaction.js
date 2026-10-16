@@ -1,4 +1,6 @@
-export async function transaction(db, callback) {
+import { db } from '../config/database.js';
+
+export async function transaction(callback) {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();

@@ -1,6 +1,10 @@
-import type { AppData, Employee, StationInput } from '../../domain/models';
-import { operationId } from '../../domain/format';
-import { requirePermission } from '../../domain/permissions';
+import type {
+  AppData,
+  Employee,
+  StationInput,
+} from '../../../src/domain/models';
+import { operationId } from '../../../src/domain/format';
+import { requirePermission } from '../../../src/domain/permissions';
 
 function authorize(actor: Employee) {
   requirePermission(actor, 'stations.manage');

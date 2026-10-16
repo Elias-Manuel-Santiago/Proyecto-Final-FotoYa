@@ -3,7 +3,7 @@ import type {
   EmployeeInput,
   PhotoFile,
   StationInput,
-} from '../domain/models';
+} from '../../src/domain/models';
 import type { FotoYaRepository, SaleInput } from './repository';
 import { createSeed } from './seed';
 import { saveEmployee, setEmployeeActive } from './operations/employees';

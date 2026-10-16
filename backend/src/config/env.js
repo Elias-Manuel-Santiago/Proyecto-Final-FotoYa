@@ -21,3 +21,5 @@ export function loadEnv(source = process.env) {
   if (!result.success) throw new Error(`Configuración inválida: ${result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
   return result.data;
 }
+
+export const env = loadEnv();

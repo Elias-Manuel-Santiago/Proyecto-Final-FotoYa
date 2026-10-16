@@ -1,25 +1,19 @@
-import { after, before, test } from 'node:test';
+import { after, before, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import mysql from 'mysql2/promise';
 import axios from 'axios';
 import { randomBytes, randomUUID, createCipheriv } from 'node:crypto';
-import { createApp } from '../../src/app.js';
-import { createDatabase } from '../../src/config/database.js';
 import { migrate } from '../../scripts/migrate.js';
 import { hashPassword, verifyPassword, newToken } from '../../src/security/crypto.js';
 import { env as fixture } from '../fixtures.js';
 import { ApiError } from '../../src/shared/errors.js';
-import { createAuthRepository } from '../../src/modules/auth/auth.repository.js';
-import { createPhotoRepository } from '../../src/modules/photos/photos.repository.js';
-import { createPhotoUploadService, businessDate } from '../../src/modules/photos/photos.upload.js';
-import { reconcilePhotoUploads } from '../../src/modules/photos/photos.reconciliation.js';
 
 // Crea y elimina exclusivamente una base nueva con nombre aleatorio; nunca usa DB_NAME.
 const enabled = process.env.TEST_DB_PORT, integration = (name, fn) => test(name, { skip: !enabled }, fn);
 const database = `foto_ya_test_${randomBytes(6).toString('hex')}`;
 const env = { ...fixture, DB_NAME: database, DB_PORT: Number(enabled ?? 33307), DB_HOST: process.env.TEST_DB_HOST ?? '127.0.0.1',
   DB_USER: process.env.TEST_DB_USER ?? 'root', DB_PASSWORD: process.env.TEST_DB_PASSWORD ?? '' };
-let admin, db, server, http, passwordHash;
+let admin, db, server, http, passwordHash, authRepository, photoUploads, businessDate, reconcilePhotoUploads;
 const users = {}, tokens = {};
 const objects = new Map(), storageCalls = { uploads: 0 };
 let failureMode = null;
@@ -50,7 +44,16 @@ before(async () => {
   if (!enabled) return;
   admin = await mysql.createConnection({ host: env.DB_HOST, port: env.DB_PORT, user: env.DB_USER, password: env.DB_PASSWORD });
   await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-  db = createDatabase(env); passwordHash = await hashPassword('Test-password-1234');
+  const { env: runtimeEnv } = await import('../../src/config/env.js');
+  Object.assign(runtimeEnv, env);
+  ({ db } = await import('../../src/config/database.js'));
+  mock.module('../../src/integrations/storage.js', { namedExports: {
+    uploadFile: storage.upload, removeFile: storage.remove, signedUrl: storage.signedUrl,
+  } });
+  ({ authRepository } = await import('../../src/modules/auth/auth.repository.js'));
+  ({ photoUploads, businessDate } = await import('../../src/modules/photos/photos.upload.js'));
+  ({ reconcilePhotoUploads } = await import('../../src/modules/photos/photos.reconciliation.js'));
+  passwordHash = await hashPassword('Test-password-1234');
   await migrate(db, env, { init: true });
   await db.query("INSERT INTO ciudad (nombre) VALUES ('Ciudad')");
   await db.query("INSERT INTO puesto (nombre, direccion, id_ciudad) VALUES ('Uno','A',1),('Dos','B',1),('Sin registros','C',1)");
@@ -70,7 +73,8 @@ before(async () => {
   await db.query('INSERT INTO precios_venta (id_venta,id_precio,precio_unitario_aplicado,cantidad) VALUES (1,1,20,30),(1,1,20,20),(2,2,25,20),(3,1,20,10)');
   await db.query('INSERT INTO fotos_venta (id_foto,id_venta) VALUES (1,1),(2,1)');
   await db.execute("INSERT INTO horarios (id_dias,id_usuario,check_in,check_out) VALUES (1,?,'2026-10-14 23:00:00','2026-10-15 01:00:00')", [users.vendedor]);
-  const app = await createApp({ db, env, storage });
+  const { createApp } = await import('../../src/app.js');
+  const app = createApp();
   server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   http = axios.create({ baseURL: `http://127.0.0.1:${server.address().port}`, validateStatus: () => true, timeout: 10000, proxy: false });
 });
@@ -296,19 +300,20 @@ integration('fallo parcial de Storage no suma fotos y la reconciliación preserv
   const [[after]] = await db.execute('SELECT fotos FROM dias WHERE fecha=? AND id_puesto=1', [date]); assert.equal(after.fotos, before.fotos);
   await db.execute('UPDATE photo_uploads SET last_attempt_at=TIMESTAMPADD(MINUTE,-6,UTC_TIMESTAMP(6)) WHERE id_foto IS NULL');
   const confirmed = [...objects.keys()].filter(key => key !== job.id_archivo);
-  const result = await reconcilePhotoUploads(db, storage, env.SUPABASE_STORAGE_BUCKET);
+  const result = await reconcilePhotoUploads();
   assert(result.cleaned > 0); assert.equal(objects.has(job.id_archivo), false);
   assert(confirmed.every(key => objects.has(key)));
   const retried = await upload(operation); assert.equal(retried.status, 200); assert(objects.has(job.id_archivo));
 });
 integration('fallos al guardar metadatos o recibir COMMIT se recuperan sin doble conteo', async () => {
-  const actor = await createAuthRepository(db).actor(tokens.encargado);
-  const repository = createPhotoRepository(db), date = businessDate(new Date());
+  const actor = await authRepository.actor(tokens.encargado);
+  const date = businessDate(new Date());
   for (const fault of ['metadata', 'commit']) {
     const input = { operationId: randomUUID(), stationId: '1', clientId: null };
     const [[before]] = await db.execute('SELECT fotos FROM dias WHERE fecha=? AND id_puesto=1', [date]);
+    const getConnection = db.getConnection.bind(db);
     const faulty = { execute: (...args) => db.execute(...args), async getConnection() {
-      const connection = await db.getConnection();
+      const connection = await getConnection();
       return new Proxy(connection, { get(target, property) {
         if (property === 'execute' && fault === 'metadata') return async (sql, values) => {
           if (sql.startsWith('INSERT INTO fotos')) throw new Error('metadata failure');
@@ -318,7 +323,9 @@ integration('fallos al guardar metadatos o recibir COMMIT se recuperan sin doble
         const value = target[property]; return typeof value === 'function' ? value.bind(target) : value;
       } });
     } };
-    await assert.rejects(createPhotoUploadService(faulty, repository, storage, env).upload(actor, input, { buffer: png }));
+    const replacement = mock.method(db, 'getConnection', () => faulty.getConnection());
+    try { await assert.rejects(photoUploads.upload(actor, input, { buffer: png })); }
+    finally { replacement.mock.restore(); }
     const [[middle]] = await db.execute('SELECT fotos FROM dias WHERE fecha=? AND id_puesto=1', [date]);
     assert.equal(middle.fotos, before.fotos + (fault === 'commit' ? 1 : 0));
     assert.equal((await upload(input.operationId)).status, 200);

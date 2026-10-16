@@ -1,9 +1,11 @@
+import { catalogRepository } from './catalog.repository.js';
+import { stations } from './stations.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { permit } from '../../security/access.js';
 import { endpoint, id, pagination, validate } from '../../shared/validation.js';
 
-export function catalogRoutes(repository, stations) {
+export function catalogRoutes() {
   const router = Router();
   router.post('/stations/create', permit('stations.manage'), validate(z.object({
     name: z.string().trim().min(1).max(150), address: z.string().trim().min(1).max(255),
@@ -13,6 +15,6 @@ export function catalogRoutes(repository, stations) {
     stationId: id, active: z.boolean(),
   }).strict()), endpoint(req => stations.setActive(req.actor, req.input)));
   router.post('/query', permit('catalog.read'), validate(z.object({ resource: z.enum(['stations', 'cities', 'events', 'roles', 'prices']), stationId: id.optional(), ...pagination }).strict()),
-    endpoint(req => repository.query(req.actor, req.input)));
+    endpoint(req => catalogRepository.query(req.actor, req.input)));
   return router;
 }

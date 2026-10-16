@@ -1,5 +1,5 @@
-import type { AppData, Employee } from '../domain/models';
-import { businessDate } from '../domain/dates';
+import type { AppData, Employee } from '../../src/domain/models';
+import { businessDate } from '../../src/domain/dates';
 
 export function createSeed(): AppData {
   const today = businessDate();
