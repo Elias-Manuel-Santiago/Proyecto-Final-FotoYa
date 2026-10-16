@@ -13,6 +13,16 @@ Copy-Item .env.example .env
 
 Completar las credenciales de MySQL y `SUPABASE_SECRET_KEY`. No se necesitan claves de cifrado ni de búsqueda para instalaciones nuevas.
 
+### Error 403 al subir fotos en Render
+
+Este backend usa `@supabase/supabase-js`, que necesita la URL del proyecto y una clave API de servidor. Las credenciales de S3 pertenecen a otro protocolo y no sirven para este cliente ([API keys](https://supabase.com/docs/guides/api/api-keys), [autenticación S3](https://supabase.com/docs/guides/storage/s3/authentication)). En Render → servicio del backend → Environment, configurar:
+
+- `SUPABASE_URL=https://mjurenohqcxirsotdkrd.supabase.co` para el proyecto actual. No usar `https://mjurenohqcxirsotdkrd.storage.supabase.co/storage/v1/s3`.
+- `SUPABASE_SECRET_KEY`: clave `sb_secret_...` del mismo proyecto, desde Settings → API Keys; también se admite la clave legacy `service_role`. No usar la Secret access key de S3 ni una clave publishable/anon.
+- `SUPABASE_STORAGE_BUCKET=Fotos`, respetando exactamente el ID del bucket y sus mayúsculas.
+
+Guardar las variables y volver a desplegar el backend. Editar el `.env` local no actualiza Render. El backend no requiere `SUPABASE_PUBLISHABLE_KEY`. La validación de inicio rechaza endpoints S3 y formatos de claves incompatibles sin mostrar el secreto; no comprueba si la clave existe o sigue vigente en Supabase. El bucket debe conservarse privado: la API autoriza cada operación y genera URLs temporales para las lecturas permitidas.
+
 Crear previamente una base vacía con `utf8mb4`. Su usuario necesita permisos de DDL para las migraciones; para ejecutar la API basta una cuenta con SELECT, INSERT y UPDATE sobre las tablas de la aplicación. Usar una cuenta de migración separada en producción. `DB_SSL_CA_PATH` permite configurar TLS con un certificado CA para MySQL remoto.
 
 ```powershell

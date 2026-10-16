@@ -43,7 +43,16 @@ test('Storage firma por POST y limita la vigencia', async () => {
 
 test('fallo de Storage no filtra la clave ni el error del proveedor', async () => {
   mock.method(globalThis, 'fetch', async () => Response.json({ message: env.SUPABASE_SECRET_KEY }, { status: 403 }));
-  await assert.rejects(signedUrl('file.jpg'), error => error.status === 502 && !error.message.includes(env.SUPABASE_SECRET_KEY));
+  for (const operation of [() => signedUrl('file.jpg'),
+    () => uploadFile('file.jpg', Buffer.from([255,216,255,0]), 'image/jpeg'), () => removeFile('file.jpg')]) {
+    await assert.rejects(operation(), error => {
+      assert.equal(error.status, 502);
+      assert.equal(error.code, 'STORAGE_ERROR');
+      assert.equal(error.message.includes(env.SUPABASE_SECRET_KEY), false);
+      assert.equal(error.message.includes('[object Object]'), false);
+      return true;
+    });
+  }
 });
 
 test('rutas privadas inválidas no llegan al proveedor', async () => {

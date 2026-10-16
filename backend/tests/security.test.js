@@ -42,3 +42,21 @@ test('configuración no requiere claves de cifrado ni de búsqueda para ejecutar
   assert.equal(loadEnv(config).SESSION_HOURS, 8);
   assert.equal(loadEnv({ ...config, DATA_ENCRYPTION_KEY: 'unused', LOOKUP_HASH_KEY: 'unused' }).DATA_ENCRYPTION_KEY, undefined);
 });
+
+test('Storage exige URL del proyecto y clave API de servidor, sin claves S3 ni publishable', () => {
+  const config = { ...env, CORS_ORIGINS: env.CORS_ORIGINS.join(',') };
+  assert.equal(loadEnv(config).SUPABASE_SECRET_KEY, env.SUPABASE_SECRET_KEY);
+  for (const url of ['https://example.storage.supabase.co/storage/v1/s3',
+    'https://example.supabase.co/storage/v1', 'https://example.storage.supabase.co']) {
+    assert.throws(() => loadEnv({ ...config, SUPABASE_URL: url }), /URL del proyecto/);
+  }
+  const jwt = role => `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ role })).toString('base64url')}.test-signature`;
+  assert.equal(loadEnv({ ...config, SUPABASE_SECRET_KEY: jwt('service_role') }).SUPABASE_SECRET_KEY, jwt('service_role'));
+  for (const key of ['a'.repeat(64), 'sb_publishable_test-key', jwt('anon'), 'invalid-key']) {
+    assert.throws(() => loadEnv({ ...config, SUPABASE_SECRET_KEY: key }), error => {
+      assert.match(error.message, /clave API/);
+      assert.equal(error.message.includes(key), false);
+      return true;
+    });
+  }
+});
