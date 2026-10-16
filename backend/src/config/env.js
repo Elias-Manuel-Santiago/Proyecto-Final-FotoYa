@@ -13,6 +13,7 @@ const schema = z.object({
   DB_SSL_CA_PATH: z.string().optional(),
   SESSION_HOURS: positive(8, 720), SUPABASE_URL: z.url().refine(v => new URL(v).protocol === 'https:'),
   SUPABASE_SECRET_KEY: z.string().min(20), SUPABASE_STORAGE_BUCKET: z.string().regex(/^[a-z\d][a-z\d_-]{0,62}$/i),
+  SUPABASE_PUBLISHABLE_KEY: z.string().min(20), SUPABASE_STORAGE_BUCKET: z.string().regex(/^[a-z\d][a-z\d_-]{0,62}$/i),
   PHOTO_URL_SECONDS: positive(60, 300), STORAGE_TIMEOUT_MS: positive(15000, 30000),
 });
 
