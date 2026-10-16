@@ -1,6 +1,6 @@
 # Backend Foto Ya
 
-Node.js 22+, Express 5, MySQL 8.0.16+ (InnoDB) y Supabase Storage. Conexiones HTTP mediante Axios; MySQL utiliza su protocolo nativo con `mysql2`. Todas las rutas de la API reciben `POST`: JSON, excepto la carga de fotos que utiliza `multipart/form-data`. No se modificó el frontend ni se aplicaron cambios a la base real de MySQL.
+Node.js 22+, Express 5, MySQL 8.0.16+ (InnoDB) y Supabase Storage. Conexiones HTTP mediante Axios; MySQL utiliza su protocolo nativo con `mysql2`. Todas las rutas de la API reciben `POST`: JSON, excepto la carga de fotos que utiliza `multipart/form-data`.
 
 ## Inicio
 
@@ -11,11 +11,7 @@ npm ci
 Copy-Item .env.example .env
 ```
 
-Completar las credenciales de MySQL y `SUPABASE_SECRET_KEY`. Generar **dos claves distintas** y copiar una en `DATA_ENCRYPTION_KEY` y otra en `LOOKUP_HASH_KEY`:
-
-```powershell
-node --input-type=module -e "import{randomBytes}from'node:crypto';console.log(randomBytes(32).toString('hex'))"
-```
+Completar las credenciales de MySQL y `SUPABASE_SECRET_KEY`. No se necesitan claves de cifrado ni de búsqueda para instalaciones nuevas.
 
 Crear previamente una base vacía con `utf8mb4`. Su usuario necesita permisos de DDL para las migraciones; para ejecutar la API basta una cuenta con SELECT, INSERT y UPDATE sobre las tablas de la aplicación. Usar una cuenta de migración separada en producción. `DB_SSL_CA_PATH` permite configurar TLS con un certificado CA para MySQL remoto.
 
@@ -26,9 +22,11 @@ npm run db:init
 npm run db:migrate
 ```
 
-Las migraciones están en `backend/database`, con registro y checksum en `backend_migrations`. El esquema base permite `fotos.id_cliente = NULL`; las migraciones 003 y 004 actualizan instalaciones existentes, conceden `photos.assign` a camarógrafo/encargado y crean las reservas persistentes de carga. Hacer copia de seguridad y detener la API antes de migrar una base con datos. MySQL confirma DDL de manera implícita: ante una interrupción entre DDL y su registro, revisar el esquema antes de reintentar.
+El actualizador inspecciona columnas e índices existentes y aplica únicamente los cambios pendientes, sin tabla de historial. El esquema base permite `fotos.id_cliente = NULL`; también se crean las reservas persistentes de carga. Hacer copia de seguridad y detener la API antes de actualizar una base con datos. MySQL confirma DDL de manera implícita; el comando puede repetirse tras resolver un fallo.
 
-La migración cifra nombre, apellido, email y DNI, añade hashes de búsqueda y convierte contraseñas antiguas en texto a scrypt. Detecta hashes de otros formatos comunes y se detiene: requieren una conversión específica. Email se normaliza a minúsculas y DNI a dígitos; los duplicados normalizados detienen la conversión. Los índices de hash sólo admiten NULL durante la migración; la API rechaza arrancar si quedan usuarios sin proteger.
+Sólo las contraseñas se guardan hasheadas con scrypt. Nombre, apellido, email y DNI se guardan directamente; email se normaliza a minúsculas y DNI sin separadores, con índices únicos. La migración convierte contraseñas antiguas en texto a scrypt y rechaza hashes de formatos desconocidos.
+
+La actualización adapta instalaciones anteriores: descifra los datos personales con la `DATA_ENCRYPTION_KEY` anterior (necesaria sólo para esa conversión), elimina hashes de búsqueda y cambia `token_hash` por `token`. Las sesiones y tokens anteriores se invalidan porque sus valores originales no se pueden recuperar; será necesario iniciar sesión otra vez. Las reservas de carga anteriores se conservan para reconciliación, pero sus UUID no pueden reutilizarse porque sólo guardaban hashes: requieren una nueva operación. No borrar la clave anterior hasta completar la conversión. Al terminar elimina `backend_locks` y `backend_migrations`; no vuelve a crearlas. Los cambios de usuarios se coordinan bloqueando las filas del catálogo de roles dentro de la transacción. Las asignaciones de permisos existentes se conservan.
 
 Crear el primer dueño desde una terminal, dentro de `backend`:
 
@@ -59,7 +57,7 @@ El puerto predeterminado es 3000. Configurar `HOST=0.0.0.0` para acceder desde u
 
 - `src/config`: entorno validado, conexiones y matriz inicial de permisos.
 - `src/modules`: rutas, validaciones, consultas y servicios separados por función.
-- `src/security`: hash, cifrado, autenticación y alcance por puesto.
+- `src/security`: hash de contraseñas, autenticación y alcance por puesto.
 - `src/integrations`: Axios para Supabase Storage.
 - `src/shared`: validación, errores y transacciones.
 - `scripts`: migraciones y creación inicial del dueño; utilidades separadas en `scripts/lib`.
@@ -77,7 +75,7 @@ Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`.
 | `/api/auth/login` | `email`, `password`; entrega token de sesión una sola vez |
 | `/api/auth/me` | `{}`; perfil y permisos efectivos |
 | `/api/auth/logout` | `{}`; revoca la sesión actual |
-| `/api/auth/sessions/query` | Paginación; lista sesiones propias sin hashes ni tokens |
+| `/api/auth/sessions/query` | Paginación; lista sesiones propias sin tokens |
 | `/api/auth/sessions/revoke` | `sessionId`; revoca una sesión propia |
 | `/api/auth/password/change` | `currentPassword`, `password`; cambia contraseña y revoca todas las sesiones |
 | `/api/users/query` | Paginación y filtros opcionales `stationId`, `email`, `dni`, `active` |
@@ -105,7 +103,7 @@ Las consultas diarias calculan `descartes = fotos - SUM(venta.cantidad)`. Los in
 
 ## Seguridad y Supabase
 
-Contraseñas con scrypt (sal aleatoria, N=131072, r=8, p=1). Tokens de sesión aleatorios de 256 bits; sólo se persiste SHA-256. Datos personales recuperables con AES-256-GCM y hashes HMAC-SHA-256 de email/DNI para búsquedas exactas y unicidad. No cambiar las claves de cifrado/búsqueda sin una migración de claves: se perdería el acceso a los datos. Conservarlas fuera del repositorio y en las copias de seguridad correspondientes.
+Contraseñas con scrypt (sal aleatoria, N=131072, r=8, p=1). Tokens de sesión aleatorios de 256 bits guardados sin hash. Los demás datos de la aplicación se almacenan sin hashes ni cifrado. La API sigue validando permisos, disponibilidad, vencimiento y revocación de sesiones; los listados de sesiones no exponen tokens.
 
 Los roles iniciales son `dueno`, `encargado`, `secretario`, `camarografo`, `vendedor` y `cliente`. Los permisos efectivos se consultan en `permisos_rol` en cada petición. Dueño y secretario tienen el alcance global definido para sus consultas; encargado y personal operativo quedan limitados a su puesto. El cliente sólo consulta sus fotos. Un puesto NULL nunca concede alcance global. El encargado no asigna roles globales ni administra usuarios fuera de su puesto. La API impide cambiar la propia asignación o desactivar la propia cuenta. Cambiar permisos en MySQL tiene efecto en la siguiente solicitud; el seed inicial no restablece asignaciones en cada migración.
 
@@ -134,7 +132,7 @@ await axios.post('/api/photos/upload', form, {
 });
 ```
 
-`photo_uploads` persiste hashes de contenido/solicitud y la ruta reservada antes de contactar Storage. Si falla el almacenamiento o MySQL, la carga no se presenta como exitosa. Un reintento reconcilia el archivo incompleto de esa reserva antes de volver a subirlo, bajo bloqueo. Si COMMIT se confirmó pero se perdió su respuesta, el reintento recupera la foto ya registrada.
+`photo_uploads` conserva la solicitud original (puesto, cliente, contenido en base64 y bucket) y la ruta reservada antes de contactar Storage, sin hashing. Esta comparación exacta conserva la detección de reintentos con archivos diferentes y supone guardar una copia adicional del contenido en la reserva. El archivo consultable sigue almacenado en Storage. Si falla el almacenamiento o MySQL, la carga no se presenta como exitosa. Un reintento reconcilia el archivo incompleto de esa reserva antes de volver a subirlo, bajo bloqueo. Si COMMIT se confirmó pero se perdió su respuesta, el reintento recupera la foto ya registrada.
 
 Para reconciliar archivos parciales de operaciones que el cliente abandonó, ejecutar `npm run photos:reconcile`. Procesa hasta 100 reservas sin confirmar y sin intentos durante al menos cinco minutos; se puede repetir. Sólo elimina archivos de esas reservas, conserva su identificación para reintentos y nunca elimina una foto confirmada. No hay una tarea programada automáticamente. Ejecutar este comando con una cuenta de mantenimiento que pueda SELECT/UPDATE sobre estas tablas y con la misma configuración de bucket.
 
@@ -158,4 +156,4 @@ $env:TEST_DB_PASSWORD=''
 npm run test:integration
 ```
 
-La integración crea una base `foto_ya_test_<aleatorio>` y la elimina al terminar; ignora `DB_NAME` del entorno de la aplicación. Sin `TEST_DB_PORT`, los casos de integración se omiten explícitamente. Se verifican permisos, aislamiento de clientes, sesiones, cifrado, bajas reversibles, precios históricos, conteos, migraciones, cargas con/sin cliente, asignación concurrente, reintentos y fallos parciales (incluida la pérdida de confirmación de COMMIT). Storage se simula en estas pruebas; no se afirma probar archivos reales en Supabase sin la clave de servidor. Se validó SQL sobre MariaDB 10.4.32 local compatible; resta ejecutar la suite en el servidor MySQL de destino.
+La integración crea una base `foto_ya_test_<aleatorio>` y la elimina al terminar; ignora `DB_NAME` del entorno de la aplicación. Sin `TEST_DB_PORT`, los casos de integración se omiten explícitamente. Se verifican permisos, aislamiento de clientes, sesiones, datos sin hash, bajas reversibles, precios históricos, conteos, migraciones, cargas con/sin cliente, asignación concurrente, reintentos y fallos parciales (incluida la pérdida de confirmación de COMMIT). Storage se simula en estas pruebas; no se afirma probar archivos reales en Supabase sin la clave de servidor. Se validó SQL sobre MariaDB 10.4.32 local compatible; resta ejecutar la suite en el servidor MySQL de destino.

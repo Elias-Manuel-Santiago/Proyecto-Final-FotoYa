@@ -1,14 +1,14 @@
 export function createAuthRepository(db) {
   return {
-    async byEmail(hash) {
-      const [rows] = await db.execute('SELECT id_usuario, password, disponible FROM usuarios WHERE email_hash = ?', [hash]);
+    async byEmail(email) {
+      const [rows] = await db.execute('SELECT id_usuario, password, disponible FROM usuarios WHERE email = ?', [email]);
       return rows[0];
     },
-    async actor(hash) {
+    async actor(token) {
       const [rows] = await db.execute(`SELECT u.id_usuario AS id, u.id_puesto AS stationId, r.nombre AS role,
         s.id_sesiones_usuario AS sessionId FROM sesiones_usuario s
         JOIN usuarios u ON u.id_usuario = s.id_usuario JOIN rol r ON r.id_rol = u.id_rol
-        WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6) AND u.disponible = 1`, [hash]);
+        WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6) AND u.disponible = 1`, [token]);
       if (!rows[0]) return null;
       const [permissions] = await db.execute(`SELECT p.tipo_de_permiso AS name FROM permisos p
         JOIN permisos_rol pr ON pr.id_permiso = p.id_permisos JOIN usuarios u ON u.id_rol = pr.id_rol

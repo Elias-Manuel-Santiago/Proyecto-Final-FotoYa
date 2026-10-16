@@ -3,7 +3,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { randomUUID } from 'node:crypto';
-import { createPrivacy } from './security/crypto.js';
 import { authenticate as authentication } from './security/authenticate.js';
 import { createStorage } from './integrations/storage.js';
 import { ApiError, errorHandler } from './shared/errors.js';
@@ -29,11 +28,11 @@ import { catalogRoutes } from './modules/catalog/catalog.routes.js';
 import { pendingRoutes } from './modules/pending/pending.routes.js';
 
 export async function createApp({ db, env, storage = createStorage(env) }) {
-  const privacy = createPrivacy(env), authRepository = createAuthRepository(db);
+  const authRepository = createAuthRepository(db);
   const authenticate = authentication(authRepository);
-  const userService = createUserService(db, createUserRepository(db), privacy);
+  const userService = createUserService(db, createUserRepository(db));
   const photoRepository = createPhotoRepository(db);
-  const authService = await createAuthService(db, authRepository, privacy, env);
+  const authService = await createAuthService(db, authRepository, env);
   const app = express();
   app.disable('x-powered-by'); app.set('trust proxy', env.TRUST_PROXY);
   app.use((req, res, next) => {

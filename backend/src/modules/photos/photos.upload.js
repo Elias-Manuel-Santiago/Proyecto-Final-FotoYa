@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { transaction } from '../../shared/transaction.js';
 import { ApiError } from '../../shared/errors.js';
 import { stationScope } from '../../security/access.js';
-import { tokenHash } from '../../security/crypto.js';
 import { photoFormat } from './photos.files.js';
 import { requireClient, requirePhotoOperator } from './photos.authorization.js';
 
@@ -12,19 +11,19 @@ export function createPhotoUploadService(db, repository, storage, env, now = () 
   return {
     async upload(actor, input, file) {
       stationScope(actor, input.stationId);
-      const format = photoFormat(file), hash = tokenHash(file.buffer), bucket = env.SUPABASE_STORAGE_BUCKET;
-      const requestHash = tokenHash(JSON.stringify([input.stationId, input.clientId, hash, bucket]));
+      const format = photoFormat(file), bucket = env.SUPABASE_STORAGE_BUCKET;
+      const requestData = JSON.stringify([input.stationId, input.clientId, file.buffer.toString('base64'), bucket]);
       const path = `${input.stationId}/${randomUUID()}.${format.extension}`;
       // La reserva persiste aunque falle Storage o se pierda la confirmación de COMMIT.
-      await db.execute(`INSERT INTO photo_uploads (operation_id,id_actor,id_puesto,request_hash,content_hash,bucket,id_archivo)
-        VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE
-        last_attempt_at = IF(id_actor = VALUES(id_actor) AND request_hash = VALUES(request_hash), UTC_TIMESTAMP(6), last_attempt_at),
-        cleaned_at = IF(id_actor = VALUES(id_actor) AND request_hash = VALUES(request_hash), NULL, cleaned_at)`,
-      [input.operationId, actor.id, input.stationId, requestHash, hash, bucket, path]);
+      await db.execute(`INSERT INTO photo_uploads (operation_id,id_actor,id_puesto,request_data,bucket,id_archivo)
+        VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE
+        last_attempt_at = IF(id_actor = VALUES(id_actor) AND request_data = VALUES(request_data), UTC_TIMESTAMP(6), last_attempt_at),
+        cleaned_at = IF(id_actor = VALUES(id_actor) AND request_data = VALUES(request_data), NULL, cleaned_at)`,
+      [input.operationId, actor.id, input.stationId, requestData, bucket, path]);
       return transaction(db, async connection => {
         await requirePhotoOperator(connection, actor, 'photos.upload', input.stationId);
         const [[job]] = await connection.execute('SELECT * FROM photo_uploads WHERE operation_id = ? FOR UPDATE', [input.operationId]);
-        if (job.id_actor !== actor.id || job.request_hash !== requestHash)
+        if (job.id_actor !== actor.id || job.request_data !== requestData)
           throw new ApiError(409, 'La operación ya se usó con otros datos.', 'IDEMPOTENCY_CONFLICT');
         if (job.id_foto) {
           const { file: storedFile, ...metadata } = await repository.find(job.id_foto, connection);

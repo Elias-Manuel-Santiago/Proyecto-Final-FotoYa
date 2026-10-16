@@ -2,11 +2,11 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import mysql from 'mysql2/promise';
 import axios from 'axios';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, createCipheriv } from 'node:crypto';
 import { createApp } from '../../src/app.js';
 import { createDatabase } from '../../src/config/database.js';
 import { migrate } from '../../scripts/migrate.js';
-import { createPrivacy, hashPassword, verifyPassword, newToken, tokenHash } from '../../src/security/crypto.js';
+import { hashPassword, verifyPassword, newToken } from '../../src/security/crypto.js';
 import { env as fixture } from '../fixtures.js';
 import { ApiError } from '../../src/shared/errors.js';
 import { createAuthRepository } from '../../src/modules/auth/auth.repository.js';
@@ -19,7 +19,7 @@ const enabled = process.env.TEST_DB_PORT, integration = (name, fn) => test(name,
 const database = `foto_ya_test_${randomBytes(6).toString('hex')}`;
 const env = { ...fixture, DB_NAME: database, DB_PORT: Number(enabled ?? 33307), DB_HOST: process.env.TEST_DB_HOST ?? '127.0.0.1',
   DB_USER: process.env.TEST_DB_USER ?? 'root', DB_PASSWORD: process.env.TEST_DB_PASSWORD ?? '' };
-let admin, db, server, http, privacy, passwordHash;
+let admin, db, server, http, passwordHash;
 const users = {}, tokens = {};
 const objects = new Map(), storageCalls = { uploads: 0 };
 let failureMode = null;
@@ -50,7 +50,7 @@ before(async () => {
   if (!enabled) return;
   admin = await mysql.createConnection({ host: env.DB_HOST, port: env.DB_PORT, user: env.DB_USER, password: env.DB_PASSWORD });
   await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-  db = createDatabase(env); privacy = createPrivacy(env); passwordHash = await hashPassword('Test-password-1234');
+  db = createDatabase(env); passwordHash = await hashPassword('Test-password-1234');
   await migrate(db, env, { init: true });
   await db.query("INSERT INTO ciudad (nombre) VALUES ('Ciudad')");
   await db.query("INSERT INTO puesto (nombre, direccion, id_ciudad) VALUES ('Uno','A',1),('Dos','B',1),('Sin registros','C',1)");
@@ -58,11 +58,10 @@ before(async () => {
     ['secretario', 'secretario', null], ['vendedor', 'vendedor', '1'], ['camarografo', 'camarografo', '1'], ['cliente', 'cliente', null], ['otroCliente', 'cliente', null]]) {
     const [[r]] = await db.execute('SELECT id_rol FROM rol WHERE nombre = ?', [role]);
     const dni = String(10000000 + Object.keys(users).length), email = `${key.toLowerCase()}@example.com`;
-    const [result] = await db.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, email_hash, dni_hash, password, id_rol, id_puesto)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [privacy.encrypt(key, 'nombre'), privacy.encrypt('Apellido', 'apellido'), privacy.encrypt(email, 'email'), privacy.encrypt(dni, 'dni'),
-      privacy.hash(email, 'email'), privacy.hash(dni, 'dni'), passwordHash, r.id_rol, station]);
+    const [result] = await db.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, password, id_rol, id_puesto)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`, [key, 'Apellido', email, dni, passwordHash, r.id_rol, station]);
     users[key] = String(result.insertId); tokens[key] = newToken();
-    await db.execute('INSERT INTO sesiones_usuario (id_usuario, token_hash, expires_at) VALUES (?, ?, TIMESTAMPADD(HOUR, 2, UTC_TIMESTAMP(6)))', [users[key], tokenHash(tokens[key])]);
+    await db.execute('INSERT INTO sesiones_usuario (id_usuario, token, expires_at) VALUES (?, ?, TIMESTAMPADD(HOUR, 2, UTC_TIMESTAMP(6)))', [users[key], tokens[key]]);
   }
   await db.query("INSERT INTO dias (fecha, fotos, descartes, id_puesto) VALUES ('2026-10-14',100,30,1),('2026-10-14',10,0,2)");
   await db.execute("INSERT INTO fotos (id_archivo, id_dia, id_cliente, id_puesto) VALUES ('1/photo.jpg',1,?,1),('1/other.jpg',1,?,1)", [users.cliente, users.otroCliente]);
@@ -89,11 +88,11 @@ integration('API: POST, autenticación, CORS y validación', async () => {
   assert.equal((await call('reports/query', { ...period, stationId: '1 OR 1=1' })).status, 422);
   assert.equal((await call('reports/query', { ...period, actorId: users.dueno })).status, 422);
 });
-integration('login real guarda sólo el hash de sesión y rechaza contraseñas erróneas', async () => {
+integration('login real guarda el token de sesión sin hash y rechaza contraseñas erróneas', async () => {
   const response = await call('auth/login', { email: 'dueno@example.com', password: 'Test-password-1234' });
   assert.equal(response.status, 200); const token = response.data.data.token;
-  const [[session]] = await db.execute('SELECT token_hash FROM sesiones_usuario WHERE token_hash = ?', [tokenHash(token)]);
-  assert(session); assert.notEqual(session.token_hash, token);
+  const [[session]] = await db.execute('SELECT token FROM sesiones_usuario WHERE token = ?', [token]);
+  assert(session); assert.equal(session.token, token);
   assert.equal((await call('auth/login', { email: 'dueno@example.com', password: 'wrong' })).status, 401);
   assert.equal((await call('auth/login', { email: 'nobody@example.com', password: 'wrong' })).status, 401);
 });
@@ -160,12 +159,12 @@ integration('asistencia conserva puesto histórico y turno que cruza medianoche'
   assert.equal((await call('attendance/query', period, 'otroEncargado')).data.data.length, 0);
   await db.execute('UPDATE usuarios SET id_puesto=1 WHERE id_usuario=?', [users.vendedor]);
 });
-integration('alta cifra PII, rechaza duplicados y evita escalamiento del encargado', async () => {
+integration('alta guarda datos sin cifrar, hashea contraseña y rechaza duplicados y escalamiento', async () => {
   const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='cliente'");
   const input = { firstName: 'Cliente nuevo', lastName: 'Prueba', email: 'new@example.com', dni: '30444555', password: 'New-password-1234', roleId: String(role.id_rol), stationId: null };
   const response = await call('users/create', input); assert.equal(response.status, 200);
   const [[stored]] = await db.execute('SELECT nombre,email,dni,password FROM usuarios WHERE id_usuario=?', [response.data.data.id]);
-  assert(stored.nombre.startsWith('enc:v1:')); assert(stored.email.startsWith('enc:v1:')); assert(stored.dni.startsWith('enc:v1:')); assert(stored.password.startsWith('scrypt$'));
+  assert.equal(stored.nombre, input.firstName); assert.equal(stored.email, input.email); assert.equal(stored.dni, input.dni); assert(stored.password.startsWith('scrypt$'));
   assert.equal((await call('users/query', { email: input.email })).data.data.length, 1);
   assert.equal((await call('users/create', input)).status, 409);
   assert.equal((await call('users/create', { ...input, email: 'other@example.com', dni: '30444556' }, 'encargado')).status, 403);
@@ -253,7 +252,7 @@ integration('fallo parcial de Storage no suma fotos y la reconciliación preserv
   const retried = await upload(operation); assert.equal(retried.status, 200); assert(objects.has(job.id_archivo));
 });
 integration('fallos al guardar metadatos o recibir COMMIT se recuperan sin doble conteo', async () => {
-  const actor = await createAuthRepository(db).actor(tokenHash(tokens.encargado));
+  const actor = await createAuthRepository(db).actor(tokens.encargado);
   const repository = createPhotoRepository(db), date = businessDate(new Date());
   for (const fault of ['metadata', 'commit']) {
     const input = { operationId: randomUUID(), stationId: '1', clientId: null };
@@ -283,28 +282,52 @@ integration('cambio de contraseña revoca sesiones y logout no altera asistencia
   assert.equal((await call('auth/logout', {}, 'cliente')).status, 200); assert.equal((await call('auth/me', {}, 'cliente')).status, 401);
   const [[after]] = await db.query('SELECT COUNT(*) AS count FROM horarios'); assert.equal(after.count, before.count);
 });
-integration('migraciones repetibles preservan permisos y datos descifrables', async () => {
+integration('migraciones repetibles preservan permisos y datos originales', async () => {
   await migrate(db, env);
   const response = await call('auth/me'); assert.equal(response.status, 200); assert.equal(response.data.data.email, 'dueno@example.com');
 });
-integration('migración protege usuarios previos y rechaza cambios de clave sin corromper datos', async () => {
+integration('migración conserva datos personales y sólo hashea contraseñas', async () => {
   const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='cliente'");
   const [created] = await db.execute(`INSERT INTO usuarios (nombre,apellido,email,dni,password,id_rol)
     VALUES ('Anterior','Prueba','Legacy@example.com','40.123.456','Legacy-password-123',?)`, [role.id_rol]);
   await migrate(db, env);
   const [[user]] = await db.execute('SELECT * FROM usuarios WHERE id_usuario=?', [created.insertId]);
-  assert.equal(privacy.decrypt(user.email, 'email'), 'legacy@example.com');
-  assert.equal(privacy.decrypt(user.dni, 'dni'), '40123456');
+  assert.equal(user.email, 'legacy@example.com');
+  assert.equal(user.dni, '40123456');
   assert.equal(await verifyPassword('Legacy-password-123', user.password), true);
-  await assert.rejects(migrate(db, { ...env, LOOKUP_HASH_KEY: '3'.repeat(64) }), /clave de búsqueda/);
+  await migrate(db, env);
   assert.equal((await call('auth/me')).status, 200);
 });
 integration('sesiones vencidas y revocación de sesiones ajenas', async () => {
   const token = newToken();
-  const [expired] = await db.execute(`INSERT INTO sesiones_usuario (id_usuario,token_hash,created_at,expires_at)
-    VALUES (?,?,TIMESTAMPADD(HOUR,-2,UTC_TIMESTAMP(6)),TIMESTAMPADD(HOUR,-1,UTC_TIMESTAMP(6)))`, [users.dueno, tokenHash(token)]);
+  const [expired] = await db.execute(`INSERT INTO sesiones_usuario (id_usuario,token,created_at,expires_at)
+    VALUES (?,?,TIMESTAMPADD(HOUR,-2,UTC_TIMESTAMP(6)),TIMESTAMPADD(HOUR,-1,UTC_TIMESTAMP(6)))`, [users.dueno, token]);
   assert.equal((await http.post('/api/auth/me', {}, { headers: { Authorization: `Bearer ${token}` } })).status, 401);
   await call('auth/sessions/revoke', { sessionId: String(expired.insertId) }, 'secretario');
   const [[row]] = await db.execute('SELECT revoked_at FROM sesiones_usuario WHERE id_sesiones_usuario=?', [expired.insertId]);
   assert.equal(row.revoked_at, null);
+});
+
+integration('convierte el esquema anterior, descifra datos y elimina tablas auxiliares sin recrearlas', async () => {
+  const key = randomBytes(32), iv = randomBytes(12), cipher = createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(Buffer.from('nombre'));
+  const ciphertext = Buffer.concat([cipher.update('Nombre anterior', 'utf8'), cipher.final()]);
+  const encrypted = `enc:v1:${Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64')}`;
+  await db.query('ALTER TABLE usuarios MODIFY nombre VARCHAR(1024) NOT NULL, ADD email_hash CHAR(64) UNIQUE, ADD dni_hash CHAR(64) UNIQUE');
+  await db.execute('UPDATE usuarios SET nombre=? WHERE id_usuario=?', [encrypted, users.dueno]);
+  for (const table of ['sesiones_usuario', 'tokens_autenticacion'])
+    await db.query(`ALTER TABLE ${table} CHANGE token token_hash VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL`);
+  await db.query('ALTER TABLE photo_uploads DROP COLUMN request_data, ADD request_hash CHAR(64), ADD content_hash CHAR(64)');
+  await db.query('CREATE TABLE backend_locks (name VARCHAR(30) PRIMARY KEY)');
+  await db.query('CREATE TABLE backend_migrations (name VARCHAR(150) PRIMARY KEY)');
+  await migrate(db, { ...env, DATA_ENCRYPTION_KEY: key.toString('hex') });
+  const [[user]] = await db.execute('SELECT nombre, password FROM usuarios WHERE id_usuario=?', [users.dueno]);
+  assert.equal(user.nombre, 'Nombre anterior'); assert.equal(user.password, passwordHash);
+  const [[active]] = await db.query('SELECT COUNT(*) AS count FROM sesiones_usuario WHERE revoked_at IS NULL');
+  assert.equal(Number(active.count), 0);
+  await migrate(db, env);
+  const [tables] = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('backend_locks','backend_migrations')");
+  assert.equal(tables.length, 0);
+  const [hashColumns] = await db.query("SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND column_name LIKE '%hash%'");
+  assert.equal(hashColumns.length, 0);
 });

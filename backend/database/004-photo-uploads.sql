@@ -1,9 +1,8 @@
-CREATE TABLE photo_uploads (
+CREATE TABLE IF NOT EXISTS photo_uploads (
   operation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
   id_actor BIGINT UNSIGNED NOT NULL,
   id_puesto BIGINT UNSIGNED NOT NULL,
-  request_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  content_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  request_data LONGTEXT CHARACTER SET ascii COLLATE ascii_bin NULL,
   bucket VARCHAR(63) NOT NULL,
   id_archivo VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL UNIQUE,
   id_foto BIGINT UNSIGNED NULL UNIQUE,

@@ -4,8 +4,8 @@ import { createDatabase } from './config/database.js';
 
 const env = loadEnv(), db = createDatabase(env);
 try {
-  const [[row]] = await db.query("SELECT COUNT(*) AS count FROM usuarios WHERE email_hash IS NULL OR dni_hash IS NULL OR nombre NOT LIKE 'enc:v1:%' OR apellido NOT LIKE 'enc:v1:%' OR email NOT LIKE 'enc:v1:%' OR dni NOT LIKE 'enc:v1:%' OR password NOT LIKE 'scrypt$%'");
-  if (Number(row.count)) throw new Error('Ejecutá npm run db:migrate para proteger los datos personales.');
+  const [[row]] = await db.query("SELECT COUNT(*) AS count FROM usuarios WHERE nombre LIKE 'enc:v1:%' OR apellido LIKE 'enc:v1:%' OR email LIKE 'enc:v1:%' OR dni LIKE 'enc:v1:%' OR password NOT LIKE 'scrypt$%'");
+  if (Number(row.count)) throw new Error('Ejecutá npm run db:migrate para actualizar los datos y hashear las contraseñas.');
   const app = await createApp({ db, env });
   const server = app.listen(env.PORT, env.HOST, () => console.log(`Foto Ya disponible en http://${env.HOST}:${env.PORT}`));
   const stop = () => {

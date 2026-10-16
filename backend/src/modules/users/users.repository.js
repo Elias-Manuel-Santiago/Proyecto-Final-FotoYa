@@ -12,7 +12,7 @@ export function createUserRepository(db) {
       const station = stationScope(actor, input.stationId), where = [], params = [];
       if (station) { where.push('u.id_puesto = ?'); params.push(station); }
       if (actor.role === 'secretario') where.push("r.nombre <> 'cliente'");
-      for (const [name, column] of [['emailHash', 'email_hash'], ['dniHash', 'dni_hash'], ['active', 'disponible']]) {
+      for (const [name, column] of [['email', 'email'], ['dni', 'dni'], ['active', 'disponible']]) {
         if (input[name] !== undefined) { where.push(`u.${column} = ?`); params.push(input[name]); }
       }
       const [rows] = await db.execute(`SELECT ${columns} FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol

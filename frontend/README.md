@@ -16,7 +16,7 @@ npm start
 
 En `.env.local`, configurar `EXPO_PUBLIC_API_URL` incluyendo `/api`. Para web local: `http://localhost:3000/api`; emulador Android: `http://10.0.2.2:3000/api`; teléfono físico: `http://IP-LAN-DE-LA-PC:3000/api`. En teléfono, la API debe escuchar en `0.0.0.0` y ser accesible desde esa red. En producción usar HTTPS. Las variables `EXPO_PUBLIC_*` son públicas: nunca incluir claves de MySQL ni de Storage.
 
-Iniciar el backend siguiendo `../backend/README.md`: requiere MySQL configurado, esquema migrado, claves de cifrado y un dueño creado. Para web, `CORS_ORIGINS` del backend debe incluir el origen exacto del frontend, por ejemplo `http://localhost:8081`. Reiniciar Expo al cambiar la URL. El frontend no aplica migraciones ni crea datos de demostración.
+Iniciar el backend siguiendo `../backend/README.md`: requiere MySQL configurado, esquema migrado y un dueño creado. Para web, `CORS_ORIGINS` del backend debe incluir el origen exacto del frontend, por ejemplo `http://localhost:8081`. Reiniciar Expo al cambiar la URL. El frontend no aplica migraciones ni crea datos de demostración.
 
 ## Comportamiento integrado
 

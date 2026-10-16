@@ -1,20 +1,20 @@
 import { ApiError } from '../../shared/errors.js';
 import { transaction } from '../../shared/transaction.js';
-import { hashPassword, verifyPassword, newToken, tokenHash, normalizeEmail } from '../../security/crypto.js';
+import { hashPassword, verifyPassword, newToken, normalizeEmail } from '../../security/crypto.js';
 
-export async function createAuthService(db, repository, privacy, env) {
+export async function createAuthService(db, repository, env) {
   const dummyHash = await hashPassword(newToken());
   return {
     async login(input) {
-      const user = await repository.byEmail(privacy.hash(normalizeEmail(input.email), 'email'));
+      const user = await repository.byEmail(normalizeEmail(input.email));
       const valid = await verifyPassword(input.password, user?.password ?? dummyHash);
       if (!valid || !user?.disponible) throw new ApiError(401, 'Correo o contraseña incorrectos.', 'INVALID_CREDENTIALS');
       const token = newToken();
       await transaction(db, async connection => {
         const [[current]] = await connection.execute('SELECT password, disponible FROM usuarios WHERE id_usuario = ? FOR UPDATE', [user.id_usuario]);
         if (!current?.disponible || current.password !== user.password) throw new ApiError(401, 'Correo o contraseña incorrectos.', 'INVALID_CREDENTIALS');
-        await connection.execute(`INSERT INTO sesiones_usuario (id_usuario, token_hash, expires_at)
-          VALUES (?, ?, TIMESTAMPADD(HOUR, ?, UTC_TIMESTAMP(6)))`, [user.id_usuario, tokenHash(token), env.SESSION_HOURS]);
+        await connection.execute(`INSERT INTO sesiones_usuario (id_usuario, token, expires_at)
+          VALUES (?, ?, TIMESTAMPADD(HOUR, ?, UTC_TIMESTAMP(6)))`, [user.id_usuario, token, env.SESSION_HOURS]);
       });
       return { token, tokenType: 'Bearer', expiresIn: env.SESSION_HOURS * 3600 };
     },

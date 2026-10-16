@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPrivacy, hashPassword, verifyPassword, tokenHash, newToken } from '../src/security/crypto.js';
+import { hashPassword, verifyPassword, newToken } from '../src/security/crypto.js';
 import { assertPermission, stationScope, assertAssignable } from '../src/security/access.js';
 import { loadEnv } from '../src/config/env.js';
 import { period } from '../src/shared/validation.js';
@@ -14,25 +14,12 @@ test('scrypt usa sal y rechaza contraseñas incorrectas o formatos desconocidos'
   assert.equal(await verifyPassword(password, password), false);
   assert.notEqual(encoded, await hashPassword(password));
 });
-test('datos personales cifrados, autenticados y separados por campo', () => {
-  const privacy = createPrivacy(env), value = 'persona@example.com';
-  const encrypted = privacy.encrypt(value, 'email');
-  assert(!encrypted.includes(value));
-  assert.equal(privacy.decrypt(encrypted, 'email'), value);
-  assert.notEqual(privacy.encrypt(value, 'email'), encrypted);
-  assert.throws(() => privacy.decrypt(encrypted, 'dni'));
-  const bytes = Buffer.from(encrypted.slice(7), 'base64'); bytes[15] ^= 1;
-  assert.throws(() => privacy.decrypt(`enc:v1:${bytes.toString('base64')}`, 'email'));
-  assert.notEqual(privacy.hash(value, 'email'), privacy.hash(value, 'dni'));
-  assert.equal(privacy.hash(value, 'email'), privacy.hash(value, 'email'));
-});
-test('tokens aleatorios con hash persistible', () => {
+test('tokens aleatorios se utilizan sin hash', () => {
   const token = newToken();
   assert.match(token, /^[\w-]{43}$/);
   assert.notEqual(token, newToken());
-  assert.match(tokenHash(token), /^[a-f\d]{64}$/);
-  assert.notEqual(tokenHash(token), token);
 });
+
 test('alcance nulo de cliente/empleado no habilita acceso global', () => {
   assert.equal(stationScope(actor('dueno')), null);
   assert.equal(stationScope(actor('secretario'), '99'), '99');
@@ -50,7 +37,8 @@ test('validación rechaza fechas falsas, períodos invertidos e identificadores 
     { ...base, stationId: '1 OR 1=1' }, { ...base, limit: 101 }, { ...base, to: '2028-01-01' }])
     assert.equal(period.safeParse(input).success, false);
 });
-test('configuración falla sin claves independientes y no revela sus valores', () => {
-  assert.throws(() => loadEnv({ ...env, DATA_ENCRYPTION_KEY: 'secret-value' }), error => !error.message.includes('secret-value'));
-  assert.throws(() => loadEnv({ ...env, LOOKUP_HASH_KEY: env.DATA_ENCRYPTION_KEY }));
+test('configuración no requiere claves de cifrado ni de búsqueda para ejecutar la API', () => {
+  const { DATA_ENCRYPTION_KEY, LOOKUP_HASH_KEY, ...config } = { ...env, CORS_ORIGINS: env.CORS_ORIGINS.join(',') };
+  assert.equal(loadEnv(config).SESSION_HOURS, 8);
+  assert.equal(loadEnv({ ...config, DATA_ENCRYPTION_KEY: 'unused', LOOKUP_HASH_KEY: 'unused' }).DATA_ENCRYPTION_KEY, undefined);
 });
