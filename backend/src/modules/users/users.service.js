@@ -33,6 +33,12 @@ export function createUserService(db, repository) {
     if (!role) throw new ApiError(422, 'El rol no existe.');
     if (['encargado', 'camarografo', 'vendedor'].includes(role) && !input.stationId) throw new ApiError(422, 'El rol requiere un puesto.');
     assertAssignable(actor, role, input.stationId);
+    if (input.stationId) {
+      const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto = ? LOCK IN SHARE MODE', [input.stationId]);
+      const existing = input.userId ? await repository.find(input.userId, connection) : null;
+      if (!station || (!station.active && existing?.stationId !== input.stationId))
+        throw new ApiError(422, 'Seleccioná un puesto activo.');
+    }
   };
   return {
     async profile(actor) { return { ...publicUser(await repository.find(actor.id)), permissions: actor.permissions }; },

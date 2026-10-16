@@ -26,6 +26,14 @@ export interface Station {
   event: string;
   cityId?: string;
   eventId?: string;
+  active?: boolean;
+}
+
+export interface StationInput {
+  name: string;
+  address: string;
+  city: string;
+  event: string;
 }
 
 export interface Photo {

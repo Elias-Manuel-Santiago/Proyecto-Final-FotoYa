@@ -1,10 +1,16 @@
-import type { AppData, EmployeeInput, PhotoFile } from '../domain/models';
+import type {
+  AppData,
+  EmployeeInput,
+  PhotoFile,
+  StationInput,
+} from '../domain/models';
 import type { FotoYaRepository, SaleInput } from './repository';
 import { createSeed } from './seed';
 import { saveEmployee, setEmployeeActive } from './operations/employees';
 import { recordSale } from './operations/sales';
 import { uploadPhotos } from './operations/photos';
 import { checkIn, checkOut } from './operations/attendance';
+import { createStation, setStationActive } from './operations/stations';
 
 interface MockOptions {
   data?: AppData;
@@ -34,6 +40,14 @@ export class MockFotoYaRepository implements FotoYaRepository {
 
   async snapshot() {
     return copyData(this.data);
+  }
+
+  async createStation(actorId: string, input: StationInput) {
+    createStation(this.data, this.actor(actorId), input);
+  }
+
+  async setStationActive(actorId: string, stationId: string, active: boolean) {
+    setStationActive(this.data, this.actor(actorId), stationId, active);
   }
 
   async saveEmployee(actorId: string, input: EmployeeInput) {

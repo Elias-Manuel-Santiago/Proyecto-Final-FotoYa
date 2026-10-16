@@ -9,6 +9,7 @@ import type {
   RoleId,
   Sale,
   Station,
+  StationInput,
   UploadResult,
 } from '../domain/models';
 import { businessDate, periodError, utcInstant } from '../domain/dates';
@@ -130,6 +131,7 @@ export class HttpFotoYaRepository implements FotoYaRepository {
       ...row,
       id: String(row.id),
       cityId: String(row.cityId),
+      active: Boolean(row.active),
       eventId: row.eventId == null ? undefined : String(row.eventId),
       event: row.event ?? '',
     }));
@@ -258,6 +260,14 @@ export class HttpFotoYaRepository implements FotoYaRepository {
       })),
       summary: summary ? metrics(summary) : undefined,
     };
+  }
+
+  async createStation(_actorId: string, input: StationInput) {
+    await this.api.post('catalog/stations/create', input);
+  }
+
+  async setStationActive(_actorId: string, stationId: string, active: boolean) {
+    await this.api.post('catalog/stations/availability', { stationId, active });
   }
 
   async saveEmployee(_actorId: string, input: EmployeeInput) {

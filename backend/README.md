@@ -87,6 +87,14 @@ Referencias: [pool de mysql2](https://sidorares.github.io/node-mysql2/docs/examp
 
 ## Contrato de la API
 
+### Gestión de puestos
+
+Después de actualizar, ejecutar `npm run db:migrate`: agrega `puesto.disponible` (los puestos existentes quedan activos) y el permiso `stations.manage` al dueño. La sección **Puestos** permite crear, dar de baja y reactivar puestos. La baja conserva usuarios asignados, fotos, ventas y horarios; bloquea nuevas cargas y nuevas asignaciones de usuarios al puesto. Los registros históricos siguen disponibles en las consultas y filtros.
+
+- `POST /api/catalog/stations/create`: `{ name, address, city, event }`. Evento opcional; ciudad y evento se reutilizan por nombre o se crean si faltan. Rechaza duplicados del mismo nombre, dirección, ciudad y evento, incluso inactivos.
+- `POST /api/catalog/stations/availability`: `{ stationId, active }`. Reversible e idempotente. Requiere dueño y permiso `stations.manage`, revalidados dentro de la transacción.
+- `POST /api/catalog/query` con `resource: 'stations'` incluye `active` y conserva los puestos inactivos para consulta histórica.
+
 Las respuestas exitosas usan `{ "data": ... }`; los errores `{ "error": { "code", "message", "requestId" } }`. Los listados devuelven un array. Paginación: `limit` (1–100, predeterminado 30), `offset` (predeterminado 0). Una página con menos elementos que `limit` indica el final. Los identificadores se envían como strings; los IDs de catálogo también deben convertirse a strings al usarlos como entrada. Los importes DECIMAL y algunos agregados se entregan como strings para conservar precisión.
 
 Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`. El actor siempre se obtiene de la sesión; nunca se acepta un actor enviado en el cuerpo. Los campos desconocidos se rechazan. `OPTIONS` queda disponible para CORS, y GET responde 405.

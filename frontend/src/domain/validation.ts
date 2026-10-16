@@ -1,6 +1,10 @@
 import type { AppData, EmployeeInput } from './models';
 
 export function validateEmployee(input: EmployeeInput, data: AppData) {
+  const station = data.stations.find((row) => row.id === input.stationId);
+  const existing = data.employees.find((row) => row.id === input.id);
+  if (station?.active === false && existing?.stationId !== input.stationId)
+    throw new Error('Seleccioná un puesto activo.');
   if (!input.firstName.trim() || !input.lastName.trim())
     throw new Error('Completá nombre y apellido.');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim()))

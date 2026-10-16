@@ -9,6 +9,7 @@ const links: { href: Href; label: string; permission?: Permission }[] = [
   { href: '/home', label: 'Inicio' },
   { href: '/reports', label: 'Estadísticas', permission: 'reports.read' },
   { href: '/employees', label: 'Usuarios', permission: 'employees.read' },
+  { href: '/stations', label: 'Puestos', permission: 'stations.manage' },
   { href: '/attendance', label: 'Horarios', permission: 'attendance.read' },
   { href: '/photos', label: 'Fotos', permission: 'photos.read' },
   { href: '/sales', label: 'Ventas', permission: 'sales.read' },

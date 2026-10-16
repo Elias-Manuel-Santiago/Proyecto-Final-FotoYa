@@ -105,10 +105,15 @@ export function EmployeeForm({
           employee.roleId === 'owner'
             ? [{ value: '', label: 'Sin puesto asignado' }]
             : []),
-          ...visibleStations(data, employee).map((station) => ({
-            value: station.id,
-            label: station.name,
-          })),
+          ...visibleStations(data, employee)
+            .filter(
+              (station) =>
+                station.active !== false || station.id === existing?.stationId,
+            )
+            .map((station) => ({
+              value: station.id,
+              label: station.name,
+            })),
         ]}
         onChange={(stationId) => update({ stationId })}
         disabled={action.busy || existing?.id === employee.id}

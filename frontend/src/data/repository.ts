@@ -4,6 +4,7 @@ import type {
   PhotoFile,
   UploadResult,
   Period,
+  StationInput,
 } from '../domain/models';
 
 export interface SaleInput {
@@ -17,6 +18,12 @@ export interface SaleInput {
 // El adaptador HTTP deberá obtener el actor de la sesión validada en el servidor.
 export interface FotoYaRepository {
   snapshot(period?: Period): Promise<AppData>;
+  createStation(actorId: string, input: StationInput): Promise<void>;
+  setStationActive(
+    actorId: string,
+    stationId: string,
+    active: boolean,
+  ): Promise<void>;
   saveEmployee(actorId: string, input: EmployeeInput): Promise<void>;
   setEmployeeActive(
     actorId: string,

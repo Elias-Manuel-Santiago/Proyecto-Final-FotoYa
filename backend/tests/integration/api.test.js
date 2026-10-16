@@ -88,6 +88,56 @@ integration('API: POST, autenticación, CORS y validación', async () => {
   assert.equal((await call('reports/query', { ...period, stationId: '1 OR 1=1' })).status, 422);
   assert.equal((await call('reports/query', { ...period, actorId: users.dueno })).status, 422);
 });
+integration('puestos: alta, baja reversible, permisos e historial', async () => {
+  // Simula una instalación existente con su catálogo de permisos ya poblado.
+  await db.query('ALTER TABLE puesto DROP COLUMN disponible');
+  await db.query("DELETE pr FROM permisos_rol pr JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE p.tipo_de_permiso='stations.manage'");
+  await db.query("DELETE FROM permisos WHERE tipo_de_permiso='stations.manage'");
+  await migrate(db, env);
+  const [[existing]] = await db.query('SELECT MIN(disponible) AS active FROM puesto');
+  assert.equal(Number(existing.active), 1);
+  const input = { name: 'Nuevo puesto', address: 'Calle 123', city: 'Ciudad', event: 'Nuevo evento' };
+  for (const role of ['encargado', 'secretario', 'vendedor', 'camarografo', 'cliente']) {
+    assert.equal((await call('catalog/stations/create', input, role)).status, 403);
+    assert.equal((await call('catalog/stations/availability', { stationId: '1', active: false }, role)).status, 403);
+  }
+  assert.equal((await call('catalog/stations/create', { ...input, name: ' ' })).status, 422);
+  const created = await call('catalog/stations/create', input);
+  assert.equal(created.status, 200); const id = created.data.data.id;
+  assert.equal((await call('catalog/stations/create', input)).status, 409);
+  const [[cityCount]] = await db.query("SELECT COUNT(*) AS count FROM ciudad WHERE nombre='Ciudad'");
+  assert.equal(Number(cityCount.count), 1);
+  assert.equal((await call('catalog/stations/availability', { stationId: id, active: false })).status, 200);
+  await migrate(db, env);
+  const [[inactive]] = await db.execute('SELECT disponible AS active FROM puesto WHERE id_puesto=?', [id]);
+  assert.equal(Number(inactive.active), 0);
+  assert.equal((await call('catalog/stations/create', input)).status, 409);
+  assert.equal((await call('catalog/stations/availability', { stationId: id, active: true })).status, 200);
+  assert.equal((await call('catalog/stations/availability', { stationId: '999999', active: false })).status, 404);
+  const [[before]] = await db.query('SELECT COUNT(*) AS count FROM fotos WHERE id_puesto=1');
+  assert.equal((await call('catalog/stations/availability', { stationId: '1', active: false })).status, 200);
+  const uploads = storageCalls.uploads;
+  assert.equal((await upload(randomUUID())).status, 409);
+  assert.equal(storageCalls.uploads, uploads);
+  const catalog = await call('catalog/query', { resource: 'stations' });
+  assert.equal(Number(catalog.data.data.find(row => String(row.id) === '1').active), 0);
+  assert.equal((await call('reports/query', period)).status, 200);
+  const [[after]] = await db.query('SELECT COUNT(*) AS count FROM fotos WHERE id_puesto=1');
+  assert.equal(after.count, before.count);
+  const [[sellerRole]] = await db.query("SELECT id_rol AS id FROM rol WHERE nombre='vendedor'");
+  assert.equal((await call('users/create', { firstName: 'Nuevo', lastName: 'Empleado', email: 'inactive-station@example.com', dni: '48555999', password: 'Test-password-1234', roleId: String(sellerRole.id), stationId: '1' })).status, 422);
+  assert.equal((await call('catalog/stations/availability', { stationId: '1', active: true })).status, 200);
+  const operation = randomUUID();
+  assert.equal((await upload(operation)).status, 200);
+  // Dejar las cantidades iniciales intactas para las comprobaciones de informes.
+  const [[photo]] = await db.execute('SELECT id_foto,id_archivo FROM photo_uploads WHERE operation_id=?', [operation]);
+  await db.execute('DELETE FROM photo_uploads WHERE operation_id=?', [operation]);
+  await db.execute('DELETE FROM fotos WHERE id_fotos=?', [photo.id_foto]);
+  objects.delete(photo.id_archivo);
+  await db.execute('DELETE FROM dias WHERE fecha=? AND id_puesto=1 AND fecha<>?', [businessDate(new Date()), period.from]);
+  await db.execute('DELETE FROM puesto WHERE id_puesto=?', [id]);
+});
+
 integration('login real guarda el token de sesión sin hash y rechaza contraseñas erróneas', async () => {
   const response = await call('auth/login', { email: 'dueno@example.com', password: 'Test-password-1234' });
   assert.equal(response.status, 200); const token = response.data.data.token;

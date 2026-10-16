@@ -29,6 +29,8 @@ export function createPhotoUploadService(db, repository, storage, env, now = () 
           const { file: storedFile, ...metadata } = await repository.find(job.id_foto, connection);
           return metadata;
         }
+        const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto = ? LOCK IN SHARE MODE', [input.stationId]);
+        if (!station?.active) throw new ApiError(409, 'El puesto está dado de baja. No se pueden cargar fotos.');
         if (input.clientId !== null) await requirePhotoOperator(connection, actor, 'photos.assign', input.stationId);
         await requireClient(connection, input.clientId);
         // Sólo se limpia el objeto de esta reserva sin foto confirmada, bajo bloqueo.

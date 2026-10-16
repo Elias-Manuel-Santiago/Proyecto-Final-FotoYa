@@ -35,6 +35,13 @@ export function uploadPhotos(
         return { key: file.key };
       }
       if (
+        data.stations.find((station) => station.id === stationId)?.active ===
+        false
+      )
+        throw new Error(
+          'El puesto está dado de baja. No se pueden cargar fotos.',
+        );
+      if (
         !file.uri ||
         !file.name ||
         (file.size !== undefined && file.size <= 0)

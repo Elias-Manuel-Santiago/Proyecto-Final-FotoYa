@@ -12,6 +12,7 @@ CREATE TABLE puesto (
   id_puesto BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(150) NOT NULL,
   direccion VARCHAR(255) NOT NULL,
+  disponible BOOLEAN NOT NULL DEFAULT TRUE,
   id_ciudad BIGINT UNSIGNED NOT NULL,
   id_evento BIGINT UNSIGNED NULL,
   CONSTRAINT fk_puesto_ciudad FOREIGN KEY (id_ciudad) REFERENCES ciudad (id_ciudad),
@@ -164,3 +165,4 @@ CREATE TABLE horarios (
   CONSTRAINT fk_horarios_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario),
   CONSTRAINT ck_horarios_orden CHECK (check_out IS NULL OR check_out >= check_in)
 ) ENGINE = InnoDB;
+

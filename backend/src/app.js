@@ -25,6 +25,7 @@ import { createReportsRepository } from './modules/reports/reports.repository.js
 import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { createCatalogRepository } from './modules/catalog/catalog.repository.js';
 import { catalogRoutes } from './modules/catalog/catalog.routes.js';
+import { createStationService } from './modules/catalog/stations.service.js';
 import { pendingRoutes } from './modules/pending/pending.routes.js';
 
 export async function createApp({ db, env, storage = createStorage(env) }) {
@@ -50,7 +51,7 @@ export async function createApp({ db, env, storage = createStorage(env) }) {
   app.use('/api/auth', authRoutes({ authService, authRepository, authenticate, userService }));
   app.use('/api', authenticate);
   app.use('/api/users', userRoutes(userService));
-  app.use('/api/catalog', catalogRoutes(createCatalogRepository(db)));
+  app.use('/api/catalog', catalogRoutes(createCatalogRepository(db), createStationService(db)));
   app.use('/api/photos', photoRoutes(createPhotoService(photoRepository, storage), createPhotoAssignmentService(db, photoRepository),
     createPhotoUploadService(db, photoRepository, storage, env)));
   app.use('/api/sales', salesRoutes(createSalesRepository(db)));

@@ -52,6 +52,7 @@ export async function migrate(db, env, { init = false } = {}) {
       if (await hasIndex(table, oldIndex)) await connection.query(`ALTER TABLE ${table} DROP INDEX ${oldIndex}`);
       if (!await hasIndex(table, newIndex)) await connection.query(`ALTER TABLE ${table} ADD CONSTRAINT ${newIndex} UNIQUE (token)`);
     }
+    if (!await hasColumn('puesto', 'disponible')) await connection.query('ALTER TABLE puesto ADD disponible BOOLEAN NOT NULL DEFAULT TRUE');
     const photoColumns = await columns('fotos');
     if (photoColumns.some(column => column.name === 'id_cliente' && column.nullable === 'NO')) {
       const [keys] = await connection.query("SELECT CONSTRAINT_NAME AS name FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND table_name = 'fotos' AND column_name = 'id_cliente' AND referenced_table_name = 'usuarios'");
@@ -71,6 +72,10 @@ export async function migrate(db, env, { init = false } = {}) {
     }
     await connection.beginTransaction();
     await seedPermissions(connection);
+    await connection.execute("INSERT IGNORE INTO permisos (tipo_de_permiso) VALUES ('stations.manage')");
+    await connection.execute(`INSERT IGNORE INTO permisos_rol (id_rol, id_permiso)
+      SELECT r.id_rol, p.id_permisos FROM rol r CROSS JOIN permisos p
+      WHERE r.nombre = 'dueno' AND p.tipo_de_permiso = 'stations.manage'`);
     await connection.commit();
     // Se retiran sólo después de convertir correctamente los datos existentes.
     await connection.query('DROP TABLE IF EXISTS backend_locks');

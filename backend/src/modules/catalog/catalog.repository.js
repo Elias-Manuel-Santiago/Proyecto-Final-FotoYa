@@ -7,7 +7,7 @@ export function createCatalogRepository(db) {
       if (input.resource === 'stations') {
         const station = stationScope(actor, input.stationId);
         const [rows] = await db.execute(`SELECT p.id_puesto AS id, p.nombre AS name, p.direccion AS address,
-          c.id_ciudad AS cityId, c.nombre AS city, e.id_evento AS eventId, e.nombre AS event
+          c.id_ciudad AS cityId, c.nombre AS city, e.id_evento AS eventId, e.nombre AS event, p.disponible AS active
           FROM puesto p JOIN ciudad c ON c.id_ciudad = p.id_ciudad LEFT JOIN evento e ON e.id_evento = p.id_evento
           ${station ? 'WHERE p.id_puesto = ?' : ''} ORDER BY p.id_puesto LIMIT ? OFFSET ?`,
         [...(station ? [station] : []), String(input.limit), String(input.offset)]);
