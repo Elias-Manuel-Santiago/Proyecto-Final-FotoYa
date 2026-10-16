@@ -17,7 +17,8 @@ export class ApiClient {
 
   constructor(
     private baseUrl: string,
-    private transport: typeof fetch = fetch,
+    // Evitar que el navegador reciba ApiClient como `this` de su fetch nativo.
+    private transport: typeof fetch = (...args) => fetch(...args),
   ) {
     if (!/^https?:\/\//.test(baseUrl))
       throw new Error(

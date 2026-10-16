@@ -24,7 +24,9 @@ export function createStorage(env, transport) {
       try {
         path(file);
         await client.delete(`/object/${encodeURIComponent(env.SUPABASE_STORAGE_BUCKET)}`, { data: { prefixes: [file] } });
-      } catch { throw new ApiError(502, 'No se pudo reconciliar la carga de la foto.', 'STORAGE_ERROR'); }
+      } catch (error){ 
+        throw new ApiError(502, error, 'STORAGE_ERROR'); 
+      }
     },
     async signedUrl(file) {
       try {
