@@ -1,0 +1,90 @@
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { loadEnv } from '../src/config/env.js';
+import { createDatabase } from '../src/config/database.js';
+import { protectUsers } from './lib/protect-users.js';
+import { seedPermissions } from './lib/seed-permissions.js';
+
+// Inspeccionar el esquema permite repetir la actualización sin tablas auxiliares.
+export async function migrate(db, env, { init = false } = {}) {
+  const connection = await db.getConnection();
+  let acquired = false;
+  const columns = async table => {
+    const [rows] = await connection.execute('SELECT COLUMN_NAME AS name, IS_NULLABLE AS nullable FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?', [table]);
+    return rows;
+  };
+  const hasColumn = async (table, name) => (await columns(table)).some(column => column.name === name);
+  const hasIndex = async (table, name) => {
+    const [rows] = await connection.execute('SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?', [table, name]);
+    return rows.length > 0;
+  };
+  const runFile = async path => {
+    const sql = await readFile(new URL(path, import.meta.url), 'utf8');
+    for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await connection.query(statement);
+  };
+  try {
+    const [[lock]] = await connection.query("SELECT GET_LOCK('foto_ya_schema', 10) AS acquired");
+    acquired = Boolean(Number(lock.acquired));
+    if (!acquired) throw new Error('Otra migración está ejecutándose.');
+    if (init) {
+      if ((await columns('usuarios')).length) throw new Error('La base ya está inicializada. Usá db:migrate.');
+      await runFile('../../database/foto_ya.sql');
+    }
+    await connection.beginTransaction();
+    await protectUsers(connection, env);
+    await connection.commit();
+    for (const column of ['email_hash', 'dni_hash']) {
+      if (await hasColumn('usuarios', column)) await connection.query(`ALTER TABLE usuarios DROP COLUMN ${column}`);
+    }
+    for (const [name, column, length] of [['uq_usuarios_email', 'email', 254], ['uq_usuarios_dni', 'dni', 20]]) {
+      if (!await hasIndex('usuarios', name)) await connection.query(`ALTER TABLE usuarios ADD CONSTRAINT ${name} UNIQUE (${column}(${length}))`);
+    }
+    for (const [table, oldIndex, newIndex, id, status, prefix] of [
+      ['sesiones_usuario', 'uq_sesiones_hash', 'uq_sesiones_token', 'id_sesiones_usuario', 'revoked_at', 'invalid-session-'],
+      ['tokens_autenticacion', 'uq_tokens_hash', 'uq_tokens_token', 'id_tokens', 'used_at', 'invalid-token-'],
+    ]) {
+      if (await hasColumn(table, 'token_hash')) {
+        // Los tokens originales no son recuperables: invalidar credenciales anteriores.
+        await connection.query(`UPDATE ${table} SET ${status} = COALESCE(${status}, UTC_TIMESTAMP(6))`);
+        await connection.query(`UPDATE ${table} SET token_hash = CONCAT('${prefix}', ${id})`);
+        await connection.query(`ALTER TABLE ${table} CHANGE token_hash token VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL`);
+      }
+      if (await hasIndex(table, oldIndex)) await connection.query(`ALTER TABLE ${table} DROP INDEX ${oldIndex}`);
+      if (!await hasIndex(table, newIndex)) await connection.query(`ALTER TABLE ${table} ADD CONSTRAINT ${newIndex} UNIQUE (token)`);
+    }
+    const photoColumns = await columns('fotos');
+    if (photoColumns.some(column => column.name === 'id_cliente' && column.nullable === 'NO')) {
+      const [keys] = await connection.query("SELECT CONSTRAINT_NAME AS name FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND table_name = 'fotos' AND column_name = 'id_cliente' AND referenced_table_name = 'usuarios'");
+      for (const key of keys) await connection.query(`ALTER TABLE fotos DROP FOREIGN KEY \`${key.name.replaceAll('`', '``')}\``);
+      await connection.query('ALTER TABLE fotos MODIFY id_cliente BIGINT UNSIGNED NULL, ADD CONSTRAINT fk_fotos_cliente_optional FOREIGN KEY (id_cliente) REFERENCES usuarios (id_usuario)');
+    }
+    const indexes = await readFile(new URL('../database/002-query-indexes.sql', import.meta.url), 'utf8');
+    for (const statement of indexes.split(';').map(s => s.trim()).filter(Boolean)) {
+      const [, name, table] = /CREATE INDEX (\w+) ON (\w+)/.exec(statement);
+      if (!await hasIndex(table, name)) await connection.query(statement);
+    }
+    if (!await hasIndex('fotos', 'ix_fotos_puesto_cliente')) await connection.query('CREATE INDEX ix_fotos_puesto_cliente ON fotos (id_puesto, id_cliente, id_fotos)');
+    await runFile('../database/004-photo-uploads.sql');
+    if (!await hasColumn('photo_uploads', 'request_data')) await connection.query('ALTER TABLE photo_uploads ADD request_data LONGTEXT CHARACTER SET ascii COLLATE ascii_bin NULL');
+    for (const column of ['request_hash', 'content_hash']) {
+      if (await hasColumn('photo_uploads', column)) await connection.query(`ALTER TABLE photo_uploads DROP COLUMN ${column}`);
+    }
+    await connection.beginTransaction();
+    await seedPermissions(connection);
+    await connection.commit();
+    // Se retiran sólo después de convertir correctamente los datos existentes.
+    await connection.query('DROP TABLE IF EXISTS backend_locks');
+    await connection.query('DROP TABLE IF EXISTS backend_migrations');
+  } catch (error) { await connection.rollback().catch(() => {}); throw error; }
+  finally {
+    if (acquired) await connection.query("SELECT RELEASE_LOCK('foto_ya_schema')").catch(() => {});
+    connection.release();
+  }
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const env = { ...loadEnv(), DATA_ENCRYPTION_KEY: process.env.DATA_ENCRYPTION_KEY }, db = createDatabase(env);
+  try { await migrate(db, env, { init: process.argv.includes('--init') }); console.log('Esquema actualizado; sólo las contraseñas se guardan hasheadas.'); }
+  catch (error) { console.error({ code: error.code ?? 'MIGRATION_ERROR', message: error.code ? 'La migración falló. Revisá el esquema y sus restricciones.' : error.message }); process.exitCode = 1; }
+  finally { await db.end(); }
+}

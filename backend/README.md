@@ -53,6 +53,28 @@ Si el comando solo mostraba una terminal en espera, la versión anterior estaba 
 
 El puerto predeterminado es 3000. Configurar `HOST=0.0.0.0` para acceder desde un dispositivo de la red. En producción servir la API detrás de HTTPS y configurar `CORS_ORIGINS` y el número exacto de proxies en `TRUST_PROXY`.
 
+## Conexiones MySQL en Render
+
+La API crea un único pool por proceso y lo comparte entre todas las rutas. `query`/`execute` devuelven la conexión automáticamente; las transacciones la liberan en `finally`. Varios clientes web o móviles comparten ese pool. Cada instancia, proceso local o comando de mantenimiento tiene su propio pool.
+
+El valor predeterminado de `DB_CONNECTION_LIMIT` es **2 por proceso**. Las solicitudes adicionales esperan una conexión libre (cola máxima de 100). Se conserva como máximo una conexión ociosa, y `DB_IDLE_TIMEOUT_MS=10000` permite cerrar las restantes al quedar inactivas; la limpieza se revisa aproximadamente cada segundo. Con un límite de 1 también se activa la limpieza. Las conexiones ocupadas por consultas o transacciones no se cierran por inactividad.
+
+`ER_TOO_MANY_USER_CONNECTIONS` indica que se alcanzó el límite de conexiones simultáneas del usuario de MySQL. El pool anterior permitía 10 por proceso y, al no configurar `maxIdle` por debajo del límite, mysql2 no activaba su limpieza de conexiones ociosas. Esto puede agotar una cuenta compartida entre Render, desarrollo y herramientas SQL. Render también puede mantener instancias viejas y nuevas durante un despliegue.
+
+En el panel de Render, establecer explícitamente `DB_CONNECTION_LIMIT=2` y `DB_IDLE_TIMEOUT_MS=10000`, y volver a desplegar. Una variable existente con valor 10 prevalece sobre el nuevo valor predeterminado. Ajustar el límite según la cuota real del proveedor: `procesos simultáneos × DB_CONNECTION_LIMIT + conexiones de otras herramientas` debe dejar margen dentro de esa cuota, incluyendo instancias temporales de despliegue. Si la cuota es muy pequeña, usar 1 y limitar los otros procesos que comparten la cuenta.
+
+Para confirmar el consumo, ejecutar con una herramienta SQL autorizada:
+
+```sql
+SHOW VARIABLES LIKE 'max_user_connections';
+SHOW GRANTS FOR CURRENT_USER;
+SHOW PROCESSLIST;
+```
+
+El proveedor puede aplicar una cuota específica de cuenta distinta del valor global. Revisar las sesiones visibles del mismo usuario, sus hosts y su estado `Sleep`; cerrar sólo sesiones identificadas como propias e innecesarias. No aumentar la cuota ni finalizar sesiones ajenas como solución automática. No hace falta modificar el esquema de datos.
+
+Referencias: [pool de mysql2](https://sidorares.github.io/node-mysql2/docs/examples/connections/create-pool), [despliegues de Render](https://render.com/docs/deploys).
+
 ## Organización
 
 - `src/config`: entorno validado, conexiones y matriz inicial de permisos.
