@@ -37,7 +37,6 @@ export const photoUploads = {
       if (input.clientId !== null) await requirePhotoOperator(connection, actor, 'photos.assign', input.stationId);
       await requireClient(connection, input.clientId);
       // Sólo se limpia el objeto de esta reserva sin foto confirmada, bajo bloqueo.
-      await removeFile(job.id_archivo);
       await uploadFile(job.id_archivo, file.buffer, format.mime);
       const date = businessDate(new Date());
       await connection.execute('INSERT INTO dias (fecha,id_puesto) VALUES (?,?) ON DUPLICATE KEY UPDATE id_dias = id_dias', [date, input.stationId]);
