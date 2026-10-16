@@ -3,7 +3,7 @@ import { env } from '../config/env.js';
 import { ApiError } from '../shared/errors.js';
 
 // La clave secreta queda en el backend; los servicios comprueban permisos y alcance.
-const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
+const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   global: { fetch: (url, options) => fetch(url, {
     ...options, redirect: 'error', signal: AbortSignal.timeout(env.STORAGE_TIMEOUT_MS),
