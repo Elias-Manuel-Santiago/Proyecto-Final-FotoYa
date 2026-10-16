@@ -25,8 +25,8 @@ export async function uploadFile(path, bytes, mime) {
     });
     if (error) throw error;
     return data;
-  } catch {
-    throw new ApiError(502, 'No se pudo guardar la foto.', 'STORAGE_ERROR');
+  } catch (error){
+    throw new ApiError(502, error, 'STORAGE_ERROR');
   }
 }
 
