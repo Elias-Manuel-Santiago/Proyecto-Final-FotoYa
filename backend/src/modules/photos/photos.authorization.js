@@ -11,6 +11,7 @@ export async function requirePhotoOperator(connection, actor, permission, statio
       AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP(6))`, [current.roleId, permission, actor.sessionId, actor.id]);
   if (!allowed) throw new ApiError(403, 'La autorización cambió. Volvé a iniciar sesión.');
   stationScope({ ...current, ...allowed }, stationId);
+  return { ...current, ...allowed };
 }
 
 export async function requireClient(connection, clientId) {

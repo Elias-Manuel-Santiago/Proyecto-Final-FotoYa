@@ -82,6 +82,29 @@ export interface Sale {
   unitPrice: number;
   total: number;
   createdAt: string;
+  copies?: number | null;
+  paymentMethod?: string | null;
+}
+
+export interface Price {
+  id: string;
+  name: string;
+  amount: string;
+  stationId: string;
+}
+
+export interface EventSaleInput {
+  operationId: string;
+  photoId: string;
+  stationId: string;
+  paymentMethod: 'efectivo' | 'transferencia' | 'tarjeta';
+  prices: { priceId: string; copies: number }[];
+}
+
+export interface SalePhoto {
+  id: string;
+  date: string;
+  sold: boolean;
 }
 
 export interface Attendance {

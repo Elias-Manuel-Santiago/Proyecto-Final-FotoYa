@@ -1,6 +1,6 @@
 import { stationScope } from '../../security/access.js';
 
-export const salesByDay = '(SELECT id_dias, SUM(cantidad) AS sold, SUM(precio_total) AS revenue FROM venta GROUP BY id_dias)';
+export const salesByDay = '(SELECT id_dias, SUM(IF(familia_contada, cantidad, 0)) AS sold, SUM(precio_total) AS revenue FROM venta GROUP BY id_dias)';
 
 export function stationReport(actor, input) {
   const station = stationScope(actor, input.stationId), where = [], filters = [];

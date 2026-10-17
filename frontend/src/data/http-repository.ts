@@ -11,6 +11,9 @@ import type {
   Station,
   StationInput,
   UploadResult,
+  Price,
+  EventSaleInput,
+  SalePhoto,
 } from '../domain/models';
 import { businessDate, periodError, utcInstant } from '../domain/dates';
 import { errorMessage } from '../domain/format';
@@ -178,6 +181,7 @@ export class HttpFotoYaRepository {
             date: string;
             quantity: number | string;
             total: string;
+            createdAt?: string | null;
           }>('sales/query', body)
         : [],
       has('attendance.read') && !attendanceSelf
@@ -236,7 +240,7 @@ export class HttpFotoYaRepository {
         unitPrice: 0,
         operationId: '',
         employeeId: '',
-        createdAt: '',
+        createdAt: row.createdAt ? utcInstant(row.createdAt) : '',
       })),
       attendance: attendance.map((row) => ({
         ...row,
@@ -292,9 +296,48 @@ export class HttpFotoYaRepository {
   async setEmployeeActive(userId: string, active: boolean) {
     await this.api.post('users/availability', { userId, active });
   }
-  async recordSale(): Promise<void> {
-    throw new Error(
-      'El registro de ventas todavía no está habilitado en el servidor.',
+  async recordSale(input: EventSaleInput) {
+    return this.api.post<{ id: string }>('sales/create', input);
+  }
+  async salePrices(stationId: string) {
+    const rows = await this.api.all<Price>('catalog/query', {
+      resource: 'prices',
+      stationId,
+    });
+    return rows.map((row) => ({
+      ...row,
+      id: String(row.id),
+      stationId: String(row.stationId),
+    }));
+  }
+  createPrice(stationId: string, name: string, amount: string) {
+    return this.api.post('catalog/prices/create', { stationId, name, amount });
+  }
+  saleEvent(stationId: string) {
+    return this.api.post<{ open: boolean; date: string | null }>(
+      'sales/event',
+      { stationId },
+    );
+  }
+  setSaleEvent(stationId: string, open: boolean) {
+    return this.api.post('sales/event/set', { stationId, open });
+  }
+  async salePhotos(stationId: string, offset = 0) {
+    const rows = await this.api.post<SalePhoto[]>('sales/photos', {
+      stationId,
+      limit: 12,
+      offset,
+    });
+    return rows.map((row) => ({
+      ...row,
+      id: String(row.id),
+      sold: Boolean(row.sold),
+    }));
+  }
+  accessSalePhoto(photoId: string) {
+    return this.api.post<{ url: string; expiresIn: number }>(
+      'sales/photos/access',
+      { photoId },
     );
   }
   async checkIn(): Promise<void> {
@@ -346,6 +389,8 @@ export class HttpFotoYaRepository {
     return this.api.post<{
       prices: { priceId: string; unitPrice: string; quantity: number }[];
       photos: { photoId: string }[];
+      copies: number | null;
+      paymentMethod: string | null;
     }>('sales/detail', { saleId });
   }
 }

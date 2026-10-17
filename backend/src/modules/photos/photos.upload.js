@@ -41,7 +41,7 @@ export const photoUploads = {
       const date = businessDate(new Date());
       await connection.execute('INSERT INTO dias (fecha,id_puesto) VALUES (?,?) ON DUPLICATE KEY UPDATE id_dias = id_dias', [date, input.stationId]);
       const [[day]] = await connection.execute('SELECT id_dias,fotos FROM dias WHERE fecha = ? AND id_puesto = ? FOR UPDATE', [date, input.stationId]);
-      const [[sales]] = await connection.execute('SELECT COALESCE(SUM(cantidad),0) AS sold FROM venta WHERE id_dias = ?', [day.id_dias]);
+      const [[sales]] = await connection.execute('SELECT COALESCE(SUM(IF(familia_contada, cantidad, 0)),0) AS sold FROM venta WHERE id_dias = ?', [day.id_dias]);
       const taken = Number(day.fotos) + 1, discarded = taken - Number(sales.sold);
       if (discarded < 0 || taken > 4294967295) throw new ApiError(409, 'Los conteos del día requieren revisión.', 'INVALID_COUNTS');
       const [photo] = await connection.execute('INSERT INTO fotos (id_archivo,id_dia,id_cliente,id_puesto) VALUES (?,?,?,?)',

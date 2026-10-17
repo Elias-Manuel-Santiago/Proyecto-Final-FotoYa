@@ -91,6 +91,14 @@ CREATE TABLE venta (
   cantidad INT UNSIGNED NOT NULL,
   precio_total DECIMAL(26,2) NOT NULL,
   id_dias BIGINT UNSIGNED NOT NULL,
+  operation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  request_data TEXT NULL,
+  id_vendedor BIGINT UNSIGNED NULL,
+  metodo_pago VARCHAR(20) NULL,
+  copias INT UNSIGNED NULL,
+  familia_contada BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at DATETIME(6) NULL,
+  CONSTRAINT uq_venta_operation UNIQUE (operation_id),
   CONSTRAINT fk_venta_dia FOREIGN KEY (id_dias) REFERENCES dias (id_dias),
   CONSTRAINT ck_venta_cantidad CHECK (cantidad > 0),
   CONSTRAINT ck_venta_precio_total CHECK (precio_total >= 0)
@@ -109,6 +117,9 @@ CREATE TABLE precios (
   id_precios BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL,
   monto DECIMAL(12,2) NOT NULL,
+  id_puesto BIGINT UNSIGNED NOT NULL,
+  disponible BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT fk_precios_puesto FOREIGN KEY (id_puesto) REFERENCES puesto (id_puesto),
   CONSTRAINT ck_precios_monto CHECK (monto >= 0)
 ) ENGINE = InnoDB;
 

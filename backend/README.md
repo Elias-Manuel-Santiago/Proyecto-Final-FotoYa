@@ -131,6 +131,12 @@ Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`.
 | `/api/photos/assign` | JSON: `photoId`, `clientId`; asigna un cliente a una foto sin asignar |
 | `/api/sales/query` | Período y paginación; cabeceras sin multiplicar totales |
 | `/api/sales/detail` | `saleId`; cabecera, fotos y tarifas históricas consultadas por separado |
+| `/api/sales/event` | `stationId`; estado y fecha del evento de ventas |
+| `/api/sales/event/set` | `stationId`, `open`; apertura/cierre manual por el encargado del puesto |
+| `/api/sales/photos` | `stationId`, paginación; fotos del día del evento abierto, con indicador de familia ya contabilizada |
+| `/api/sales/photos/access` | `photoId`; URL temporal para previsualizar con permiso `sales.create` y alcance por puesto |
+| `/api/sales/create` | `operationId` UUID, `stationId`, `photoId`, `paymentMethod`, `prices: [{ priceId, copies }]` |
+| `/api/catalog/prices/create` | `stationId`, `name`, `amount` decimal como string; dueño con permiso `stations.manage` |
 | `/api/attendance/query` | Período, paginación y `userId` opcional; usa el puesto histórico del día |
 | `/api/attendance/mine` | Período y paginación; registros propios |
 | `/api/reports/query` | Período, paginación y filtros opcionales `cityId`, `eventId`; rendimiento por puesto |
@@ -139,7 +145,17 @@ Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`.
 
 Período: `from` y `to` en formato `YYYY-MM-DD`, inclusivos, máximo 367 días; `stationId` opcional. Las fechas de negocio provienen de `Dias.fecha`. Los instantes de sesiones y horarios se guardan y consultan en UTC; el frontend debe interpretar los DATETIME recibidos como UTC antes de convertirlos a Argentina.
 
-Las consultas diarias calculan `descartes = fotos - SUM(venta.cantidad)`. Los informes incluyen puestos sin registros: `taken`, `discarded` y `percentage` son NULL cuando faltan días del período, mientras `registeredTaken` conserva las fotos de los días registrados. `revenue` son ingresos por ventas; no se presentan como ganancias netas sin una definición de costos. `invalidDays` señala días con ventas superiores a fotos; esa inconsistencia no se compensa con otros días. El porcentaje global se calcula sobre las sumas, sin promediar porcentajes.
+Cada foto representa una familia. Las consultas diarias calculan `descartes = fotos - SUM(IF(venta.familia_contada, venta.cantidad, 0))`: las copias y las compras adicionales de una foto no incrementan las familias que compraron. Los informes incluyen puestos sin registros: `taken`, `discarded` y `percentage` son NULL cuando faltan días del período, mientras `registeredTaken` conserva las fotos de los días registrados. `revenue` son ingresos por ventas; no se presentan como ganancias netas sin una definición de costos. `invalidDays` señala días con ventas superiores a fotos; esa inconsistencia no se compensa con otros días. El porcentaje global se calcula sobre las sumas, sin promediar porcentajes.
+
+## Ventas en eventos y tarifas por puesto
+
+Ejecutar `npm run db:migrate` antes de iniciar esta versión. La migración agrega `precios.id_puesto`, disponibilidad de tarifas, pago/copias/vendedor e identificación de reintentos en las ventas, y `event_sales` para apertura/cierre por puesto. Conserva las ventas y tarifas históricas sin reinterpretar sus cantidades. En bases anteriores, los precios sin puesto quedan con `id_puesto = NULL` y no se ofrecen para vender: asignar cada tarifa a su puesto explícitamente o crear las nuevas desde **Puestos → Precios del puesto**. En instalaciones nuevas `id_puesto` es obligatorio; la API exige puesto para todo precio nuevo. No se copian automáticamente tarifas a todos los puestos.
+
+El encargado abre o cierra las ventas de su puesto desde **Registrar venta en evento**. La apertura fija la fecha de negocio argentina; abrir nuevamente un evento que ya está abierto conserva su fecha, incluso al cruzar medianoche. Se ofrecen únicamente fotos de ese puesto y fecha. Después de cerrar, una nueva apertura toma la fecha actual. Este flujo no registra ventas fuera del evento; esa categoría e interfaz quedan para una implementación independiente.
+
+El vendedor o encargado elige una foto, toca **Vender**, ingresa copias por tarifa y selecciona `efectivo`, `transferencia` o `tarjeta`. Se registra el método; no se procesa un cobro electrónico. La API rechaza eventos cerrados, puestos inactivos, fotos ajenas al evento, tarifas de otros puestos/no disponibles y ventas sin tarifas. Calcula el total en centavos enteros con los precios actuales del servidor y conserva cada importe unitario aplicado. Cabecera, foto, tarifas y conteos se confirman en una transacción. Las compras adicionales generan operaciones e ingresos, pero `familia_contada = false`, conservando el porcentaje. `quantity` en las consultas representa familias contabilizadas; `copies` informa las copias físicas.
+
+Conservar el mismo `operationId` y contenido al reintentar una venta: recupera su resultado sin duplicar datos, incluso si el evento ya cerró. Reutilizarlo con otro contenido devuelve 409. Las ventas simultáneas de una foto contabilizan la familia una sola vez.
 
 ## Seguridad y Supabase
 
@@ -180,7 +196,6 @@ Para reconciliar archivos parciales de operaciones que el cliente abandonó, eje
 
 Estas rutas están protegidas y responden **501 `BUSINESS_RULES_PENDING`**, sin escribir datos:
 
-- `/api/sales/create`: falta definir las ventas repetidas/copias y el alcance temporal de las fotos vendidas; requerirá transacción con cabecera, fotos y tarifas históricas.
 - `/api/attendance/check-in` y `/api/attendance/check-out`: falta definir quién marca, turnos/pausas y día de referencia al cruzar medianoche.
 
 También quedan por definir ganancias netas, recuperación de contraseña y entrega de tokens de un solo uso, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API. Las simulaciones quedan en `frontend/tests/support`.

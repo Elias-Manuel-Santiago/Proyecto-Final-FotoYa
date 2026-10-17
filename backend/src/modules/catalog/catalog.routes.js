@@ -7,6 +7,9 @@ import { endpoint, id, pagination, validate } from '../../shared/validation.js';
 
 export function catalogRoutes() {
   const router = Router();
+  router.post('/prices/create', permit('stations.manage'), validate(z.object({
+    stationId: id, name: z.string().trim().min(1).max(100), amount: z.string().regex(/^\d{1,10}(\.\d{1,2})?$/),
+  }).strict()), endpoint(req => stations.createPrice(req.actor, req.input)));
   router.post('/stations/create', permit('stations.manage'), validate(z.object({
     name: z.string().trim().min(1).max(150), address: z.string().trim().min(1).max(255),
     city: z.string().trim().min(1).max(120), event: z.string().trim().max(150).default(''),

@@ -26,6 +26,14 @@ const reference = async (connection, table, key, name) => {
   return created.insertId;
 };
 export const stations = {
+  createPrice(actor, input) {
+    return managed(actor, async connection => {
+      const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto=? FOR UPDATE', [input.stationId]);
+      if (!station?.active) throw new ApiError(422, 'El puesto no está disponible.');
+      const [result] = await connection.execute('INSERT INTO precios (nombre,monto,id_puesto) VALUES (?,?,?)', [input.name, input.amount, input.stationId]);
+      return { id: String(result.insertId) };
+    });
+  },
   create(actor, input) {
     return managed(actor, async connection => {
       const cityId = await reference(connection, 'ciudad', 'id_ciudad', input.city);

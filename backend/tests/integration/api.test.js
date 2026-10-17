@@ -47,6 +47,9 @@ before(async () => {
   const { env: runtimeEnv } = await import('../../src/config/env.js');
   Object.assign(runtimeEnv, env);
   ({ db } = await import('../../src/config/database.js'));
+  // La suite supera el cupo de un minuto: conservar el middleware sin limitar los casos funcionales.
+  const { rateLimit: realRateLimit } = await import('express-rate-limit');
+  mock.module('express-rate-limit', { namedExports: { rateLimit: options => realRateLimit({ ...options, limit: 10000 }) } });
   mock.module('../../src/integrations/storage.js', { namedExports: {
     uploadFile: storage.upload, removeFile: storage.remove, signedUrl: storage.signedUrl,
   } });
@@ -68,7 +71,7 @@ before(async () => {
   }
   await db.query("INSERT INTO dias (fecha, fotos, descartes, id_puesto) VALUES ('2026-10-14',100,30,1),('2026-10-14',10,0,2)");
   await db.execute("INSERT INTO fotos (id_archivo, id_dia, id_cliente, id_puesto) VALUES ('1/photo.jpg',1,?,1),('1/other.jpg',1,?,1)", [users.cliente, users.otroCliente]);
-  await db.query("INSERT INTO precios (nombre, monto) VALUES ('Inicial',20),('Otra',25)");
+  await db.query("INSERT INTO precios (nombre, monto, id_puesto) VALUES ('Inicial',20,1),('Otra',25,1)");
   await db.query('INSERT INTO venta (cantidad, precio_total, id_dias) VALUES (50,1000,1),(20,500,1),(10,200,2)');
   await db.query('INSERT INTO precios_venta (id_venta,id_precio,precio_unitario_aplicado,cantidad) VALUES (1,1,20,30),(1,1,20,20),(2,2,25,20),(3,1,20,10)');
   await db.query('INSERT INTO fotos_venta (id_foto,id_venta) VALUES (1,1),(2,1)');
@@ -233,7 +236,7 @@ integration('baja reversible invalida sesiones anteriores y preserva el identifi
 });
 integration('operaciones pendientes devuelven 501 y no escriben registros', async () => {
   const [[before]] = await db.query('SELECT COUNT(*) AS count FROM venta');
-  assert.equal((await call('sales/create', {}, 'encargado')).status, 501);
+  assert.equal((await call('sales/create', {}, 'encargado')).status, 422);
   assert.equal((await call('attendance/check-in', {}, 'encargado')).status, 501);
   assert.equal((await call('photos/upload', {}, 'cliente')).status, 403);
   const [[after]] = await db.query('SELECT COUNT(*) AS count FROM venta'); assert.equal(after.count, before.count);
@@ -332,6 +335,78 @@ integration('fallos al guardar metadatos o recibir COMMIT se recuperan sin doble
     const [[after]] = await db.execute('SELECT fotos FROM dias WHERE fecha=? AND id_puesto=1', [date]); assert.equal(after.fotos, before.fotos + 1);
   }
 });
+integration('migración de ventas y precios anteriores conserva el historial sin asignar tarifas globales', async () => {
+  await db.query('ALTER TABLE precios DROP FOREIGN KEY fk_precios_puesto');
+  await db.query('ALTER TABLE precios DROP COLUMN id_puesto, DROP COLUMN disponible');
+  await db.query('ALTER TABLE venta DROP INDEX uq_venta_operation');
+  for (const name of ['operation_id', 'request_data', 'id_vendedor', 'metodo_pago', 'copias', 'familia_contada', 'created_at'])
+    await db.query(`ALTER TABLE venta DROP COLUMN ${name}`);
+  await migrate(db, env);
+  await migrate(db, env);
+  const [[legacy]] = await db.query('SELECT COUNT(*) AS n FROM precios WHERE id_puesto IS NULL');
+  assert.equal(Number(legacy.n), 2);
+  assert.deepEqual((await call('catalog/query', { resource: 'prices', stationId: '1' }, 'encargado')).data.data, []);
+  const detail = (await call('sales/detail', { saleId: '1' }, 'encargado')).data.data;
+  assert.equal(detail.total, '1000.00'); assert.equal(detail.prices.length, 2);
+});
+
+integration('ventas del evento: tarifas por puesto, copias, familias, reintentos y cierre', async () => {
+  tokens.vendedor = (await call('auth/login', { email: 'vendedor@example.com', password: 'Test-password-1234' })).data.data.token;
+  const form = { operationId: randomUUID(), stationId: '1', photoId: '1', paymentMethod: 'efectivo', prices: [{ priceId: '1', copies: 3 }] };
+  assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'EVENT_CLOSED');
+  assert.equal((await call('sales/event/set', { stationId: '1', open: true }, 'vendedor')).status, 403);
+  assert.equal((await call('sales/event/set', { stationId: '2', open: true }, 'encargado')).status, 403);
+  const opened = await call('sales/event/set', { stationId: '1', open: true }, 'encargado');
+  assert.equal(opened.status, 200);
+  const date = opened.data.data.date;
+  // Fotos creadas por este test, fuera de los datos históricos de informes.
+  const firstPhoto = (await upload(randomUUID())).data.data.id;
+  const secondPhoto = (await upload(randomUUID())).data.data.id;
+  form.photoId = firstPhoto;
+  await db.query('UPDATE precios SET disponible=0 WHERE id_puesto=1');
+  assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'NO_PRICES');
+  const empty = await call('catalog/query', { resource: 'prices', stationId: '1' }, 'vendedor');
+  assert.deepEqual(empty.data.data, []);
+  const created = await call('catalog/prices/create', { stationId: '1', name: 'Copia', amount: '10.10' });
+  const another = await call('catalog/prices/create', { stationId: '1', name: 'Grande', amount: '20.25' });
+  const otherStation = await call('catalog/prices/create', { stationId: '2', name: 'Ajena', amount: '1.00' });
+  assert.equal(created.status, 200);
+  assert.equal((await call('catalog/prices/create', { stationId: '1', name: 'Prohibida', amount: '1' }, 'vendedor')).status, 403);
+  form.prices = [{ priceId: otherStation.data.data.id, copies: 1 }];
+  assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'INVALID_PRICE');
+  form.prices = [{ priceId: created.data.data.id, copies: 3 }, { priceId: another.data.data.id, copies: 2 }];
+  const [[before]] = await db.execute('SELECT COUNT(*) AS n FROM venta');
+  const responses = await Promise.all([call('sales/create', form, 'vendedor'), call('sales/create', form, 'vendedor')]);
+  assert(responses.every(response => response.status === 200), JSON.stringify(responses.map(response => response.data)));
+  assert.equal(responses[0].data.data.id, responses[1].data.data.id);
+  const [[after]] = await db.execute('SELECT COUNT(*) AS n FROM venta');
+  assert.equal(Number(after.n), Number(before.n) + 1);
+  const detail = (await call('sales/detail', { saleId: responses[0].data.data.id }, 'vendedor')).data.data;
+  assert.equal(detail.total, '70.80'); assert.equal(Number(detail.copies), 5); assert.equal(detail.prices.length, 2);
+  assert.equal(detail.paymentMethod, 'efectivo');
+  assert.equal((await call('sales/create', { ...form, paymentMethod: 'tarjeta' }, 'vendedor')).status, 409);
+  const extra = await call('sales/create', { ...form, operationId: randomUUID(), paymentMethod: 'transferencia' }, 'vendedor');
+  assert.equal(extra.status, 200); assert.equal(extra.data.data.counted, false);
+  const independent = await Promise.all(['vendedor', 'encargado'].map(role => call('sales/create', {
+    ...form, photoId: secondPhoto, operationId: randomUUID(), paymentMethod: 'tarjeta',
+  }, role)));
+  assert(independent.every(response => response.status === 200));
+  assert.equal(independent.filter(response => response.data.data.counted).length, 1);
+  const days = (await call('reports/days/query', { from: date, to: date, stationId: '1' }, 'vendedor')).data.data;
+  assert.equal(Number(days[0].sold), 2);
+  assert.equal(days[0].revenue, '283.20');
+  const photos = await call('sales/photos', { stationId: '1' }, 'vendedor');
+  assert.equal(photos.status, 200); assert(photos.data.data.some(photo => photo.id === firstPhoto && photo.sold));
+  assert.equal((await call('sales/photos/access', { photoId: firstPhoto }, 'vendedor')).status, 200);
+  assert.equal((await call('sales/photos/access', { photoId: firstPhoto }, 'cliente')).status, 403);
+  assert.equal((await call('sales/create', { ...form, operationId: randomUUID(), photoId: '1' }, 'vendedor')).status, 422);
+  assert.equal((await call('sales/event/set', { stationId: '1', open: false }, 'encargado')).status, 200);
+  assert.equal((await call('sales/create', { ...form, operationId: randomUUID() }, 'vendedor')).data.error.code, 'EVENT_CLOSED');
+  // Una confirmación perdida puede recuperarse incluso después del cierre.
+  assert.equal((await call('sales/create', form, 'vendedor')).status, 200);
+  assert.deepEqual((await call('sales/photos', { stationId: '1' }, 'vendedor')).data.data, []);
+});
+
 integration('cambio de contraseña revoca sesiones y logout no altera asistencia', async () => {
   const [[before]] = await db.query('SELECT COUNT(*) AS count FROM horarios');
   const changed = await call('auth/password/change', { currentPassword: 'Test-password-1234', password: 'Changed-password-1234' }, 'camarografo');

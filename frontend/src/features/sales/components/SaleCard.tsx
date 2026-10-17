@@ -17,7 +17,7 @@ export function SaleCard({ sale, data }: { sale: Sale; data: AppData }) {
   return (
     <View style={styles.card}>
       <Text style={styles.heading}>
-        {sale.quantity} fotos · {money(sale.total)}
+        {sale.quantity} familias · {money(sale.total)}
       </Text>
       <Text style={styles.text}>
         {data.stations.find((row) => row.id === sale.stationId)?.name} ·{' '}
@@ -34,6 +34,11 @@ export function SaleCard({ sale, data }: { sale: Sale; data: AppData }) {
         }}
       />
       <Feedback error={action.error} />
+      {detail?.copies != null && (
+        <Text style={styles.text}>
+          Copias: {detail.copies} · Pago: {detail.paymentMethod}
+        </Text>
+      )}
       {detail?.prices.map((price, index) => (
         <Text key={index} style={styles.text}>
           Tarifa {price.priceId}: {price.quantity} ×{' '}

@@ -36,7 +36,7 @@ export function SalesScreen() {
     <Screen title="Ventas">
       {can(employee, 'sales.create') && (
         <Link href="/sales/new" style={styles.card}>
-          Registro de ventas (pendiente)
+          Registrar venta en evento
         </Link>
       )}
       <PeriodFilters
@@ -60,7 +60,7 @@ export function SalesScreen() {
             }
           />
           <Text style={styles.muted}>
-            {sales.length} operaciones · cantidades expresadas en fotos
+            {sales.length} operaciones · familias contadas una sola vez por foto
           </Text>
           {!sales.length && <EmptyState />}
           {sales.map((sale) => (

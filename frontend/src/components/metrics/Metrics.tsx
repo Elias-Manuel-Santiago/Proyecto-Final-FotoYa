@@ -19,10 +19,10 @@ export function Metrics({
 }) {
   const metrics = [
     [
-      'Fotos tomadas',
+      'Familias fotografiadas',
       values.taken === null ? 'Sin conteo' : String(values.taken),
     ],
-    ['Fotos vendidas', String(values.sold)],
+    ['Familias que compraron', String(values.sold)],
     [
       'Descartes',
       values.discarded === null ? 'No disponible' : String(values.discarded),

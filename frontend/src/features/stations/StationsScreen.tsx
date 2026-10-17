@@ -9,6 +9,7 @@ import { Select } from '../../components/ui/Select';
 import { styles } from '../../components/ui/theme';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
+import { StationPrices } from './StationPrices';
 
 const empty = { name: '', address: '', city: '', event: '' };
 
@@ -18,6 +19,7 @@ export function StationsScreen() {
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
+  const [pricing, setPricing] = useState('');
   const action = useAction();
   const rows = data.stations.filter(
     (row) =>
@@ -122,6 +124,18 @@ export function StationsScreen() {
           <Text style={styles.muted}>
             {station.active === false ? 'Inactivo' : 'Activo'}
           </Text>
+          {station.active !== false && (
+            <Button
+              title="Precios del puesto"
+              secondary
+              onPress={() =>
+                setPricing(pricing === station.id ? '' : station.id)
+              }
+            />
+          )}
+          {pricing === station.id && station.active !== false && (
+            <StationPrices stationId={station.id} />
+          )}
           {station.active === false ? (
             <Button
               title={`Reactivar ${station.name}`}

@@ -51,6 +51,20 @@ export async function migrate(db, env, { init = false } = {}) {
       if (!await hasIndex(table, newIndex)) await connection.query(`ALTER TABLE ${table} ADD CONSTRAINT ${newIndex} UNIQUE (token)`);
     }
     if (!await hasColumn('puesto', 'disponible')) await connection.query('ALTER TABLE puesto ADD disponible BOOLEAN NOT NULL DEFAULT TRUE');
+    // Las tarifas antiguas quedan sin asignar: nunca se convierten en tarifas globales.
+    if (!await hasColumn('precios', 'id_puesto')) await connection.query('ALTER TABLE precios ADD id_puesto BIGINT UNSIGNED NULL, ADD CONSTRAINT fk_precios_puesto FOREIGN KEY (id_puesto) REFERENCES puesto (id_puesto)');
+    if (!await hasColumn('precios', 'disponible')) await connection.query('ALTER TABLE precios ADD disponible BOOLEAN NOT NULL DEFAULT TRUE');
+    for (const [name, definition] of [
+      ['operation_id', 'CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL'],
+      ['request_data', 'TEXT NULL'], ['id_vendedor', 'BIGINT UNSIGNED NULL'],
+      ['metodo_pago', 'VARCHAR(20) NULL'], ['copias', 'INT UNSIGNED NULL'],
+      ['familia_contada', 'BOOLEAN NOT NULL DEFAULT TRUE'],
+      ['created_at', 'DATETIME(6) NULL'],
+    ]) {
+      if (!await hasColumn('venta', name)) await connection.query(`ALTER TABLE venta ADD ${name} ${definition}`);
+    }
+    if (!await hasIndex('venta', 'uq_venta_operation')) await connection.query('CREATE UNIQUE INDEX uq_venta_operation ON venta (operation_id)');
+    await runFile('../database/005-event-sales.sql');
     const photoColumns = await columns('fotos');
     if (photoColumns.some(column => column.name === 'id_cliente' && column.nullable === 'NO')) {
       const [keys] = await connection.query("SELECT CONSTRAINT_NAME AS name FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND table_name = 'fotos' AND column_name = 'id_cliente' AND referenced_table_name = 'usuarios'");

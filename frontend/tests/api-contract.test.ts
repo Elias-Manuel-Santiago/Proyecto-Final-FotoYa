@@ -486,12 +486,28 @@ test('fechas MySQL se interpretan como UTC y los períodos respetan 367 días', 
   assert.match(periodError('2026-01-01', '2027-01-03'), /367/);
 });
 
-test('operaciones pendientes no registran datos simulados ni llaman rutas no implementadas', async () => {
+test('asistencia pendiente no llama rutas no implementadas', async () => {
   const { repo, requests } = fixture();
-  await assert.rejects(repo.recordSale(), /habilitado/);
   await assert.rejects(repo.checkIn(), /habilitadas/);
   await assert.rejects(repo.checkOut(), /habilitadas/);
   assert.equal(requests.length, 0);
+});
+
+test('ventas envía foto, tarifas, copias, pago y UUID; el servidor calcula el importe', async () => {
+  const { repo, requests } = fixture();
+  const input = {
+    operationId: '73ddf539-013b-4200-b7a9-96e43f8f1a31',
+    stationId: '1',
+    photoId: '42',
+    paymentMethod: 'transferencia' as const,
+    prices: [
+      { priceId: '3', copies: 4 },
+      { priceId: '5', copies: 2 },
+    ],
+  };
+  await repo.recordSale(input);
+  assert.equal(requests[0].path, 'sales/create');
+  assert.deepEqual(requests[0].body, input);
 });
 
 test('conteos del camarógrafo no compensan días con sobreventa entre sí', async () => {

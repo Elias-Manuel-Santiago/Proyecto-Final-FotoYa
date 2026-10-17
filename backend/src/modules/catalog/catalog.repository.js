@@ -27,7 +27,10 @@ export const catalogRepository = {
         ORDER BY c.${key} LIMIT ? OFFSET ?`, [...(station ? [station] : []), String(input.limit), String(input.offset)]);
       return rows;
     }
-    const [rows] = await db.execute('SELECT id_precios AS id, nombre AS name, monto AS amount FROM precios ORDER BY id_precios LIMIT ? OFFSET ?', [String(input.limit), String(input.offset)]);
+    const station = stationScope(actor, input.stationId);
+    const [rows] = await db.execute(`SELECT id_precios AS id, nombre AS name, monto AS amount, id_puesto AS stationId
+      FROM precios WHERE disponible = 1 AND id_puesto IS NOT NULL ${station ? 'AND id_puesto = ?' : ''}
+      ORDER BY id_precios LIMIT ? OFFSET ?`, [...(station ? [station] : []), String(input.limit), String(input.offset)]);
     return rows;
   },
 };

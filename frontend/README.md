@@ -31,7 +31,13 @@ Iniciar el backend siguiendo `../backend/README.md`: requiere MySQL configurado,
 
 ## Operaciones pendientes del backend
 
-El registro de ventas y las marcaciones de entrada/salida responden `501 BUSINESS_RULES_PENDING`. La interfaz explica la limitación y permite consultar datos existentes. No simula guardar ventas ni asistencia. Falta definir copias/ventas repetidas, alcance temporal de fotos vendidas y reglas de marcación/turnos. Iniciar/cerrar sesión no marca asistencia. Tampoco se incorporan pagos, recuperación de contraseña ni administración de catálogos.
+Las marcaciones de entrada/salida responden `501 BUSINESS_RULES_PENDING`; faltan reglas de marcación/turnos. Iniciar/cerrar sesión no marca asistencia. La recuperación de contraseña y el procesamiento de cobros electrónicos siguen pendientes.
+
+## Ventas en eventos
+
+Actualizar primero el backend con `npm run db:migrate` desde `backend`. El dueño configura tarifas en **Puestos → Precios del puesto**. Cada precio pertenece a un puesto; las tarifas antiguas sin asignación no habilitan ventas.
+
+Desde **Ventas → Registrar venta en evento**, el encargado abre o cierra las ventas del puesto manualmente. El vendedor ve las fotos del día del evento con previsualización y páginas de 12 fotos. Al tocar una foto aparece **Vender**: se ingresan copias por cada tarifa elegida, se selecciona efectivo, transferencia o tarjeta y se confirma. Sin tarifas disponibles el botón queda bloqueado; la API también lo valida. Una foto representa una familia: comprar varias copias o comprar más copias después suma ingresos sin volver a contar la familia en el porcentaje. Se conservan UUID de reintento para el mismo contenido dentro del formulario. Las ventas fuera del evento tendrán otra interfaz y no se registran en este flujo.
 
 ## Organización y validación
 
