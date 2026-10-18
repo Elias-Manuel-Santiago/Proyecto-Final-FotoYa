@@ -84,6 +84,10 @@ export async function migrate(db, env, { init = false } = {}) {
     }
     await connection.beginTransaction();
     await seedPermissions(connection);
+    const [pricePermission] = await connection.execute("INSERT IGNORE INTO permisos (tipo_de_permiso) VALUES ('prices.manage')");
+    if (pricePermission.affectedRows) await connection.execute(`INSERT IGNORE INTO permisos_rol (id_rol, id_permiso)
+      SELECT r.id_rol, p.id_permisos FROM rol r CROSS JOIN permisos p
+      WHERE r.nombre IN ('dueno', 'encargado') AND p.tipo_de_permiso = 'prices.manage'`);
     await connection.execute("INSERT IGNORE INTO permisos (tipo_de_permiso) VALUES ('stations.manage')");
     await connection.execute(`INSERT IGNORE INTO permisos_rol (id_rol, id_permiso)
       SELECT r.id_rol, p.id_permisos FROM rol r CROSS JOIN permisos p

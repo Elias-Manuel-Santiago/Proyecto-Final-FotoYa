@@ -5,8 +5,8 @@ import { stationScope, assertPermission } from '../../security/access.js';
 import { requirePhotoOperator } from '../photos/photos.authorization.js';
 import { photoService } from '../photos/photos.service.js';
 import { saleAmounts } from './sales.schemas.js';
+import { businessDate, currentEvent } from './sales.rules.js';
 
-const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
 const columns = 'e.abierta AS open, d.fecha AS date';
 const event = async (executor, stationId, lock = false) => {
   const [[row]] = await executor.execute(`SELECT ${columns}, e.id_dia AS dayId FROM event_sales e
@@ -19,7 +19,7 @@ export const salesService = {
   async event(actor, input) {
     stationScope(actor, input.stationId);
     const row = await event(db, input.stationId);
-    return { open: Boolean(row?.open), date: row?.date ?? null };
+    return { open: currentEvent(row), date: row?.date ?? null };
   },
   setEvent(actor, input) {
     assertPermission(actor, 'sales.create');
@@ -30,9 +30,8 @@ export const salesService = {
       const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto = ? FOR UPDATE', [input.stationId]);
       if (!station || (input.open && !station.active)) throw new ApiError(409, 'El puesto no está disponible.');
       const current = await event(connection, input.stationId, true);
-      // Abrir dos veces conserva el día original, incluso después de medianoche.
-      if (input.open && !current?.open) {
-        const date = today();
+      if (input.open && !currentEvent(current)) {
+        const date = businessDate();
         await connection.execute('INSERT INTO dias (fecha,id_puesto) VALUES (?,?) ON DUPLICATE KEY UPDATE id_dias=id_dias', [date, input.stationId]);
         const [[day]] = await connection.execute('SELECT id_dias AS id FROM dias WHERE fecha=? AND id_puesto=? FOR UPDATE', [date, input.stationId]);
         await connection.execute(`INSERT INTO event_sales (id_puesto,id_dia,abierta) VALUES (?,?,1)
@@ -41,13 +40,13 @@ export const salesService = {
         await connection.execute('UPDATE event_sales SET abierta=0, updated_at=UTC_TIMESTAMP(6) WHERE id_puesto=?', [input.stationId]);
       }
       const row = await event(connection, input.stationId);
-      return { open: Boolean(row?.open), date: row?.date ?? null };
+      return { open: currentEvent(row), date: row?.date ?? null };
     });
   },
   async photos(actor, input) {
     stationScope(actor, input.stationId);
     const current = await event(db, input.stationId);
-    if (!current?.open) return [];
+    if (!currentEvent(current)) return [];
     const [rows] = await db.execute(`SELECT f.id_fotos AS id, d.fecha AS date,
       EXISTS(SELECT 1 FROM fotos_venta fv WHERE fv.id_foto=f.id_fotos) AS sold
       FROM fotos f JOIN dias d ON d.id_dias=f.id_dia WHERE f.id_puesto=? AND f.id_dia=?
@@ -55,7 +54,9 @@ export const salesService = {
     return rows;
   },
   async accessPhoto(actor, photoId) {
-    // sales.create autoriza la selección y previsualización, sin otorgar acceso a clientes ajenos.
+    const photo = await photoService.detail(actor, photoId);
+    const current = await event(db, photo.stationId);
+    if (photo.date !== businessDate() || !currentEvent(current)) throw new ApiError(404, 'La foto no está disponible para esta venta.');
     return photoService.access(actor, photoId);
   },
   create(actor, input) {
@@ -72,7 +73,7 @@ export const salesService = {
           throw new ApiError(409, 'La operación ya se usó con otros datos.', 'IDEMPOTENCY_CONFLICT');
         return { id: String(existing.id), repeated: true };
       }
-      if (!station?.active || !current?.open) throw new ApiError(409, 'Las ventas del evento están cerradas.', 'EVENT_CLOSED');
+      if (!station?.active || !currentEvent(current)) throw new ApiError(409, 'Las ventas del evento están cerradas.', 'EVENT_CLOSED');
       const [[day]] = await connection.execute('SELECT fotos FROM dias WHERE id_dias=? FOR UPDATE', [current.dayId]);
       const [[photo]] = await connection.execute('SELECT id_fotos FROM fotos WHERE id_fotos=? AND id_dia=? AND id_puesto=? FOR UPDATE', [input.photoId, current.dayId, input.stationId]);
       if (!photo) throw new ApiError(422, 'La foto no pertenece al evento abierto de este puesto.');

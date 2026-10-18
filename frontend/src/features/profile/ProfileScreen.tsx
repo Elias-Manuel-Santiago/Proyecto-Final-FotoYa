@@ -90,48 +90,7 @@ export function ProfileScreen() {
           }}
         />
       </View>
-      <Text style={styles.heading}>Mis sesiones</Text>
-      <Button
-        title="Actualizar sesiones"
-        secondary
-        busy={action.busy}
-        onPress={() => {
-          void action.run(async () =>
-            setSessions(
-              await repository.api.all<Session>('auth/sessions/query'),
-            ),
-          );
-        }}
-      />
-      {sessions.map((session) => (
-        <View key={session.id} style={styles.card}>
-          <Text style={styles.text}>
-            Sesión {session.id} · {displayInstant(session.created_at)}
-          </Text>
-          <Text style={styles.muted}>
-            Vence: {displayInstant(session.expires_at)}
-          </Text>
-          {session.revoked_at ? (
-            <Text style={styles.muted}>Revocada</Text>
-          ) : (
-            <Button
-              title={`Revocar sesión ${session.id}`}
-              secondary
-              busy={action.busy}
-              onPress={() => {
-                void action.run(async () => {
-                  await repository.api.post('auth/sessions/revoke', {
-                    sessionId: String(session.id),
-                  });
-                  setSessions(
-                    await repository.api.all<Session>('auth/sessions/query'),
-                  );
-                });
-              }}
-            />
-          )}
-        </View>
-      ))}
+ 
     </Screen>
   );
 }

@@ -9,10 +9,19 @@ import { displayDate } from '../../domain/dates';
 import type { Price, SalePhoto } from '../../domain/models';
 import { useWorkspace } from '../../providers/AppProvider';
 import { useAction } from '../../hooks/useAction';
+import { useBusinessDate } from '../../hooks/useBusinessDate';
 import { SalePhotoCard } from './components/SalePhotoCard';
 import { SaleForm } from './components/SaleForm';
 
 export function NewSaleScreen() {
+  const today = useBusinessDate();
+  const { employee } = useWorkspace();
+  return (
+    <DailySaleScreen key={`${employee.stationId}:${today}`} today={today} />
+  );
+}
+
+function DailySaleScreen({ today }: { today: string }) {
   const { repository, employee } = useWorkspace();
   const stationId = employee.stationId;
   const action = useAction();
@@ -21,7 +30,7 @@ export function NewSaleScreen() {
   const [selected, setSelected] = useState('');
   const [selling, setSelling] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const key = JSON.stringify([stationId, offset, revision]);
+  const key = JSON.stringify([stationId, offset, revision, today]);
   const [result, setResult] = useState<{
     key: string;
     event?: { open: boolean; date: string | null };
@@ -62,7 +71,7 @@ export function NewSaleScreen() {
     error = current?.error ?? '';
   const event = current?.event,
     prices = current?.prices ?? [],
-    photos = current?.photos ?? [];
+    photos = (current?.photos ?? []).filter((photo) => photo.date === today);
   const blocked = loading || !!error || action.busy;
   return (
     <Screen title="Venta en evento">
@@ -117,10 +126,6 @@ export function NewSaleScreen() {
           )}
           {event?.open && (
             <>
-              <Text style={styles.muted}>
-                Tocá una foto para vender. Cada foto representa una familia; las
-                copias no aumentan el porcentaje.
-              </Text>
               {!photos.length && (
                 <Text style={styles.text}>
                   No hay fotos en esta página del evento.

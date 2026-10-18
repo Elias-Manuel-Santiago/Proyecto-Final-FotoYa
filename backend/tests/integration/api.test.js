@@ -173,6 +173,26 @@ integration('cliente aislado por propietario, incluso en acceso directo', async 
   assert.equal((await call('reports/query', period, 'cliente')).status, 403);
   assert.equal((await call('photos/query', period, 'dueno')).status, 403);
 });
+
+integration('encargado consulta y gestiona únicamente usuarios, horarios y datos de su puesto', async () => {
+  for (const path of ['users/query', 'attendance/query', 'reports/query', 'reports/days/query', 'sales/query', 'photos/query']) {
+    const filters = path === 'users/query' ? {} : period;
+    const response = await call(path, filters, 'encargado');
+    assert.equal(response.status, 200, path);
+    assert(response.data.data.every(row => row.stationId === '1'), path);
+    assert.equal((await call(path, { ...filters, stationId: '2' }, 'encargado')).status, 403, path);
+  }
+  assert.equal((await call('users/availability', { userId: users.otroEncargado, active: false }, 'encargado')).status, 404);
+  assert.equal((await call('sales/detail', { saleId: '3' }, 'encargado')).status, 404);
+  assert.equal((await call('reports/summary', { ...period, stationId: '2' }, 'encargado')).status, 403);
+  assert.equal((await call('catalog/query', { resource: 'stations' }, 'encargado')).data.data.length, 1);
+  await db.execute("INSERT INTO horarios (id_dias,id_usuario,check_in,check_out) VALUES (1,?,'2026-10-14 10:00:00','2026-10-14 11:00:00'),(2,?,'2026-10-14 10:00:00','2026-10-14 11:00:00')", [users.encargado, users.encargado]);
+  try {
+    const mine = await call('attendance/mine', period, 'encargado');
+    assert.equal(mine.status, 200); assert.equal(mine.data.data.length, 1);
+    assert.equal(mine.data.data[0].stationId, '1');
+  } finally { await db.execute('DELETE FROM horarios WHERE id_usuario=?', [users.encargado]); }
+});
 integration('informes: 100 tomadas, 70 vendidas y 30 descartes sin multiplicar importes', async () => {
   const response = await call('reports/query', period); assert.equal(response.status, 200);
   const [first, second, empty] = response.data.data;
@@ -405,6 +425,60 @@ integration('ventas del evento: tarifas por puesto, copias, familias, reintentos
   // Una confirmación perdida puede recuperarse incluso después del cierre.
   assert.equal((await call('sales/create', form, 'vendedor')).status, 200);
   assert.deepEqual((await call('sales/photos', { stationId: '1' }, 'vendedor')).data.data, []);
+});
+
+integration('encargado administra precios de su puesto y conserva tarifas históricas', async () => {
+  // Simula una instalación que todavía no tenía el permiso.
+  await db.query("DELETE pr FROM permisos_rol pr JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE p.tipo_de_permiso='prices.manage'");
+  await db.query("DELETE FROM permisos WHERE tipo_de_permiso='prices.manage'");
+  await migrate(db, env);
+  assert((await call('auth/me', {}, 'encargado')).data.data.permissions.includes('prices.manage'));
+  const input = { stationId: '1', name: 'Tarifa del encargado', amount: '12.50' };
+  const created = await call('catalog/prices/create', input, 'encargado');
+  assert.equal(created.status, 200); const priceId = created.data.data.id;
+  assert.equal((await call('catalog/prices/create', { ...input, stationId: '2' }, 'encargado')).status, 403);
+  for (const role of ['vendedor', 'secretario', 'camarografo', 'cliente'])
+    assert.equal((await call('catalog/prices/query', { stationId: '1' }, role)).status, 403);
+  const [[foreign]] = await db.query('SELECT id_precios AS id FROM precios WHERE id_puesto=2 LIMIT 1');
+  assert.equal((await call('catalog/prices/query', { stationId: '2' }, 'encargado')).status, 403);
+  assert.equal((await call('catalog/prices/update', { ...input, priceId: foreign.id }, 'encargado')).status, 404);
+  assert.equal((await call('catalog/prices/availability', { stationId: '1', priceId: foreign.id, active: false }, 'encargado')).status, 404);
+  assert.equal((await call('catalog/prices/update', { ...input, priceId, amount: '15.75' }, 'encargado')).status, 200);
+  assert.equal((await call('catalog/prices/availability', { stationId: '1', priceId, active: false }, 'encargado')).status, 200);
+  const all = (await call('catalog/prices/query', { stationId: '1' }, 'encargado')).data.data;
+  assert(all.every(row => row.stationId === '1'));
+  assert.equal(Number(all.find(row => row.id === priceId).active), 0);
+  assert(!(await call('catalog/query', { resource: 'prices' }, 'vendedor')).data.data.some(row => row.id === priceId));
+  assert.equal((await call('catalog/prices/availability', { stationId: '1', priceId, active: true }, 'encargado')).status, 200);
+  assert.equal((await call('catalog/stations/create', { name: 'No', address: 'No', city: 'No' }, 'encargado')).status, 403);
+  const [[historic]] = await db.query(`SELECT pv.id_venta AS saleId, pv.id_precio AS priceId, pv.precio_unitario_aplicado AS amount
+    FROM precios_venta pv JOIN venta v ON v.id_venta=pv.id_venta WHERE v.operation_id IS NOT NULL LIMIT 1`);
+  await call('catalog/prices/update', { ...input, priceId: historic.priceId, amount: '99.99' }, 'encargado');
+  const detail = (await call('sales/detail', { saleId: historic.saleId }, 'encargado')).data.data;
+  assert(detail.prices.some(row => row.priceId === historic.priceId && row.unitPrice === historic.amount));
+  await db.query("DELETE pr FROM permisos_rol pr JOIN rol r ON r.id_rol=pr.id_rol JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE r.nombre='encargado' AND p.tipo_de_permiso='prices.manage'");
+  await migrate(db, env);
+  assert.equal((await call('catalog/prices/create', input, 'encargado')).status, 403);
+  await db.query("INSERT INTO permisos_rol (id_rol,id_permiso) SELECT r.id_rol,p.id_permisos FROM rol r CROSS JOIN permisos p WHERE r.nombre='encargado' AND p.tipo_de_permiso='prices.manage'");
+});
+
+integration('ventas solo lista, previsualiza y vende fotos del día actual de Argentina', async () => {
+  // Un evento que quedó abierto ayer ya no habilita fotos ni ventas.
+  await db.query('UPDATE event_sales SET id_dia=1, abierta=1 WHERE id_puesto=1');
+  assert.equal((await call('sales/event', { stationId: '1' }, 'vendedor')).data.data.open, false);
+  assert.deepEqual((await call('sales/photos', { stationId: '1' }, 'vendedor')).data.data, []);
+  assert.equal((await call('sales/photos/access', { photoId: '1' }, 'vendedor')).status, 404);
+  const [[price]] = await db.query('SELECT id_precios AS id FROM precios WHERE id_puesto=1 AND disponible=1 LIMIT 1');
+  const input = { stationId: '1', photoId: '1', operationId: randomUUID(), paymentMethod: 'efectivo', prices: [{ priceId: price.id, copies: 1 }] };
+  assert.equal((await call('sales/create', input, 'vendedor')).data.error.code, 'EVENT_CLOSED');
+  const open = await call('sales/event/set', { stationId: '1', open: true }, 'encargado');
+  assert.equal(open.status, 200); assert.equal(open.data.data.date, businessDate(new Date()));
+  const rows = (await call('sales/photos', { stationId: '1' }, 'vendedor')).data.data;
+  assert(rows.length > 0); assert(rows.every(row => row.date === businessDate(new Date())));
+  assert(!rows.some(row => row.id === '1'));
+  assert.equal((await call('sales/photos/access', { photoId: '1' }, 'vendedor')).status, 404);
+  assert.equal((await call('sales/create', input, 'vendedor')).status, 422);
+  await call('sales/event/set', { stationId: '1', open: false }, 'encargado');
 });
 
 integration('cambio de contraseña revoca sesiones y logout no altera asistencia', async () => {

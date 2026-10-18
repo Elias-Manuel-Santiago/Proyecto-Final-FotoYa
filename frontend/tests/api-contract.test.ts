@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { before, test, mock, afterEach } from 'node:test';
 import { ApiClient, ApiError } from '../src/data/api-client';
 import { HttpFotoYaRepository } from '../src/data/http-repository';
-import { periodError, utcInstant, displayInstant } from '../src/domain/dates';
+import {
+  periodError,
+  utcInstant,
+  displayInstant,
+  millisecondsUntilBusinessMidnight,
+} from '../src/domain/dates';
 import { can, rolePermissions } from '../src/domain/permissions';
 import { reportRows, totalMetrics } from '../src/domain/metrics';
 import type { PhotoFile } from '../src/domain/models';
@@ -508,6 +513,53 @@ test('ventas envía foto, tarifas, copias, pago y UUID; el servidor calcula el i
   await repo.recordSale(input);
   assert.equal(requests[0].path, 'sales/create');
   assert.deepEqual(requests[0].body, input);
+});
+
+test('precios administra tarifas por puesto sin enviar permisos de gestión de puestos', async () => {
+  const { repo, requests } = fixture('encargado', {
+    'catalog/prices/query': [
+      { id: 1, stationId: 1, amount: '10.00', name: 'Copia', active: 0 },
+    ],
+  });
+  const prices = await repo.stationPrices('1');
+  assert.deepEqual(prices, [
+    { id: '1', stationId: '1', amount: '10.00', name: 'Copia', active: false },
+  ]);
+  await repo.createPrice('1', 'Nueva', '20.00');
+  await repo.updatePrice('1', '1', 'Grande', '30.00');
+  await repo.setPriceActive('1', '1', false);
+  assert.deepEqual(
+    requests.slice(1).map(({ path, body }) => ({ path, body })),
+    [
+      {
+        path: 'catalog/prices/create',
+        body: { stationId: '1', name: 'Nueva', amount: '20.00' },
+      },
+      {
+        path: 'catalog/prices/update',
+        body: { stationId: '1', priceId: '1', name: 'Grande', amount: '30.00' },
+      },
+      {
+        path: 'catalog/prices/availability',
+        body: { stationId: '1', priceId: '1', active: false },
+      },
+    ],
+  );
+});
+
+test('la lista de venta cambia de día a medianoche de Argentina', () => {
+  assert.equal(
+    millisecondsUntilBusinessMidnight(new Date('2026-10-18T02:59:59.999Z')),
+    1,
+  );
+  assert.equal(
+    millisecondsUntilBusinessMidnight(new Date('2026-10-18T03:00:00Z')),
+    86400000,
+  );
+  assert.equal(
+    millisecondsUntilBusinessMidnight(new Date('2026-10-17T23:00:00Z')),
+    14400000,
+  );
 });
 
 test('conteos del camarógrafo no compensan días con sobreventa entre sí', async () => {

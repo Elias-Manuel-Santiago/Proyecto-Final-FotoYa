@@ -313,6 +313,37 @@ export class HttpFotoYaRepository {
   createPrice(stationId: string, name: string, amount: string) {
     return this.api.post('catalog/prices/create', { stationId, name, amount });
   }
+  async stationPrices(stationId: string) {
+    const rows = await this.api.all<Price>('catalog/prices/query', {
+      stationId,
+    });
+    return rows.map((row) => ({
+      ...row,
+      id: String(row.id),
+      stationId: String(row.stationId),
+      active: Boolean(row.active),
+    }));
+  }
+  updatePrice(
+    stationId: string,
+    priceId: string,
+    name: string,
+    amount: string,
+  ) {
+    return this.api.post('catalog/prices/update', {
+      stationId,
+      priceId,
+      name,
+      amount,
+    });
+  }
+  setPriceActive(stationId: string, priceId: string, active: boolean) {
+    return this.api.post('catalog/prices/availability', {
+      stationId,
+      priceId,
+      active,
+    });
+  }
   saleEvent(stationId: string) {
     return this.api.post<{ open: boolean; date: string | null }>(
       'sales/event',

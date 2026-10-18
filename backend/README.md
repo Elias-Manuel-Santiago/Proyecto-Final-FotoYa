@@ -133,10 +133,13 @@ Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`.
 | `/api/sales/detail` | `saleId`; cabecera, fotos y tarifas históricas consultadas por separado |
 | `/api/sales/event` | `stationId`; estado y fecha del evento de ventas |
 | `/api/sales/event/set` | `stationId`, `open`; apertura/cierre manual por el encargado del puesto |
-| `/api/sales/photos` | `stationId`, paginación; fotos del día del evento abierto, con indicador de familia ya contabilizada |
+| `/api/sales/photos` | `stationId`, paginación; fotos del día actual argentino y del puesto, con ventas abiertas |
 | `/api/sales/photos/access` | `photoId`; URL temporal para previsualizar con permiso `sales.create` y alcance por puesto |
 | `/api/sales/create` | `operationId` UUID, `stationId`, `photoId`, `paymentMethod`, `prices: [{ priceId, copies }]` |
-| `/api/catalog/prices/create` | `stationId`, `name`, `amount` decimal como string; dueño con permiso `stations.manage` |
+| `/api/catalog/prices/query` | `stationId`, paginación; precios activos e inactivos del puesto; requiere `prices.manage` |
+| `/api/catalog/prices/create` | `stationId`, `name`, `amount` decimal como string; dueño o encargado con `prices.manage` |
+| `/api/catalog/prices/update` | `stationId`, `priceId`, `name`, `amount`; conserva los importes de ventas anteriores |
+| `/api/catalog/prices/availability` | `stationId`, `priceId`, `active`; baja y reactivación de tarifas |
 | `/api/attendance/query` | Período, paginación y `userId` opcional; usa el puesto histórico del día |
 | `/api/attendance/mine` | Período y paginación; registros propios |
 | `/api/reports/query` | Período, paginación y filtros opcionales `cityId`, `eventId`; rendimiento por puesto |
@@ -151,7 +154,9 @@ Cada foto representa una familia. Las consultas diarias calculan `descartes = fo
 
 Ejecutar `npm run db:migrate` antes de iniciar esta versión. La migración agrega `precios.id_puesto`, disponibilidad de tarifas, pago/copias/vendedor e identificación de reintentos en las ventas, y `event_sales` para apertura/cierre por puesto. Conserva las ventas y tarifas históricas sin reinterpretar sus cantidades. En bases anteriores, los precios sin puesto quedan con `id_puesto = NULL` y no se ofrecen para vender: asignar cada tarifa a su puesto explícitamente o crear las nuevas desde **Puestos → Precios del puesto**. En instalaciones nuevas `id_puesto` es obligatorio; la API exige puesto para todo precio nuevo. No se copian automáticamente tarifas a todos los puestos.
 
-El encargado abre o cierra las ventas de su puesto desde **Registrar venta en evento**. La apertura fija la fecha de negocio argentina; abrir nuevamente un evento que ya está abierto conserva su fecha, incluso al cruzar medianoche. Se ofrecen únicamente fotos de ese puesto y fecha. Después de cerrar, una nueva apertura toma la fecha actual. Este flujo no registra ventas fuera del evento; esa categoría e interfaz quedan para una implementación independiente.
+El dueño y el encargado administran tarifas desde **Precios** con el permiso `prices.manage`; el encargado sólo consulta y modifica las de su puesto. El dueño conserva el acceso desde **Puestos → Precios del puesto**. La migración agrega el permiso a estos dos roles al incorporarlo por primera vez, sin restablecerlo si se revoca después. Las consultas de usuarios, horarios, informes, fotos y ventas del encargado se limitan a su puesto; su asistencia propia también respeta ese alcance.
+
+El encargado abre o cierra las ventas de su puesto desde **Registrar venta en evento**. La apertura corresponde al día actual de Argentina. Al cruzar medianoche, la apertura anterior deja de habilitar ventas: es necesario abrir las del nuevo día. Se listan, previsualizan y venden únicamente fotos de ese puesto tomadas el día actual. Este flujo no registra ventas fuera del evento; esa categoría e interfaz quedan para una implementación independiente.
 
 El vendedor o encargado elige una foto, toca **Vender**, ingresa copias por tarifa y selecciona `efectivo`, `transferencia` o `tarjeta`. Se registra el método; no se procesa un cobro electrónico. La API rechaza eventos cerrados, puestos inactivos, fotos ajenas al evento, tarifas de otros puestos/no disponibles y ventas sin tarifas. Calcula el total en centavos enteros con los precios actuales del servidor y conserva cada importe unitario aplicado. Cabecera, foto, tarifas y conteos se confirman en una transacción. Las compras adicionales generan operaciones e ingresos, pero `familia_contada = false`, conservando el porcentaje. `quantity` en las consultas representa familias contabilizadas; `copies` informa las copias físicas.
 

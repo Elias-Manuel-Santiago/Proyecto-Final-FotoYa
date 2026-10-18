@@ -22,11 +22,13 @@ export type Permission =
   | 'counts.read'
   | 'photos.assign'
   | 'catalog.read'
+  | 'prices.manage'
   | 'stations.manage';
 
 // Adaptador inicial de la relación roles-permisos. El backend proveerá las asignaciones.
 export const rolePermissions: Record<RoleId, readonly Permission[]> = {
   owner: [
+    'prices.manage',
     'stations.manage',
     'counts.read',
     'catalog.read',
@@ -38,6 +40,7 @@ export const rolePermissions: Record<RoleId, readonly Permission[]> = {
     'sales.read',
   ],
   manager: [
+    'prices.manage',
     'counts.read',
     'catalog.read',
     'photos.assign',

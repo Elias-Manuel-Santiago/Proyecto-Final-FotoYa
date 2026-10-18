@@ -22,6 +22,23 @@ export function displayDate(date: string) {
   return date.split('-').reverse().join('/');
 }
 
+export function millisecondsUntilBusinessMidnight(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: businessTimeZone,
+    hourCycle: 'h23',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(now);
+  const value = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return (
+    (86400 - value('hour') * 3600 - value('minute') * 60 - value('second')) *
+      1000 -
+    now.getMilliseconds()
+  );
+}
+
 export function displayInstant(value: string) {
   return new Intl.DateTimeFormat('es-AR', {
     timeZone: businessTimeZone,

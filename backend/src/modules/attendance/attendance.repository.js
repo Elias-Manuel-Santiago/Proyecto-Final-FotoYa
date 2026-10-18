@@ -3,7 +3,7 @@ import { stationScope } from '../../security/access.js';
 
 export const attendanceRepository = {
   async query(actor, input, self = false) {
-    const station = self ? null : stationScope(actor, input.stationId);
+    const station = self && actor.role !== 'encargado' ? null : stationScope(actor, input.stationId);
     const params = [input.from, input.to];
     const where = ['d.fecha BETWEEN ? AND ?'];
     if (station) { where.push('d.id_puesto = ?'); params.push(station); }

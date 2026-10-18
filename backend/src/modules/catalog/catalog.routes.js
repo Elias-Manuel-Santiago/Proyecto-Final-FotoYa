@@ -1,5 +1,6 @@
 import { catalogRepository } from './catalog.repository.js';
 import { stations } from './stations.service.js';
+import { pricesService } from './prices.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { permit } from '../../security/access.js';
@@ -7,9 +8,13 @@ import { endpoint, id, pagination, validate } from '../../shared/validation.js';
 
 export function catalogRoutes() {
   const router = Router();
-  router.post('/prices/create', permit('stations.manage'), validate(z.object({
+  const priceFields = {
     stationId: id, name: z.string().trim().min(1).max(100), amount: z.string().regex(/^\d{1,10}(\.\d{1,2})?$/),
-  }).strict()), endpoint(req => stations.createPrice(req.actor, req.input)));
+  };
+  router.post('/prices/query', permit('prices.manage'), validate(z.object({ stationId: id, ...pagination }).strict()), endpoint(req => pricesService.query(req.actor, req.input)));
+  router.post('/prices/create', permit('prices.manage'), validate(z.object(priceFields).strict()), endpoint(req => pricesService.create(req.actor, req.input)));
+  router.post('/prices/update', permit('prices.manage'), validate(z.object({ ...priceFields, priceId: id }).strict()), endpoint(req => pricesService.update(req.actor, req.input)));
+  router.post('/prices/availability', permit('prices.manage'), validate(z.object({ stationId: id, priceId: id, active: z.boolean() }).strict()), endpoint(req => pricesService.setActive(req.actor, req.input)));
   router.post('/stations/create', permit('stations.manage'), validate(z.object({
     name: z.string().trim().min(1).max(150), address: z.string().trim().min(1).max(255),
     city: z.string().trim().min(1).max(120), event: z.string().trim().max(150).default(''),

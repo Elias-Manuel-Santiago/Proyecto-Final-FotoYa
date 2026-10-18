@@ -91,6 +91,7 @@ export interface Price {
   name: string;
   amount: string;
   stationId: string;
+  active?: boolean;
 }
 
 export interface EventSaleInput {

@@ -63,11 +63,7 @@ export function SalePhotoCard({
           Foto {photo.id}
           {selected ? ' · Seleccionada' : ''}
         </Text>
-        {photo.sold && (
-          <Text style={styles.muted}>
-            Familia ya contabilizada. Más copias suman ingresos.
-          </Text>
-        )}
+        {photo.sold && <Text style={styles.muted}>Vendida</Text>}
       </Pressable>
       {!!error && (
         <Button

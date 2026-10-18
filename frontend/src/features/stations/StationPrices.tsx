@@ -15,11 +15,12 @@ export function StationPrices({ stationId }: { stationId: string }) {
   const [prices, setPrices] = useState<Price[]>([]);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
+  const [editing, setEditing] = useState('');
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
     repository
-      .salePrices(stationId)
+      .stationPrices(stationId)
       .then((rows) => {
         if (active) setPrices(rows);
       })
@@ -35,12 +36,44 @@ export function StationPrices({ stationId }: { stationId: string }) {
       <Text style={styles.heading}>Precios del puesto</Text>
       <Feedback error={error || action.error} success={action.success} />
       {prices.map((price) => (
-        <Text key={price.id} style={styles.text}>
-          {price.name}: {money(Number(price.amount))}
-        </Text>
+        <View key={price.id} style={{ gap: 8 }}>
+          <Text style={styles.text}>
+            {price.name}: {money(Number(price.amount))} ·{' '}
+            {price.active ? 'Activo' : 'Inactivo'}
+          </Text>
+          <View style={styles.row}>
+            <Button
+              title={`Editar ${price.name}`}
+              secondary
+              disabled={action.busy}
+              onPress={() => {
+                setEditing(price.id);
+                setName(price.name);
+                setAmount(price.amount);
+                action.clear();
+              }}
+            />
+            <Button
+              title={`${price.active ? 'Desactivar' : 'Reactivar'} ${price.name}`}
+              secondary
+              busy={action.busy}
+              onPress={() => {
+                void action.run(async () => {
+                  await repository.setPriceActive(
+                    stationId,
+                    price.id,
+                    !price.active,
+                  );
+                  setPrices(await repository.stationPrices(stationId));
+                  setError('');
+                }, 'Precio guardado.');
+              }}
+            />
+          </View>
+        </View>
       ))}
       {!prices.length && (
-        <Text style={styles.muted}>Sin tarifas disponibles.</Text>
+        <Text style={styles.muted}>No hay precios registrados.</Text>
       )}
       <Field
         label="Nombre de la tarifa"
@@ -57,23 +90,42 @@ export function StationPrices({ stationId }: { stationId: string }) {
         editable={!action.busy}
       />
       <Button
-        title="Agregar precio"
+        title={editing ? 'Guardar precio' : 'Agregar precio'}
         busy={action.busy}
         disabled={!name.trim() || !/^\d{1,10}([.,]\d{1,2})?$/.test(amount)}
         onPress={() => {
           void action.run(async () => {
-            await repository.createPrice(
-              stationId,
-              name.trim(),
-              amount.replace(',', '.'),
-            );
+            const normalized = amount.replace(',', '.');
+            if (editing)
+              await repository.updatePrice(
+                stationId,
+                editing,
+                name.trim(),
+                normalized,
+              );
+            else
+              await repository.createPrice(stationId, name.trim(), normalized);
+            setEditing('');
             setName('');
             setAmount('');
-            setPrices(await repository.salePrices(stationId));
+            setPrices(await repository.stationPrices(stationId));
             setError('');
-          }, 'Precio agregado.');
+          }, 'Precio guardado.');
         }}
       />
+      {!!editing && (
+        <Button
+          title="Cancelar edición"
+          secondary
+          disabled={action.busy}
+          onPress={() => {
+            setEditing('');
+            setName('');
+            setAmount('');
+            action.clear();
+          }}
+        />
+      )}
     </View>
   );
 }
