@@ -14,3 +14,4 @@ export function usePeriod() {
     setPeriod((current) => ({ ...current, ...patch }));
   return { period, update, error: periodError(period.from, period.to) };
 }
+ 
