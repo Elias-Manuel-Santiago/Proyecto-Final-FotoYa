@@ -62,6 +62,8 @@ const actor = (role: string, permissions = backendPermissions[role]) => ({
   roleId: '3',
   stationId: ['dueno', 'secretario', 'cliente'].includes(role) ? null : '1',
   active: true,
+  working: true,
+  kioskMode: false,
   permissions,
 });
 const station = {
@@ -491,11 +493,71 @@ test('fechas MySQL se interpretan como UTC y los períodos respetan 367 días', 
   assert.match(periodError('2026-01-01', '2027-01-03'), /367/);
 });
 
-test('asistencia pendiente no llama rutas no implementadas', async () => {
-  const { repo, requests } = fixture();
-  await assert.rejects(repo.checkIn(), /habilitadas/);
-  await assert.rejects(repo.checkOut(), /habilitadas/);
-  assert.equal(requests.length, 0);
+test('check-in conserva la sesión y envía credenciales del empleado y estado esperado', async () => {
+  const { repo, requests } = fixture('encargado', {
+    'attendance/kiosk/employees': [
+      {
+        id: 8,
+        firstName: 'Ana',
+        lastName: 'Pérez',
+        working: false,
+        attendanceId: null,
+      },
+    ],
+  });
+  await repo.login('encargado@example.com', 'clave');
+  await repo.enterCheckIn();
+  const [employee] = await repo.checkInEmployees();
+  assert.equal(employee.id, '8');
+  await repo.markAttendance(
+    employee,
+    ' empleado@example.com ',
+    'clave-empleado',
+  );
+  await repo.markAttendance(
+    { ...employee, working: true, attendanceId: '22' },
+    'empleado@example.com',
+    'clave-empleado',
+  );
+  await repo.exitCheckIn('clave-encargado');
+  const marks = requests.filter((row) => row.path === 'attendance/kiosk/mark');
+  assert.deepEqual(marks[0].body, {
+    userId: '8',
+    email: 'empleado@example.com',
+    password: 'clave-empleado',
+    action: 'check-in',
+    attendanceId: null,
+  });
+  assert.equal(marks[1].body.action, 'check-out');
+  assert.equal(marks[1].body.attendanceId, '22');
+  assert(
+    requests
+      .slice(1)
+      .every(
+        (row) =>
+          row.headers.get('Authorization') === `Bearer ${'t'.repeat(43)}`,
+      ),
+  );
+});
+
+test('sin check-in o en modo check-in el snapshot solo consulta el perfil', async () => {
+  for (const role of ['camarografo', 'vendedor', 'secretario', 'encargado']) {
+    const { repo, requests } = fixture(role, {
+      'auth/me': {
+        ...actor(role),
+        working: false,
+        kioskMode: role === 'encargado',
+      },
+    });
+    const data = await repo.snapshot();
+    assert.deepEqual(
+      requests.map((row) => row.path),
+      ['auth/me'],
+    );
+    assert.equal(data.photos.length, 0);
+    assert.equal(data.stations.length, 0);
+    assert.equal(can(data.employees[0], 'photos.read'), false);
+  }
 });
 
 test('ventas envía foto, tarifas, copias, pago y UUID; el servidor calcula el importe', async () => {

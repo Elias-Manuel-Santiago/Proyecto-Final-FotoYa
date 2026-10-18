@@ -10,15 +10,29 @@ import { reportRows, totalMetrics } from '../../domain/metrics';
 import { useWorkspace } from '../../providers/AppProvider';
 import { usePeriodData } from '../../hooks/usePeriodData';
 import { Feedback } from '../../components/ui/Feedback';
+import { useAction } from '../../hooks/useAction';
 
 export function HomeScreen() {
-  const { employee } = useWorkspace();
+  const { employee, enterCheckIn } = useWorkspace();
+  const action = useAction();
   const today = businessDate();
   const period = { from: today, to: today, stationId: '' };
   const { data, loading, error, reload } = usePeriodData(period);
   const rows = reportRows(data, employee, period);
   return (
     <Screen title={roleLabels[employee.roleId]}>
+      {employee.roleId === 'manager' && (
+        <>
+          <Button
+            title="Activar vista de check-in"
+            busy={action.busy}
+            onPress={() => {
+              void action.run(enterCheckIn);
+            }}
+          />
+          <Feedback error={action.error} />
+        </>
+      )}
       <Text style={styles.heading}>{displayDate(today)}</Text>
       <Feedback error={error} />
       <Button

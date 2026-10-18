@@ -31,7 +31,13 @@ Iniciar el backend siguiendo `../backend/README.md`: requiere MySQL configurado,
 
 ## Operaciones pendientes del backend
 
-Las marcaciones de entrada/salida responden `501 BUSINESS_RULES_PENDING`; faltan reglas de marcación/turnos. Iniciar/cerrar sesión no marca asistencia. La recuperación de contraseña y el procesamiento de cobros electrónicos siguen pendientes.
+La recuperación de contraseña y el procesamiento de cobros electrónicos siguen pendientes. Iniciar/cerrar sesión no marca asistencia.
+
+## Check-in del puesto
+
+Actualizar el backend con `npm run db:migrate` antes de usar esta función. Desde Inicio, el encargado puede **Activar vista de check-in**: aparecen los empleados activos de su puesto con nombre, apellido y estado de trabajo. Al seleccionar uno, se pide su mail y contraseña para confirmar la entrada o salida correspondiente. Para salir de la vista se exige la contraseña del encargado que la activó; la navegación y el botón Atrás no permiten acceder al resto de la aplicación mientras esté bloqueada.
+
+Sin una jornada abierta, camarógrafos, vendedores y secretarios sólo acceden a **Mi usuario**. El estado se consulta cada 15 segundos y al volver a la aplicación; también puede actualizarse manualmente desde el perfil. La API bloquea inmediatamente nuevas operaciones después del check-out desde cualquier dispositivo. El encargado, dueño y clientes conservan su acceso habitual. El secretario requiere un puesto asignado para poder marcar.
 
 ## Ventas en eventos
 

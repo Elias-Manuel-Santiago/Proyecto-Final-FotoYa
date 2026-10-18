@@ -21,6 +21,8 @@ interface AppContextValue {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  enterCheckIn: () => Promise<void>;
+  exitCheckIn: (password: string) => Promise<void>;
   repository: HttpFotoYaRepository;
 }
 
@@ -88,6 +90,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => subscription.remove();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!employee) return;
+    let running = false;
+    const timer = setInterval(() => {
+      if (running || !signedIn.current) return;
+      running = true;
+      void repository
+        .profile()
+        .then(async (current) => {
+          if (
+            current.working !== employee.working ||
+            current.kioskMode !== employee.kioskMode
+          )
+            await refresh();
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          running = false;
+        });
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [employee, repository, refresh]);
+
+  const enterCheckIn = async () => {
+    await repository.enterCheckIn();
+    setEmployee((current) =>
+      current ? { ...current, kioskMode: true } : current,
+    );
+  };
+  const exitCheckIn = async (password: string) => {
+    await repository.exitCheckIn(password);
+    setEmployee((current) =>
+      current ? { ...current, kioskMode: false } : current,
+    );
+    await refresh();
+  };
+
   const login = async (email: string, password: string) => {
     if (loginRunning.current) return;
     loginRunning.current = true;
@@ -129,6 +168,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         refresh,
+        enterCheckIn,
+        exitCheckIn,
         repository,
       }}
     >

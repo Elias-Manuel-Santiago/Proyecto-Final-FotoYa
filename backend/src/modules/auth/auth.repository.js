@@ -6,7 +6,10 @@ export const authRepository = {
   },
   async actor(token) {
     const [rows] = await db.execute(`SELECT u.id_usuario AS id, u.id_puesto AS stationId, r.nombre AS role,
-      s.id_sesiones_usuario AS sessionId FROM sesiones_usuario s
+      s.id_sesiones_usuario AS sessionId, s.check_in_mode AS kioskMode,
+      EXISTS(SELECT 1 FROM horarios h JOIN dias d ON d.id_dias = h.id_dias
+        WHERE h.id_usuario = u.id_usuario AND h.check_out IS NULL AND d.id_puesto = u.id_puesto) AS working
+      FROM sesiones_usuario s
       JOIN usuarios u ON u.id_usuario = s.id_usuario JOIN rol r ON r.id_rol = u.id_rol
       WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6) AND u.disponible = 1`, [token]);
     if (!rows[0]) return null;
@@ -14,7 +17,7 @@ export const authRepository = {
       JOIN permisos_rol pr ON pr.id_permiso = p.id_permisos JOIN usuarios u ON u.id_rol = pr.id_rol
       WHERE u.id_usuario = ?`, [rows[0].id]);
     await db.execute('UPDATE sesiones_usuario SET last_seen_at = UTC_TIMESTAMP(6) WHERE id_sesiones_usuario = ?', [rows[0].sessionId]);
-    return { ...rows[0], permissions: permissions.map(p => p.name) };
+    return { ...rows[0], kioskMode: Boolean(rows[0].kioskMode), working: Boolean(rows[0].working), permissions: permissions.map(p => p.name) };
   },
   async sessions(actor, { limit, offset }) {
     const [rows] = await db.execute(`SELECT id_sesiones_usuario AS id, created_at, expires_at, last_seen_at, revoked_at

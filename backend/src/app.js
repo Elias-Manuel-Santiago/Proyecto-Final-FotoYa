@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { randomUUID } from 'node:crypto';
 import { authenticate } from './security/authenticate.js';
+import { workAccess } from './security/work-access.js';
 import { ApiError, errorHandler } from './shared/errors.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { userRoutes } from './modules/users/users.routes.js';
@@ -31,7 +32,7 @@ export function createApp() {
   app.use(express.json({ limit: '64kb' }));
   app.post('/api/health', (req, res) => res.json({ data: { status: 'ok' } }));
   app.use('/api/auth', authRoutes());
-  app.use('/api', authenticate);
+  app.use('/api', authenticate, workAccess);
   app.use('/api/users', userRoutes());
   app.use('/api/catalog', catalogRoutes());
   app.use('/api/photos', photoRoutes());

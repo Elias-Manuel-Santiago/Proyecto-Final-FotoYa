@@ -7,7 +7,7 @@ import { hashPassword, normalizeEmail } from '../../security/crypto.js';
 const publicUser = row => ({ id: row.id, firstName: row.nombre,
   lastName: row.apellido, email: row.email,
   dni: row.dni, roleId: String(row.roleId), role: row.role,
-  stationId: row.stationId, active: Boolean(row.active), createdAt: row.created_at, updatedAt: row.updated_at });
+  stationId: row.stationId, stationName: row.stationName, active: Boolean(row.active), createdAt: row.created_at, updatedAt: row.updated_at });
 const personalData = input => [input.firstName, input.lastName, normalizeEmail(input.email), input.dni];
 const target = async (actor, id, connection) => {
   const row = await userRepository.find(id, connection);
@@ -41,7 +41,8 @@ const assignment = async (actor, input, connection) => {
   }
 };
 export const userService = {
-  async profile(actor) { return { ...publicUser(await userRepository.find(actor.id)), permissions: actor.permissions }; },
+  async profile(actor) { return { ...publicUser(await userRepository.find(actor.id)), permissions: actor.permissions,
+    working: actor.working, kioskMode: actor.kioskMode }; },
   async query(actor, input) {
     const rows = await userRepository.query(actor, { ...input,
       email: input.email ? normalizeEmail(input.email) : undefined });

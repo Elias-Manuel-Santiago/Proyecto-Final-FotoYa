@@ -142,6 +142,10 @@ Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`.
 | `/api/catalog/prices/availability` | `stationId`, `priceId`, `active`; baja y reactivación de tarifas |
 | `/api/attendance/query` | Período, paginación y `userId` opcional; usa el puesto histórico del día |
 | `/api/attendance/mine` | Período y paginación; registros propios |
+| `/api/attendance/kiosk/enter` | Sin campos; encargado con puesto activa el modo de check-in en su sesión |
+| `/api/attendance/kiosk/employees` | Paginación; empleados activos del puesto, nombre, apellido, `working` y `attendanceId` |
+| `/api/attendance/kiosk/mark` | `userId`, `email`, `password`, `action` (`check-in`/`check-out`) y `attendanceId` esperado (null para entrada) |
+| `/api/attendance/kiosk/exit` | `password` del encargado que activó la vista; desbloquea su sesión |
 | `/api/reports/query` | Período, paginación y filtros opcionales `cityId`, `eventId`; rendimiento por puesto |
 | `/api/reports/summary` | Mismos filtros; totales de todo el alcance, independientes de la paginación |
 | `/api/reports/days/query` | Período y paginación; conteos diarios y descartes calculados |
@@ -199,9 +203,11 @@ Para reconciliar archivos parciales de operaciones que el cliente abandonó, eje
 
 ## Operaciones pendientes por decisión del usuario
 
-Estas rutas están protegidas y responden **501 `BUSINESS_RULES_PENDING`**, sin escribir datos:
+La asistencia se registra exclusivamente desde `/api/attendance/kiosk/*`. Las rutas anteriores `/api/attendance/check-in` y `/api/attendance/check-out` rechazan con `403 KIOSK_REQUIRED`.
 
-- `/api/attendance/check-in` y `/api/attendance/check-out`: falta definir quién marca, turnos/pausas y día de referencia al cruzar medianoche.
+Ejecutar `npm run db:migrate` antes de desplegar esta versión: agrega `sesiones_usuario.check_in_mode` y un índice de horarios abiertos. En modo check-in la sesión del encargado sólo puede consultar su perfil y operar la vista; tampoco permite logout, cambios de contraseña ni revocación de sesiones hasta validar su contraseña. Cada marcación verifica el mail y contraseña del empleado seleccionado, activo y del mismo puesto, sin cambiar de sesión. La transacción serializa marcaciones y cambios de asignación; los reintentos con estado anterior se rechazan con `409 ATTENDANCE_CHANGED`.
+
+Las entradas usan el día de Argentina y horas UTC del servidor. Se permite volver a entrar después de una salida y un turno puede cruzar medianoche: su día y puesto siguen siendo los de entrada. Una jornada abierta en otro puesto debe cerrarse antes de abrir otra. Camarógrafos, vendedores y secretarios necesitan una jornada abierta en su puesto actual para acceder a operaciones; fuera de jornada conservan su perfil y administración de su cuenta. El dueño, encargado y cliente no requieren jornada para usar la aplicación. Un secretario sin puesto asignado necesita que el dueño se lo asigne para poder marcar. El estado se verifica en cada petición, incluyendo sesiones de otros dispositivos.
 
 También quedan por definir ganancias netas, recuperación de contraseña y entrega de tokens de un solo uso, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API. Las simulaciones quedan en `frontend/tests/support`.
 

@@ -61,7 +61,7 @@ before(async () => {
   await db.query("INSERT INTO ciudad (nombre) VALUES ('Ciudad')");
   await db.query("INSERT INTO puesto (nombre, direccion, id_ciudad) VALUES ('Uno','A',1),('Dos','B',1),('Sin registros','C',1)");
   for (const [key, role, station] of [['dueno', 'dueno', null], ['encargado', 'encargado', '1'], ['otroEncargado', 'encargado', '2'],
-    ['secretario', 'secretario', null], ['vendedor', 'vendedor', '1'], ['camarografo', 'camarografo', '1'], ['cliente', 'cliente', null], ['otroCliente', 'cliente', null]]) {
+    ['secretario', 'secretario', '1'], ['vendedor', 'vendedor', '1'], ['camarografo', 'camarografo', '1'], ['cliente', 'cliente', null], ['otroCliente', 'cliente', null]]) {
     const [[r]] = await db.execute('SELECT id_rol FROM rol WHERE nombre = ?', [role]);
     const dni = String(10000000 + Object.keys(users).length), email = `${key.toLowerCase()}@example.com`;
     const [result] = await db.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, password, id_rol, id_puesto)
@@ -76,6 +76,8 @@ before(async () => {
   await db.query('INSERT INTO precios_venta (id_venta,id_precio,precio_unitario_aplicado,cantidad) VALUES (1,1,20,30),(1,1,20,20),(2,2,25,20),(3,1,20,10)');
   await db.query('INSERT INTO fotos_venta (id_foto,id_venta) VALUES (1,1),(2,1)');
   await db.execute("INSERT INTO horarios (id_dias,id_usuario,check_in,check_out) VALUES (1,?,'2026-10-14 23:00:00','2026-10-15 01:00:00')", [users.vendedor]);
+  for (const role of ['secretario', 'vendedor', 'camarografo'])
+    await db.execute("INSERT INTO horarios (id_dias,id_usuario,check_in) VALUES (1,?,'2026-10-14 12:00:00')", [users[role]]);
   const { createApp } = await import('../../src/app.js');
   const app = createApp();
   server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
@@ -94,6 +96,59 @@ integration('API: POST, autenticación, CORS y validación', async () => {
   assert.equal((await http.post('/api/health', {}, { headers: { Origin: 'https://hostile.example' } })).status, 403);
   assert.equal((await call('reports/query', { ...period, stationId: '1 OR 1=1' })).status, 422);
   assert.equal((await call('reports/query', { ...period, actorId: users.dueno })).status, 422);
+});
+integration('check-in: puesto, credenciales, bloqueo del encargado y acceso desde otros dispositivos', async () => {
+  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='vendedor'");
+  const ids = [];
+  for (const [name, station, active] of [['kioskEmployee', '1', true], ['kioskOther', '2', true], ['kioskInactive', '1', false]]) {
+    const [result] = await db.execute(`INSERT INTO usuarios (nombre,apellido,email,dni,password,id_rol,id_puesto,disponible)
+      VALUES (?,'Prueba',?,?,?,?,?,?)`, [name, `${name.toLowerCase()}@example.com`, String(70000000 + ids.length), passwordHash, role.id_rol, station, active]);
+    ids.push(String(result.insertId));
+  }
+  const employee = ids[0], credentials = { email: 'kioskemployee@example.com', password: 'Test-password-1234' };
+  const session = (await call('auth/login', credentials)).data.data.token;
+  const device = (path, input = {}) => http.post(`/api/${path}`, input, { headers: { Authorization: `Bearer ${session}` } });
+  assert.equal((await device('auth/me')).data.data.working, false);
+  assert.equal((await device('auth/me')).data.data.stationName, 'Uno');
+  assert.equal((await device('sales/query', period)).data.error.code, 'CHECK_IN_REQUIRED');
+  assert.equal((await call('attendance/kiosk/enter')).status, 403);
+  assert.equal((await call('attendance/kiosk/employees', {}, 'encargado')).status, 409);
+  assert.equal((await call('attendance/kiosk/enter', {}, 'encargado')).status, 200);
+  try {
+    for (const path of ['users/query', 'auth/logout', 'auth/sessions/revoke', 'auth/password/change'])
+      assert.equal((await call(path, {}, 'encargado')).data.error.code, 'KIOSK_LOCKED');
+    const roster = (await call('attendance/kiosk/employees', {}, 'encargado')).data.data;
+    assert(roster.some(row => row.id === employee && row.working === false));
+    assert(!roster.some(row => ids.slice(1).includes(row.id)));
+    assert(roster.every(row => row.email === undefined && row.password === undefined));
+    const mark = { ...credentials, userId: employee, action: 'check-in', attendanceId: null };
+    assert.equal((await call('attendance/kiosk/mark', { ...mark, password: 'incorrecta' }, 'encargado')).status, 401);
+    assert.equal((await call('attendance/kiosk/mark', { ...mark, email: 'vendedor@example.com' }, 'encargado')).status, 401);
+    assert.equal((await call('attendance/kiosk/mark', { ...mark, userId: ids[1], email: 'kioskother@example.com' }, 'encargado')).status, 401);
+    const results = await Promise.all([call('attendance/kiosk/mark', mark, 'encargado'), call('attendance/kiosk/mark', mark, 'encargado')]);
+    assert.deepEqual(results.map(row => row.status).sort(), [200, 409]);
+    assert.equal((await device('auth/me')).data.data.working, true);
+    assert.equal((await device('sales/query', period)).status, 200);
+    assert.equal((await call('auth/me', {}, 'encargado')).data.data.id, users.encargado);
+    const current = (await call('attendance/kiosk/employees', {}, 'encargado')).data.data.find(row => row.id === employee);
+    // Una jornada abierta continúa al cruzar medianoche y conserva el día de entrada al salir.
+    await db.execute('UPDATE horarios SET id_dias = 1, check_in = TIMESTAMPADD(HOUR,-26,UTC_TIMESTAMP(6)) WHERE id_horario = ?', [current.attendanceId]);
+    assert.equal((await device('auth/me')).data.data.working, true);
+    const checkout = { ...mark, action: 'check-out', attendanceId: current.attendanceId };
+    assert.equal((await call('attendance/kiosk/mark', checkout, 'encargado')).status, 200);
+    assert.equal((await call('attendance/kiosk/mark', checkout, 'encargado')).status, 409);
+    assert.equal((await device('auth/me')).data.data.working, false);
+    assert.equal((await device('sales/query', period)).status, 403);
+    const [[closed]] = await db.execute('SELECT id_dias, check_out FROM horarios WHERE id_horario = ?', [current.attendanceId]);
+    assert.equal(closed.id_dias, '1'); assert(closed.check_out);
+    assert.equal((await call('attendance/kiosk/exit', { password: 'incorrecta' }, 'encargado')).status, 401);
+    assert.equal((await call('auth/me', {}, 'encargado')).data.data.kioskMode, true);
+    assert.equal((await call('attendance/kiosk/exit', { password: 'Test-password-1234' }, 'encargado')).status, 200);
+    assert.equal((await call('users/query', {}, 'encargado')).status, 200);
+  } finally {
+    await db.execute('UPDATE sesiones_usuario SET check_in_mode = FALSE WHERE id_usuario = ?', [users.encargado]);
+    await db.execute('DELETE FROM horarios WHERE id_usuario = ?', [employee]);
+  }
 });
 integration('puestos: alta, baja reversible, permisos e historial', async () => {
   // Simula una instalación existente con su catálogo de permisos ya poblado.
@@ -230,11 +285,13 @@ integration('ventas conserva tarifas históricas y separa las tablas intermedias
 });
 integration('asistencia conserva puesto histórico y turno que cruza medianoche', async () => {
   await db.execute('UPDATE usuarios SET id_puesto=2 WHERE id_usuario=?', [users.vendedor]);
-  const response = await call('attendance/query', period, 'encargado');
-  assert.equal(response.status, 200); assert.equal(response.data.data.length, 1);
-  assert.equal(response.data.data[0].stationId, '1'); assert.equal(Number(response.data.data[0].durationSeconds), 7200);
-  assert.equal((await call('attendance/query', period, 'otroEncargado')).data.data.length, 0);
-  await db.execute('UPDATE usuarios SET id_puesto=1 WHERE id_usuario=?', [users.vendedor]);
+  try {
+    const response = await call('attendance/query', { ...period, userId: users.vendedor }, 'encargado');
+    assert.equal(response.status, 200); assert.equal(response.data.data.length, 2);
+    const closed = response.data.data.find(row => row.checkOut !== null);
+    assert.equal(closed.stationId, '1'); assert.equal(Number(closed.durationSeconds), 7200);
+    assert.equal((await call('attendance/query', period, 'otroEncargado')).data.data.length, 0);
+  } finally { await db.execute('UPDATE usuarios SET id_puesto=1 WHERE id_usuario=?', [users.vendedor]); }
 });
 integration('alta guarda datos sin cifrar, hashea contraseña y rechaza duplicados y escalamiento', async () => {
   const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='cliente'");
@@ -254,10 +311,10 @@ integration('baja reversible invalida sesiones anteriores y preserva el identifi
   const detail = await call('users/detail', { userId: users.vendedor });
   assert.equal(detail.data.data.id, users.vendedor); assert.equal(detail.data.data.active, true);
 });
-integration('operaciones pendientes devuelven 501 y no escriben registros', async () => {
+integration('operaciones inválidas y marcación fuera de la vista no escriben registros', async () => {
   const [[before]] = await db.query('SELECT COUNT(*) AS count FROM venta');
   assert.equal((await call('sales/create', {}, 'encargado')).status, 422);
-  assert.equal((await call('attendance/check-in', {}, 'encargado')).status, 501);
+  assert.equal((await call('attendance/check-in', {}, 'encargado')).status, 403);
   assert.equal((await call('photos/upload', {}, 'cliente')).status, 403);
   const [[after]] = await db.query('SELECT COUNT(*) AS count FROM venta'); assert.equal(after.count, before.count);
 });
@@ -489,8 +546,13 @@ integration('cambio de contraseña revoca sesiones y logout no altera asistencia
   const [[after]] = await db.query('SELECT COUNT(*) AS count FROM horarios'); assert.equal(after.count, before.count);
 });
 integration('migraciones repetibles preservan permisos y datos originales', async () => {
+  await db.query('ALTER TABLE sesiones_usuario DROP COLUMN check_in_mode');
+  await db.query('ALTER TABLE horarios DROP INDEX ix_horarios_usuario_abierto');
   await migrate(db, env);
   const response = await call('auth/me'); assert.equal(response.status, 200); assert.equal(response.data.data.email, 'dueno@example.com');
+  assert.equal(response.data.data.kioskMode, false);
+  const [indexes] = await db.query("SHOW INDEX FROM horarios WHERE Key_name='ix_horarios_usuario_abierto'");
+  assert(indexes.length > 0);
 });
 integration('migración conserva datos personales y sólo hashea contraseñas', async () => {
   const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='cliente'");

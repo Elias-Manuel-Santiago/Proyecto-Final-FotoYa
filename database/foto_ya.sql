@@ -157,6 +157,7 @@ CREATE TABLE sesiones_usuario (
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   last_seen_at DATETIME(6) NULL,
   revoked_at DATETIME(6) NULL,
+  check_in_mode BOOLEAN NOT NULL DEFAULT FALSE,
   user_agent VARCHAR(512) NULL,
   ip_address VARCHAR(45) CHARACTER SET ascii NULL,
   CONSTRAINT uq_sesiones_token UNIQUE (token),

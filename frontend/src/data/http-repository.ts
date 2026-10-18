@@ -14,7 +14,9 @@ import type {
   Price,
   EventSaleInput,
   SalePhoto,
+  CheckInEmployee,
 } from '../domain/models';
+import { canWork } from '../domain/permissions';
 import { businessDate, periodError, utcInstant } from '../domain/dates';
 import { errorMessage } from '../domain/format';
 import { ApiClient } from './api-client';
@@ -84,6 +86,7 @@ function user(row: UserRow): Employee {
 }
 
 export class HttpFotoYaRepository {
+  private profileRevision = 0;
   onProfile?: (employee: Employee) => void;
   setOnProfile(listener?: (employee: Employee) => void) {
     this.onProfile = listener;
@@ -106,6 +109,45 @@ export class HttpFotoYaRepository {
     }
   }
 
+  async profile() {
+    const revision = this.profileRevision;
+    const actor = user(await this.api.post<UserRow>('auth/me'));
+    if (revision === this.profileRevision) this.onProfile?.(actor);
+    return actor;
+  }
+
+  async enterCheckIn() {
+    await this.api.post('attendance/kiosk/enter');
+    this.profileRevision += 1;
+  }
+
+  async exitCheckIn(password: string) {
+    await this.api.post('attendance/kiosk/exit', { password });
+    this.profileRevision += 1;
+  }
+
+  async checkInEmployees(): Promise<CheckInEmployee[]> {
+    const rows = await this.api.all<CheckInEmployee>(
+      'attendance/kiosk/employees',
+    );
+    return rows.map((row) => ({
+      ...row,
+      id: String(row.id),
+      working: Boolean(row.working),
+      attendanceId: row.attendanceId == null ? null : String(row.attendanceId),
+    }));
+  }
+
+  markAttendance(employee: CheckInEmployee, email: string, password: string) {
+    return this.api.post('attendance/kiosk/mark', {
+      userId: employee.id,
+      email: email.trim(),
+      password,
+      action: employee.working ? 'check-out' : 'check-in',
+      attendanceId: employee.attendanceId,
+    });
+  }
+
   async snapshot(
     period: Period = {
       from: businessDate(),
@@ -116,8 +158,16 @@ export class HttpFotoYaRepository {
   ): Promise<AppData> {
     const invalid = periodError(period.from, period.to);
     if (invalid) throw new Error(invalid);
-    const actor = user(await this.api.post<UserRow>('auth/me'));
-    this.onProfile?.(actor);
+    const actor = await this.profile();
+    if (actor.kioskMode || !canWork(actor))
+      return {
+        employees: [actor],
+        stations: [],
+        counts: [],
+        photos: [],
+        sales: [],
+        attendance: [],
+      };
     const has = (permission: string) => actor.permissions?.includes(permission);
     const body = {
       from: period.from,
@@ -369,16 +419,6 @@ export class HttpFotoYaRepository {
     return this.api.post<{ url: string; expiresIn: number }>(
       'sales/photos/access',
       { photoId },
-    );
-  }
-  async checkIn(): Promise<void> {
-    throw new Error(
-      'Las marcaciones de asistencia todavía no están habilitadas en el servidor.',
-    );
-  }
-  async checkOut(): Promise<void> {
-    throw new Error(
-      'Las marcaciones de asistencia todavía no están habilitadas en el servidor.',
     );
   }
 

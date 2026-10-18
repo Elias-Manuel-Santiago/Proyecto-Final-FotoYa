@@ -1,7 +1,12 @@
 import { Link, usePathname, type Href } from 'expo-router';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { can, roleLabels, type Permission } from '../../domain/permissions';
+import {
+  can,
+  canWork,
+  roleLabels,
+  type Permission,
+} from '../../domain/permissions';
 import { useWorkspace } from '../../providers/AppProvider';
 import { colors, styles } from '../ui/theme';
 
@@ -46,13 +51,19 @@ export function WorkspaceHeader() {
       >
         <Text style={styles.label}>
           Foto Ya · {roleLabels[employee.roleId]} ·{' '}
-          {station?.name ?? 'Sin puesto asignado'}
+          {station?.name ??
+            employee.stationName ??
+            (employee.stationId
+              ? `Puesto ${employee.stationId}`
+              : 'Sin puesto asignado')}
         </Text>
         <Text style={styles.muted}>Conectado al servidor</Text>
         <View style={styles.row}>
           {links
-            .filter(
-              (link) => !link.permission || can(employee, link.permission),
+            .filter((link) =>
+              canWork(employee)
+                ? !link.permission || can(employee, link.permission)
+                : link.href === '/profile',
             )
             .map((link) => (
               <Link

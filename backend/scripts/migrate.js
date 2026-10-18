@@ -51,6 +51,8 @@ export async function migrate(db, env, { init = false } = {}) {
       if (!await hasIndex(table, newIndex)) await connection.query(`ALTER TABLE ${table} ADD CONSTRAINT ${newIndex} UNIQUE (token)`);
     }
     if (!await hasColumn('puesto', 'disponible')) await connection.query('ALTER TABLE puesto ADD disponible BOOLEAN NOT NULL DEFAULT TRUE');
+    if (!await hasColumn('sesiones_usuario', 'check_in_mode')) await connection.query('ALTER TABLE sesiones_usuario ADD check_in_mode BOOLEAN NOT NULL DEFAULT FALSE');
+    if (!await hasIndex('horarios', 'ix_horarios_usuario_abierto')) await connection.query('CREATE INDEX ix_horarios_usuario_abierto ON horarios (id_usuario, check_out)');
     // Las tarifas antiguas quedan sin asignar: nunca se convierten en tarifas globales.
     if (!await hasColumn('precios', 'id_puesto')) await connection.query('ALTER TABLE precios ADD id_puesto BIGINT UNSIGNED NULL, ADD CONSTRAINT fk_precios_puesto FOREIGN KEY (id_puesto) REFERENCES puesto (id_puesto)');
     if (!await hasColumn('precios', 'disponible')) await connection.query('ALTER TABLE precios ADD disponible BOOLEAN NOT NULL DEFAULT TRUE');

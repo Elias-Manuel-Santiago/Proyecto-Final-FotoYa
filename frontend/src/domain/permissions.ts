@@ -86,9 +86,18 @@ const globalRoles: readonly RoleId[] = ['owner', 'secretary'];
 export function can(employee: Employee, permission: Permission) {
   return (
     employee.active &&
+    canWork(employee) &&
+    !employee.kioskMode &&
     (employee.permissions ?? rolePermissions[employee.roleId]).includes(
       permission,
     )
+  );
+}
+
+export function canWork(employee: Employee) {
+  return (
+    !['secretary', 'photographer', 'seller'].includes(employee.roleId) ||
+    employee.working === true
   );
 }
 

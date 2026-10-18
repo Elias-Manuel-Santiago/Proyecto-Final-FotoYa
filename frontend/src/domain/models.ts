@@ -9,11 +9,17 @@ export interface Employee {
   dni: string;
   roleId: RoleId;
   stationId: string;
+  stationName?: string | null;
   active: boolean;
   permissions?: readonly string[];
+  working?: boolean;
+  kioskMode?: boolean;
 }
 
-export type EmployeeInput = Omit<Employee, 'id' | 'active' | 'permissions'> & {
+export type EmployeeInput = Omit<
+  Employee,
+  'id' | 'active' | 'permissions' | 'working' | 'kioskMode' | 'stationName'
+> & {
   id?: string;
   password?: string;
 };
@@ -115,6 +121,14 @@ export interface Attendance {
   date: string;
   checkIn: string;
   checkOut: string | null;
+}
+
+export interface CheckInEmployee {
+  id: string;
+  firstName: string;
+  lastName: string;
+  working: boolean;
+  attendanceId: string | null;
 }
 
 export interface AppData {

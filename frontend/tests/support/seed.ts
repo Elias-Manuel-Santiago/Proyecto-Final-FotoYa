@@ -66,7 +66,7 @@ export function createSeed(): AppData {
     },
   ];
   return {
-    employees,
+    employees: employees.map((employee) => ({ ...employee, working: true })),
     stations: [
       {
         id: 'centro',

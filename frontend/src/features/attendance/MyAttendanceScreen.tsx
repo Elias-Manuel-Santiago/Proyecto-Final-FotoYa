@@ -25,8 +25,8 @@ export function MyAttendanceScreen() {
   return (
     <Screen title="Mi asistencia">
       <Text style={styles.muted}>
-        Las marcaciones todavía no están habilitadas. Podés consultar los
-        registros existentes. Iniciar o cerrar sesión no registra asistencia.
+        Registrá tu entrada y salida en la vista de check-in del encargado con
+        tu mail y contraseña. Iniciar o cerrar sesión no registra asistencia.
       </Text>
       <PeriodFilters period={period} stations={[]} onChange={update} />
       <Feedback error={error} />

@@ -5,7 +5,9 @@ const columns = `u.id_usuario AS id, u.nombre, u.apellido, u.email, u.dni, u.id_
 r.nombre AS role, u.id_puesto AS stationId, u.disponible AS active, u.created_at, u.updated_at`;
 export const userRepository = {
   async find(userId, executor = db) {
-    const [[row]] = await executor.execute(`SELECT ${columns} FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol WHERE u.id_usuario = ?`, [userId]);
+    const [[row]] = await executor.execute(`SELECT ${columns},
+      (SELECT nombre FROM puesto WHERE id_puesto = u.id_puesto) AS stationName
+      FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol WHERE u.id_usuario = ?`, [userId]);
     return row;
   },
   async query(actor, input) {
