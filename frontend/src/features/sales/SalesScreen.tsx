@@ -60,7 +60,7 @@ export function SalesScreen() {
             }
           />
           <Text style={styles.muted}>
-            {sales.length} operaciones · familias contadas una sola vez por foto
+            {sales.length} operaciones
           </Text>
           {!sales.length && <EmptyState />}
           {sales.map((sale) => (

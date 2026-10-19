@@ -20,6 +20,7 @@ export function usePeriodData(period: Period, attendanceSelf = false) {
     let active = true;
     const [requested] = JSON.parse(key) as [Period, number, boolean];
     if (periodError(requested.from, requested.to)) return;
+    
     const timer = setTimeout(() => {
       void repository
         .snapshot(requested, attendanceSelf)
@@ -35,8 +36,10 @@ export function usePeriodData(period: Period, attendanceSelf = false) {
       clearTimeout(timer);
     };
   }, [key, repository, base, attendanceSelf, revision]);
+
   const current =
     result?.key === key && result.base === base ? result : undefined;
+
   const data = current?.data ?? {
     ...base,
     counts: [],
@@ -46,6 +49,7 @@ export function usePeriodData(period: Period, attendanceSelf = false) {
     reports: [],
     summary: undefined,
   };
+
   return {
     data,
     loading: !current && !periodError(period.from, period.to),
