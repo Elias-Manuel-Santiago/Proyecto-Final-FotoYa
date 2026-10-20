@@ -1,4 +1,3 @@
-import { Button } from '../../components/ui/Button';
 import { Text, View } from 'react-native';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
 import { Metrics } from '../../components/metrics/Metrics';
@@ -22,7 +21,11 @@ export function ReportsScreen() {
   const error = periodError || queryError;
   const rows = error ? [] : reportRows(data, employee, period);
   return (
-    <Screen title="Estadísticas e ingresos">
+    <Screen
+      title="Estadísticas e ingresos"
+      refreshing={loading}
+      onRefresh={reload}
+    >
       <PeriodFilters
         period={period}
         stations={visibleStations(data, employee)}
@@ -30,12 +33,6 @@ export function ReportsScreen() {
         extended
       />
       <Feedback error={error} />
-      <Button
-        title="Actualizar datos"
-        secondary
-        busy={loading}
-        onPress={reload}
-      />
       {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
       {!error && !loading && (
         <>

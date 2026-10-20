@@ -16,22 +16,20 @@ export function ProfileScreen() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   return (
-    <Screen title="Mi usuario">
+    <Screen
+      title="Mi usuario"
+      refreshing={action.busy}
+      onRefresh={() => {
+        void action.run(refresh);
+      }}
+    >
       {!canWork(employee) && (
         <Text style={styles.muted}>
           No estás trabajando. Registrá tu check-in en la pantalla del encargado
-          de tu puesto para habilitar tus tareas. Podés actualizar esta pantalla
-          después de marcar.
+          de tu puesto para habilitar tus tareas. Deslizá hacia abajo para
+          actualizar esta pantalla después de marcar.
         </Text>
       )}
-      <Button
-        title="Actualizar información"
-        secondary
-        busy={action.busy}
-        onPress={() => {
-          void action.run(refresh);
-        }}
-      />
       <View style={styles.card}>
         <Text style={styles.heading}>{fullName(employee)}</Text>
         <Text style={styles.text}>ID de usuario: {employee.id}</Text>

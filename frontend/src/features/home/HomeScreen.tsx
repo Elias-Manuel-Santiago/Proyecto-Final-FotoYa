@@ -20,7 +20,11 @@ export function HomeScreen() {
   const { data, loading, error, reload } = usePeriodData(period);
   const rows = reportRows(data, employee, period);
   return (
-    <Screen title={roleLabels[employee.roleId]}>
+    <Screen
+      title={roleLabels[employee.roleId]}
+      refreshing={loading}
+      onRefresh={reload}
+    >
       {employee.roleId === 'manager' && (
         <>
           <Button
@@ -35,12 +39,6 @@ export function HomeScreen() {
       )}
       <Text style={styles.heading}>{displayDate(today)}</Text>
       <Feedback error={error} />
-      <Button
-        title="Actualizar datos"
-        secondary
-        busy={loading}
-        onPress={reload}
-      />
       {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
       {!error && !loading && employee.permissions?.includes('counts.read') && (
         <>

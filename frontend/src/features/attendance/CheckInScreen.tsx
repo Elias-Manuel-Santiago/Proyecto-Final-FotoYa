@@ -53,7 +53,14 @@ export function CheckInScreen() {
   };
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-      <Screen title="Check-in del puesto">
+      <Screen
+        title="Check-in del puesto"
+        refreshing={loading}
+        refreshEnabled={!selected && !leaving && !action.busy}
+        onRefresh={() => {
+          void reload();
+        }}
+      >
         <Text style={styles.muted}>
           Seleccioná tu nombre para registrar tu entrada o salida.
         </Text>
@@ -159,14 +166,6 @@ export function CheckInScreen() {
           </View>
         ) : (
           <>
-            <Button
-              title="Actualizar empleados"
-              secondary
-              busy={loading}
-              onPress={() => {
-                void reload();
-              }}
-            />
             {!loading && !error && !employees.length && (
               <EmptyState message="No hay empleados activos en este puesto." />
             )}

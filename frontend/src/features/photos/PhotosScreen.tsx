@@ -49,7 +49,7 @@ export function PhotosScreen() {
         )
       : 0;
   return (
-    <Screen title="Fotos">
+    <Screen title="Fotos" refreshing={loading} onRefresh={reload}>
       {can(employee, 'photos.upload') && <UploadQueue />}
       <PeriodFilters
         period={period}
@@ -57,12 +57,6 @@ export function PhotosScreen() {
         onChange={update}
       />
       <Feedback error={error} />
-      <Button
-        title="Actualizar datos"
-        secondary
-        busy={loading}
-        onPress={reload}
-      />
       {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
       {!error && !loading && (
         <>

@@ -1,4 +1,3 @@
-import { Button } from '../../components/ui/Button';
 import { Link } from 'expo-router';
 import { Text } from 'react-native';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
@@ -33,7 +32,7 @@ export function SalesScreen() {
         )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (
-    <Screen title="Ventas">
+    <Screen title="Ventas" refreshing={loading} onRefresh={reload}>
       {can(employee, 'sales.create') && (
         <Link href="/sales/new" style={styles.card}>
           Registrar venta en evento
@@ -45,12 +44,6 @@ export function SalesScreen() {
         onChange={update}
       />
       <Feedback error={error} />
-      <Button
-        title="Actualizar datos"
-        secondary
-        busy={loading}
-        onPress={reload}
-      />
       {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
       {!error && !loading && (
         <>
@@ -59,9 +52,7 @@ export function SalesScreen() {
               data.summary ?? totalMetrics(reportRows(data, employee, period))
             }
           />
-          <Text style={styles.muted}>
-            {sales.length} operaciones
-          </Text>
+          <Text style={styles.muted}>{sales.length} operaciones</Text>
           {!sales.length && <EmptyState />}
           {sales.map((sale) => (
             <SaleCard key={sale.id} sale={sale} data={data} />

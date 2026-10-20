@@ -29,6 +29,8 @@ Iniciar el backend siguiendo `../backend/README.md`: requiere MySQL configurado,
 - Los informes usan `/reports/query` y `/reports/summary`; el resumen viene del servidor y no suma una sola página. Los conteos diarios contienen las fotos vendidas incluso para el camarógrafo sin permiso de ventas. Los días incompletos y las inconsistencias conservan valores no disponibles, sin compensar diferencias entre días. Los importes se presentan como ingresos por ventas; faltan costos para calcular ganancias netas.
 - Los DATETIME de horarios/sesiones se interpretan como UTC y se muestran en Argentina. La consulta de asistencia propia usa `/attendance/mine`, conservando registros de puestos anteriores.
 
+En Android e iOS, las vistas Inicio, Fotos, Ventas, Venta en evento, Informes, Asistencia, Mi asistencia, Check-in y Mi usuario se actualizan deslizando hacia abajo desde el inicio del contenido con `RefreshControl`. El gesto conserva los filtros y queda bloqueado durante una venta o mientras se completa el check-in. React Native Web no implementa este control; el gesto de actualización está disponible en móvil.
+
 ## Operaciones pendientes del backend
 
 La recuperación de contraseña y el procesamiento de cobros electrónicos siguen pendientes. Iniciar/cerrar sesión no marca asistencia.

@@ -1,4 +1,3 @@
-import { Button } from '../../components/ui/Button';
 import { Text } from 'react-native';
 import { styles } from '../../components/ui/theme';
 import { useLocalSearchParams } from 'expo-router';
@@ -36,7 +35,11 @@ export function AttendanceScreen() {
         )
         .sort((a, b) => b.checkIn.localeCompare(a.checkIn));
   return (
-    <Screen title="Horarios de empleados">
+    <Screen
+      title="Horarios de empleados"
+      refreshing={loading}
+      onRefresh={reload}
+    >
       <PeriodFilters
         period={period}
         stations={visibleStations(data, employee)}
@@ -52,12 +55,6 @@ export function AttendanceScreen() {
         ]}
       />
       <Feedback error={error} />
-      <Button
-        title="Actualizar datos"
-        secondary
-        busy={loading}
-        onPress={reload}
-      />
       {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
       {!error && !loading && !records.length && <EmptyState />}
       {records.map((record) => {

@@ -77,22 +77,18 @@ function DailySaleScreen({ today }: { today: string }) {
     photos = (current?.photos ?? []).filter((photo) => photo.date === today);
   const blocked = loading || !!error || action.busy;
   return (
-    <Screen title="Venta en evento">
+    <Screen
+      title="Venta en evento"
+      refreshing={loading}
+      onRefresh={reload}
+      refreshEnabled={!action.busy && !selling}
+    >
       <Feedback error={error || action.error} success={action.success} />
       {!!photoId && !selling && (
         <Link href="/sales/new" replace style={styles.text}>
           Ver todas las fotos del evento
         </Link>
       )}
-      <Button
-        title="Actualizar"
-        secondary
-        disabled={action.busy || selling}
-        busy={loading}
-        onPress={() => {
-          reload();
-        }}
-      />
       {!error && !loading && (
         <>
           <Text style={styles.heading}>

@@ -1,4 +1,3 @@
-import { Button } from '../../components/ui/Button';
 import { Text } from 'react-native';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
 import { EmptyState, Feedback } from '../../components/ui/Feedback';
@@ -23,19 +22,13 @@ export function MyAttendanceScreen() {
   );
   const error = periodError || queryError;
   return (
-    <Screen title="Mi asistencia">
+    <Screen title="Mi asistencia" refreshing={loading} onRefresh={reload}>
       <Text style={styles.muted}>
         Registrá tu entrada y salida en la vista de check-in del encargado con
         tu mail y contraseña. Iniciar o cerrar sesión no registra asistencia.
       </Text>
       <PeriodFilters period={period} stations={[]} onChange={update} />
       <Feedback error={error} />
-      <Button
-        title="Actualizar datos"
-        secondary
-        busy={loading}
-        onPress={reload}
-      />
       {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
       {!loading && !error && !records.length && (
         <EmptyState message="No hay horarios en este período." />
