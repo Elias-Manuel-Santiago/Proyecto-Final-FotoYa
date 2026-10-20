@@ -8,6 +8,7 @@ import { Button } from '../../../components/ui/Button';
 import { Feedback } from '../../../components/ui/Feedback';
 import { useAction } from '../../../hooks/useAction';
 import { useWorkspace } from '../../../providers/AppProvider';
+import { PhotoPreview } from '../../photos/components/PhotoPreview';
 
 export function SaleCard({ sale, data }: { sale: Sale; data: AppData }) {
   const { repository } = useWorkspace();
@@ -52,6 +53,14 @@ export function SaleCard({ sale, data }: { sale: Sale; data: AppData }) {
             'Sin fotos vinculadas'}
         </Text>
       )}
+      {detail?.photos.map((row) => (
+        <PhotoPreview
+          key={row.photoId}
+          photoId={row.photoId}
+          saleId={sale.id}
+          name={`Foto ${row.photoId}`}
+        />
+      ))}
     </View>
   );
 }

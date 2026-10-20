@@ -51,7 +51,7 @@ before(async () => {
   const { rateLimit: realRateLimit } = await import('express-rate-limit');
   mock.module('express-rate-limit', { namedExports: { rateLimit: options => realRateLimit({ ...options, limit: 10000 }) } });
   mock.module('../../src/integrations/storage.js', { namedExports: {
-    uploadFile: storage.upload, removeFile: storage.remove, signedUrl: storage.signedUrl,
+    uploadFile: storage.upload, removeFile: storage.remove, signedUrl: storage.signedUrl, signedPreviewUrl: storage.signedUrl,
   } });
   ({ authRepository } = await import('../../src/modules/auth/auth.repository.js'));
   ({ photoUploads, businessDate } = await import('../../src/modules/photos/photos.upload.js'));
@@ -331,10 +331,10 @@ integration('carga opcional, reintentos concurrentes y asignación posterior no 
   assert.equal((await call('photos/query', query, 'cliente')).status, 403);
   assert.equal((await call('photos/detail', { photoId: photo.id }, 'cliente')).status, 404);
   assert.equal((await call('photos/access', { photoId: photo.id }, 'cliente')).status, 404);
-  const assigned = await call('photos/assign', { photoId: photo.id, clientId: users.cliente }, 'encargado');
+  const assigned = await call('photos/assign', { photoId: photo.id, clientEmail: 'cliente@example.com' }, 'encargado');
   assert.equal(assigned.status, 200); assert.equal(assigned.data.data.clientId, users.cliente);
-  assert.equal((await call('photos/assign', { photoId: photo.id, clientId: users.cliente }, 'encargado')).status, 200);
-  assert.equal((await call('photos/assign', { photoId: photo.id, clientId: users.otroCliente }, 'encargado')).status, 409);
+  assert.equal((await call('photos/assign', { photoId: photo.id, clientEmail: 'cliente@example.com' }, 'encargado')).status, 200);
+  assert.equal((await call('photos/assign', { photoId: photo.id, clientEmail: 'otroCliente@example.com' }, 'encargado')).status, 409);
   assert.equal((await call('photos/access', { photoId: photo.id }, 'cliente')).status, 200);
   assert.equal((await call('photos/access', { photoId: photo.id }, 'otroCliente')).status, 404);
   const replay = await upload(operation); assert.equal(replay.data.data.clientId, users.cliente);
@@ -348,12 +348,12 @@ integration('cliente durante carga y asignaciones concurrentes respetan permisos
   assert.equal((await call('photos/access', { photoId: initial.data.data.id }, 'otroCliente')).status, 200);
   const unassigned = await upload(randomUUID()); assert.equal(unassigned.status, 200);
   const photoId = unassigned.data.data.id;
-  assert.equal((await call('photos/assign', { photoId, clientId: users.cliente }, 'otroEncargado')).status, 403);
-  assert.equal((await call('photos/assign', { photoId, clientId: users.cliente }, 'cliente')).status, 403);
-  assert.equal((await call('photos/assign', { photoId, clientId: users.vendedor }, 'encargado')).status, 422);
+  assert.equal((await call('photos/assign', { photoId, clientEmail: 'cliente@example.com' }, 'otroEncargado')).status, 403);
+  assert.equal((await call('photos/assign', { photoId, clientEmail: 'cliente@example.com' }, 'cliente')).status, 403);
+  assert.equal((await call('photos/assign', { photoId, clientEmail: 'vendedor@example.com' }, 'encargado')).status, 422);
   const assignments = await Promise.all([
-    call('photos/assign', { photoId, clientId: users.cliente }, 'encargado'),
-    call('photos/assign', { photoId, clientId: users.otroCliente }, 'camarografo'),
+    call('photos/assign', { photoId, clientEmail: 'cliente@example.com' }, 'encargado'),
+    call('photos/assign', { photoId, clientEmail: 'otroCliente@example.com' }, 'camarografo'),
   ]);
   assert.deepEqual(assignments.map(r => r.status).sort(), [200, 409]);
 });

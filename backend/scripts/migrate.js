@@ -67,6 +67,7 @@ export async function migrate(db, env, { init = false } = {}) {
     }
     if (!await hasIndex('venta', 'uq_venta_operation')) await connection.query('CREATE UNIQUE INDEX uq_venta_operation ON venta (operation_id)');
     await runFile('../database/005-event-sales.sql');
+    if (!await hasColumn('fotos', 'email_cliente')) await connection.query('ALTER TABLE fotos ADD email_cliente VARCHAR(254) NULL');
     const photoColumns = await columns('fotos');
     if (photoColumns.some(column => column.name === 'id_cliente' && column.nullable === 'NO')) {
       const [keys] = await connection.query("SELECT CONSTRAINT_NAME AS name FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND table_name = 'fotos' AND column_name = 'id_cliente' AND referenced_table_name = 'usuarios'");

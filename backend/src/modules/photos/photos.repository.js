@@ -1,5 +1,7 @@
 import { db } from '../../config/database.js';
-const columns = 'f.id_fotos AS id, f.id_cliente AS clientId, f.id_puesto AS stationId, d.fecha AS date';
+const columns = `f.id_fotos AS id, f.id_cliente AS clientId,
+  COALESCE(f.email_cliente, (SELECT email FROM usuarios WHERE id_usuario = f.id_cliente)) AS clientEmail,
+  f.id_puesto AS stationId, d.fecha AS date`;
 export const photoRepository = {
   async query(actor, input, station) {
     const params = [input.from, input.to], where = ['d.fecha BETWEEN ? AND ?'];

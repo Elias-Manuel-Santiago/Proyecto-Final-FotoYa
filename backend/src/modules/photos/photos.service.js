@@ -1,5 +1,5 @@
 import { photoRepository } from './photos.repository.js';
-import { signedUrl } from '../../integrations/storage.js';
+import { signedPreviewUrl } from '../../integrations/storage.js';
 import { ApiError } from '../../shared/errors.js';
 import { globalScope, stationScope } from '../../security/access.js';
 
@@ -20,5 +20,5 @@ export const photoService = {
     const { file, ...metadata } = await find(actor, photoId);
     return metadata;
   },
-  async access(actor, photoId) { return signedUrl((await find(actor, photoId)).file); },
+  async access(actor, photoId) { return signedPreviewUrl((await find(actor, photoId)).file); },
 };

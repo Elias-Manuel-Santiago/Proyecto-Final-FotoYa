@@ -358,11 +358,46 @@ test('cada apertura obtiene acceso temporal; asignación no envía metadatos inv
   const { repo, requests } = fixture();
   await repo.accessPhoto('91');
   await repo.accessPhoto('91');
-  await repo.assignPhoto('91', '42');
+  await repo.assignPhoto('91', ' Cliente@Example.com ');
   assert.deepEqual(
     requests.map((row) => row.body),
-    [{ photoId: '91' }, { photoId: '91' }, { photoId: '91', clientId: '42' }],
+    [
+      { photoId: '91' },
+      { photoId: '91' },
+      { photoId: '91', clientEmail: 'cliente@example.com' },
+    ],
   );
+});
+
+test('desde ventas guarda el mail por la ruta del evento y consulta una foto elegida fuera de la primera página', async () => {
+  const requests: { path: string; body: Record<string, unknown> }[] = [];
+  const repo = new HttpFotoYaRepository(
+    testApi('https://api.example.com/api', async (url, options) => {
+      const path = String(url).split('/api/')[1];
+      requests.push({ path, body: JSON.parse(String(options?.body)) });
+      return Response.json({
+        data:
+          path === 'sales/photos'
+            ? []
+            : { clientEmail: 'cliente@example.com', clientId: null },
+      });
+    }),
+  );
+  const result = await repo.assignPhoto('91', 'Cliente@Example.com', true);
+  assert.equal(result.clientEmail, 'cliente@example.com');
+  await repo.salePhotos('1', 0, '91');
+  await repo.accessSoldPhoto('25', '91');
+  assert.deepEqual(requests, [
+    {
+      path: 'sales/photos/assign',
+      body: { photoId: '91', clientEmail: 'cliente@example.com' },
+    },
+    {
+      path: 'sales/photos',
+      body: { stationId: '1', limit: 12, offset: 0, photoId: '91' },
+    },
+    { path: 'sales/photos/sold/access', body: { saleId: '25', photoId: '91' } },
+  ]);
 });
 
 test('paginación recorre todos los bloques y conserva filtros sin truncar totales', async () => {

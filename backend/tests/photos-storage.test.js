@@ -1,7 +1,8 @@
 import test, { mock, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { photoService } from '../src/modules/photos/photos.service.js';
-import { uploadFile, removeFile, signedUrl } from '../src/integrations/storage.js';
+import { uploadFile, removeFile, signedUrl, signedPreviewUrl } from '../src/integrations/storage.js';
+import sharp from 'sharp';
 import { db } from '../src/config/database.js';
 after(() => db.end());
 import { photoRepository } from '../src/modules/photos/photos.repository.js';
@@ -21,7 +22,7 @@ test('cliente no accede a metadatos ni archivos de otro cliente', async () => {
   const ownerClient = { ...client, id: '9' };
   assert.equal((await photoService.detail(ownerClient, '2')).file, undefined);
   await photoService.access(ownerClient, '2');
-  assert.equal(request.mock.callCount(), 1);
+  assert.equal(request.mock.callCount(), 2);
   assert.throws(() => photoService.query(client, { clientId: '9' }), { status: 403 });
 });
 
@@ -39,6 +40,45 @@ test('Storage firma por POST y limita la vigencia', async () => {
   assert.equal(JSON.parse(options.body).expiresIn, 60);
   assert.equal(response.url, 'https://example.supabase.co/storage/v1/object/sign/foto-ya/foto.jpg?token=example');
   assert.equal(options.redirect, 'error');
+});
+
+test('la vista previa genera WebP de hasta 960 px, conserva proporciones y firma sólo la copia privada', async () => {
+  const original = await sharp({ create: { width: 1800, height: 1200, channels: 3, background: '#336699' } }).png().toBuffer();
+  let uploaded;
+  const request = mock.method(globalThis, 'fetch', async (url, options) => {
+    if (options.method === 'HEAD') return new Response(null, { status: 404 });
+    if (options.method === 'GET') return new Response(original, { headers: { 'content-type': 'image/png' } });
+    if (String(url).includes('/object/sign/')) return Response.json({ signedURL: '/object/sign/foto-ya/previews/test.webp?token=example' });
+    uploaded = options.body;
+    assert.equal(new Headers(options.headers).get('x-upsert'), 'true');
+    assert.match(String(url), /previews\/v1\/[a-f0-9]{64}\.webp$/);
+    return Response.json({ Key: 'preview' });
+  });
+  const result = await signedPreviewUrl('private/existing.png');
+  const metadata = await sharp(uploaded).metadata();
+  assert.equal(metadata.width, 960);
+  assert.equal(metadata.height, 640);
+  assert.equal(metadata.format, 'webp');
+  assert.equal(metadata.exif, undefined);
+  assert.match(result.url, /previews/);
+  assert.equal(result.expiresIn, 60);
+  assert.equal(request.mock.callCount(), 4);
+});
+
+test('una vista previa ya generada se reutiliza sin descargar el original', async () => {
+  const request = mock.method(globalThis, 'fetch', async (_url, options) => {
+    if (options.method === 'HEAD') return new Response(null, { status: 200 });
+    assert.equal(options.method, 'POST');
+    return Response.json({ signedURL: '/object/sign/foto-ya/previews/test.webp?token=example' });
+  });
+  await signedPreviewUrl('private/existing.jpg');
+  assert.equal(request.mock.callCount(), 2);
+});
+
+test('asignación valida y normaliza el mail, y rechaza el antiguo ID', () => {
+  assert.deepEqual(schema.assign.parse({ photoId: '1', clientEmail: ' Cliente@Example.com ' }), { photoId: '1', clientEmail: 'cliente@example.com' });
+  for (const input of [{ photoId: '1', clientId: '2' }, { photoId: '1', clientEmail: 'incorrecto' }])
+    assert.equal(schema.assign.safeParse(input).success, false);
 });
 
 test('fallo de Storage no filtra la clave ni el error del proveedor', async () => {

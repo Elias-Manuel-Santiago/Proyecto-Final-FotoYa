@@ -52,6 +52,7 @@ export interface Photo {
   uri: string;
   createdAt: string;
   clientId?: string | null;
+  clientEmail?: string | null;
 }
 
 export interface PhotoFile {
@@ -112,6 +113,8 @@ export interface SalePhoto {
   id: string;
   date: string;
   sold: boolean;
+  clientId?: string | null;
+  clientEmail?: string | null;
 }
 
 export interface Attendance {

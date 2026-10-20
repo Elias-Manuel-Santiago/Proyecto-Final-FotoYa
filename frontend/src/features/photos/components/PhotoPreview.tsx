@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Image, Modal, Text, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Image, Modal, Pressable, Text, View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../../components/ui/Button';
 import { styles } from '../../../components/ui/theme';
@@ -9,11 +9,15 @@ import { errorMessage } from '../../../domain/format';
 export function PhotoPreview({
   uri: localUri,
   photoId,
+  saleId,
   name,
+  children,
 }: {
   uri?: string;
   photoId?: string;
+  saleId?: string;
   name: string;
+  children?: ReactNode | ((close: () => void) => ReactNode);
 }) {
   const { repository } = useWorkspace();
   const [uri, setUri] = useState(localUri);
@@ -21,31 +25,83 @@ export function PhotoPreview({
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let active = true;
+    if (!photoId) return;
+    void (
+      saleId
+        ? repository.accessSoldPhoto(saleId, photoId)
+        : repository.accessPhoto(photoId)
+    )
+      .then((result) => {
+        if (active) {
+          setUri(result.url);
+          setError('');
+          setFailed(false);
+        }
+      })
+      .catch((cause: unknown) => {
+        if (active) setError(errorMessage(cause));
+      });
+    return () => {
+      active = false;
+    };
+  }, [repository, photoId, saleId, retry]);
+  const open = () => {
+    setFailed(false);
+    setError('');
+    if (!photoId) {
+      setUri(localUri);
+      setVisible(true);
+      return;
+    }
+    setBusy(true);
+    void (
+      saleId
+        ? repository.accessSoldPhoto(saleId, photoId)
+        : repository.accessPhoto(photoId)
+    )
+      .then((result) => {
+        setUri(result.url);
+        setVisible(true);
+      })
+      .catch((cause: unknown) => setError(errorMessage(cause)))
+      .finally(() => setBusy(false));
+  };
   return (
     <>
-      <Button
-        title={`Ver ${name}`}
-        secondary
-        busy={busy}
-        onPress={() => {
-          setFailed(false);
-          setError('');
-          if (!photoId) {
-            setUri(localUri);
-            setVisible(true);
-            return;
-          }
-          setBusy(true);
-          void repository
-            .accessPhoto(photoId)
-            .then((result) => {
-              setUri(result.url);
-              setVisible(true);
-            })
-            .catch((cause: unknown) => setError(errorMessage(cause)))
-            .finally(() => setBusy(false));
-        }}
-      />
+      <Pressable
+        disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel={`Abrir ${name}`}
+        onPress={open}
+      >
+        {!!uri && !failed ? (
+          <Image
+            source={{ uri }}
+            accessibilityLabel={name}
+            resizeMode="contain"
+            style={{ width: '100%', height: 220 }}
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <Text style={styles.muted}>
+            {error ||
+              (failed
+                ? 'No se pudo cargar la vista previa.'
+                : 'Cargando vista previa…')}
+          </Text>
+        )}
+      </Pressable>
+      {(!!error || failed) && (
+        <Button
+          title="Recargar vista previa"
+          secondary
+          onPress={() => setRetry((value) => value + 1)}
+        />
+      )}
+      <Button title={`Ver ${name}`} secondary busy={busy} onPress={open} />
       {!!error && <Text style={styles.error}>{error}</Text>}
       <Modal
         visible={visible}
@@ -67,6 +123,16 @@ export function PhotoPreview({
               />
             )}
           </View>
+          {!!children && (
+            <ScrollView
+              style={{ maxHeight: 300 }}
+              contentContainerStyle={{ gap: 12 }}
+            >
+              {typeof children === 'function'
+                ? children(() => setVisible(false))
+                : children}
+            </ScrollView>
+          )}
           <Button title="Cerrar foto" onPress={() => setVisible(false)} />
         </SafeAreaView>
       </Modal>

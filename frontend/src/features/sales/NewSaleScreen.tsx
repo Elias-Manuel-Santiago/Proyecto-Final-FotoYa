@@ -12,6 +12,8 @@ import { useAction } from '../../hooks/useAction';
 import { useBusinessDate } from '../../hooks/useBusinessDate';
 import { SalePhotoCard } from './components/SalePhotoCard';
 import { SaleForm } from './components/SaleForm';
+import { PhotoAssignment } from '../photos/components/PhotoAssignment';
+import { Link, useLocalSearchParams } from 'expo-router';
 
 export function NewSaleScreen() {
   const today = useBusinessDate();
@@ -22,15 +24,16 @@ export function NewSaleScreen() {
 }
 
 function DailySaleScreen({ today }: { today: string }) {
+  const { photoId } = useLocalSearchParams<{ photoId?: string }>();
   const { repository, employee } = useWorkspace();
   const stationId = employee.stationId;
   const action = useAction();
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(photoId ?? '');
   const [selling, setSelling] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const key = JSON.stringify([stationId, offset, revision, today]);
+  const key = JSON.stringify([stationId, offset, revision, today, photoId]);
   const [result, setResult] = useState<{
     key: string;
     event?: { open: boolean; date: string | null };
@@ -48,7 +51,7 @@ function DailySaleScreen({ today }: { today: string }) {
     void Promise.all([
       repository.saleEvent(stationId),
       repository.salePrices(stationId),
-      repository.salePhotos(stationId, offset),
+      repository.salePhotos(stationId, offset, photoId),
     ])
       .then(([event, prices, photos]) => {
         if (active) setResult({ key, event, prices, photos });
@@ -65,7 +68,7 @@ function DailySaleScreen({ today }: { today: string }) {
     return () => {
       active = false;
     };
-  }, [repository, stationId, offset, key]);
+  }, [repository, stationId, offset, key, photoId]);
   const current = result?.key === key ? result : undefined;
   const loading = !current,
     error = current?.error ?? '';
@@ -76,6 +79,11 @@ function DailySaleScreen({ today }: { today: string }) {
   return (
     <Screen title="Venta en evento">
       <Feedback error={error || action.error} success={action.success} />
+      {!!photoId && !selling && (
+        <Link href="/sales/new" replace style={styles.text}>
+          Ver todas las fotos del evento
+        </Link>
+      )}
       <Button
         title="Actualizar"
         secondary
@@ -143,6 +151,26 @@ function DailySaleScreen({ today }: { today: string }) {
                     }
                   }}
                 >
+                  {!selling && (
+                    <PhotoAssignment
+                      photo={photo}
+                      sale
+                      onSaved={(assignment) =>
+                        setResult((current) =>
+                          current
+                            ? {
+                                ...current,
+                                photos: current.photos.map((row) =>
+                                  row.id === photo.id
+                                    ? { ...row, ...assignment }
+                                    : row,
+                                ),
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                  )}
                   {!selling ? (
                     <Button
                       title="Vender"

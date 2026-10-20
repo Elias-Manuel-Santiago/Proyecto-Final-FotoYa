@@ -40,6 +40,7 @@ interface PhotoRow {
   stationId: string;
   date: string;
   clientId: string | null;
+  clientEmail?: string | null;
 }
 interface DayRow {
   stationId: string;
@@ -275,6 +276,7 @@ export class HttpFotoYaRepository {
         id: String(row.id),
         stationId: String(row.stationId),
         clientId: row.clientId === null ? null : String(row.clientId),
+        clientEmail: row.clientEmail,
         name: `Foto ${row.id}`,
         uri: '',
         employeeId: '',
@@ -403,11 +405,12 @@ export class HttpFotoYaRepository {
   setSaleEvent(stationId: string, open: boolean) {
     return this.api.post('sales/event/set', { stationId, open });
   }
-  async salePhotos(stationId: string, offset = 0) {
+  async salePhotos(stationId: string, offset = 0, photoId?: string) {
     const rows = await this.api.post<SalePhoto[]>('sales/photos', {
       stationId,
       limit: 12,
       offset,
+      ...(photoId ? { photoId } : {}),
     });
     return rows.map((row) => ({
       ...row,
@@ -453,8 +456,17 @@ export class HttpFotoYaRepository {
       photoId,
     });
   }
-  async assignPhoto(photoId: string, clientId: string) {
-    await this.api.post('photos/assign', { photoId, clientId });
+  accessSoldPhoto(saleId: string, photoId: string) {
+    return this.api.post<{ url: string; expiresIn: number }>(
+      'sales/photos/sold/access',
+      { saleId, photoId },
+    );
+  }
+  assignPhoto(photoId: string, clientEmail: string, sale = false) {
+    return this.api.post<PhotoRow>(
+      sale ? 'sales/photos/assign' : 'photos/assign',
+      { photoId, clientEmail: clientEmail.trim().toLowerCase() },
+    );
   }
   saleDetail(saleId: string) {
     return this.api.post<{

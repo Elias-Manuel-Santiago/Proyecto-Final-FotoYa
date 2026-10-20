@@ -6,6 +6,7 @@ import { requirePhotoOperator } from '../photos/photos.authorization.js';
 import { photoService } from '../photos/photos.service.js';
 import { saleAmounts } from './sales.schemas.js';
 import { businessDate, currentEvent } from './sales.rules.js';
+import { salesRepository } from './sales.repository.js';
 
 const columns = 'e.abierta AS open, d.fecha AS date';
 const event = async (executor, stationId, lock = false) => {
@@ -16,6 +17,12 @@ const event = async (executor, stationId, lock = false) => {
 const operator = (connection, actor, stationId) => requirePhotoOperator(connection, actor, 'sales.create', stationId);
 
 export const salesService = {
+  async accessSoldPhoto(actor, input) {
+    const sale = await salesRepository.detail(actor, input.saleId);
+    if (!sale.photos.some(photo => String(photo.photoId) === input.photoId))
+      throw new ApiError(404, 'La foto no pertenece a esta venta.');
+    return photoService.access(actor, input.photoId);
+  },
   async event(actor, input) {
     stationScope(actor, input.stationId);
     const row = await event(db, input.stationId);
@@ -47,10 +54,11 @@ export const salesService = {
     stationScope(actor, input.stationId);
     const current = await event(db, input.stationId);
     if (!currentEvent(current)) return [];
-    const [rows] = await db.execute(`SELECT f.id_fotos AS id, d.fecha AS date,
+    const [rows] = await db.execute(`SELECT f.id_fotos AS id, d.fecha AS date, f.id_cliente AS clientId,
+      COALESCE(f.email_cliente, (SELECT email FROM usuarios WHERE id_usuario = f.id_cliente)) AS clientEmail,
       EXISTS(SELECT 1 FROM fotos_venta fv WHERE fv.id_foto=f.id_fotos) AS sold
-      FROM fotos f JOIN dias d ON d.id_dias=f.id_dia WHERE f.id_puesto=? AND f.id_dia=?
-      ORDER BY f.id_fotos DESC LIMIT ? OFFSET ?`, [input.stationId, current.dayId, String(input.limit), String(input.offset)]);
+      FROM fotos f JOIN dias d ON d.id_dias=f.id_dia WHERE f.id_puesto=? AND f.id_dia=? ${input.photoId ? 'AND f.id_fotos=?' : ''}
+      ORDER BY f.id_fotos DESC LIMIT ? OFFSET ?`, [input.stationId, current.dayId, ...(input.photoId ? [input.photoId] : []), String(input.limit), String(input.offset)]);
     return rows;
   },
   async accessPhoto(actor, photoId) {

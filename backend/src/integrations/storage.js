@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { env } from "../config/env.js";
 import { ApiError } from "../shared/errors.js";
+import sharp from "sharp";
+import { createHash } from "node:crypto";
 
 // La clave secreta queda en el backend; los servicios comprueban permisos y alcance.
 const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
@@ -19,6 +21,39 @@ const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
   },
 });
 const bucket = supabase.storage.from(env.SUPABASE_STORAGE_BUCKET);
+const pendingPreviews = new Map();
+
+export async function signedPreviewUrl(path) {
+  validatePath(path);
+  const previewPath = `previews/v1/${createHash('sha256').update(path).digest('hex')}.webp`;
+  let pending = pendingPreviews.get(path);
+  if (!pending) {
+    pending = (async () => {
+      const { data: exists, error: checkError } = await bucket.exists(previewPath);
+      if (checkError && ![400, 404].includes(Number(checkError.status ?? checkError.originalError?.status))) throw checkError;
+      if (exists) return;
+      const { data, error } = await bucket.download(path);
+      if (error || !data || data.size > 6 * 1024 * 1024) throw error ?? new Error('Invalid image');
+      const bytes = await sharp(Buffer.from(await data.arrayBuffer()), { limitInputPixels: 80000000 })
+        .rotate().resize(960, 960, { fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 60 }).toBuffer();
+      // Sólo se sobrescribe la versión derivada, nunca el original privado.
+      const { error: uploadError } = await bucket.upload(previewPath, bytes, {
+        contentType: 'image/webp', upsert: true, cacheControl: '3600',
+      });
+      if (uploadError) throw uploadError;
+    })();
+    pendingPreviews.set(path, pending);
+  }
+  try {
+    await pending;
+    return await signedUrl(previewPath);
+  } catch {
+    throw new ApiError(502, 'No se pudo generar la vista previa.', 'STORAGE_ERROR');
+  } finally {
+    if (pendingPreviews.get(path) === pending) pendingPreviews.delete(path);
+  }
+}
 
 function validatePath(path) {
   if (

@@ -10,7 +10,7 @@ export const saleInput = z.object({
 }).strict().refine(input => new Set(input.prices.map(row => row.priceId)).size === input.prices.length,
   'Cada tarifa debe aparecer una sola vez.');
 
-export const salePhotosInput = z.object({ stationId: id, ...pagination }).strict();
+export const salePhotosInput = z.object({ stationId: id, photoId: id.optional(), ...pagination }).strict();
 
 // DECIMAL se calcula en centavos enteros; el cliente nunca decide el importe.
 export function saleAmounts(prices, lines) {

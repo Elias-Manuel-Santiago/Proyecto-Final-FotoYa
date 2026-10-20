@@ -128,13 +128,15 @@ Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`.
 | `/api/photos/detail` | `photoId`; metadatos sin ruta privada del archivo |
 | `/api/photos/access` | `photoId`; autoriza y firma una URL temporal de consulta |
 | `/api/photos/upload` | Multipart: `photo` (archivo), `operationId` (UUID), `stationId` y `clientId` opcional |
-| `/api/photos/assign` | JSON: `photoId`, `clientId`; asigna un cliente a una foto sin asignar |
+| `/api/photos/assign` | JSON: `photoId`, `clientEmail`; guarda el mail y asocia si existe una cuenta cliente activa |
 | `/api/sales/query` | Período y paginación; cabeceras sin multiplicar totales |
 | `/api/sales/detail` | `saleId`; cabecera, fotos y tarifas históricas consultadas por separado |
 | `/api/sales/event` | `stationId`; estado y fecha del evento de ventas |
 | `/api/sales/event/set` | `stationId`, `open`; apertura/cierre manual por el encargado del puesto |
-| `/api/sales/photos` | `stationId`, paginación; fotos del día actual argentino y del puesto, con ventas abiertas |
+| `/api/sales/photos` | `stationId`, `photoId` opcional, paginación; fotos del día actual argentino y del puesto, con ventas abiertas |
 | `/api/sales/photos/access` | `photoId`; URL temporal para previsualizar con permiso `sales.create` y alcance por puesto |
+| `/api/sales/photos/assign` | `photoId`, `clientEmail`; guardado desde el evento abierto con permiso `sales.create` |
+| `/api/sales/photos/sold/access` | `saleId`, `photoId`; vista previa de una foto vinculada a una venta autorizada, con permiso `sales.read` |
 | `/api/sales/create` | `operationId` UUID, `stationId`, `photoId`, `paymentMethod`, `prices: [{ priceId, copies }]` |
 | `/api/catalog/prices/query` | `stationId`, paginación; precios activos e inactivos del puesto; requiere `prices.manage` |
 | `/api/catalog/prices/create` | `stationId`, `name`, `amount` decimal como string; dueño o encargado con `prices.manage` |
@@ -212,6 +214,12 @@ Las entradas usan el día de Argentina y horas UTC del servidor. Se permite volv
 También quedan por definir ganancias netas, recuperación de contraseña y entrega de tokens de un solo uso, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API. Las simulaciones quedan en `frontend/tests/support`.
 
 ## Pruebas
+
+Antes de desplegar los cambios de fotos, ejecutar `npm run db:migrate`: agrega `fotos.email_cliente` sin modificar las asociaciones existentes. `photos/assign` recibe `{ photoId, clientEmail }`; ya no recibe un ID de cliente. Guarda el mail normalizado aunque todavía no exista una cuenta. Si corresponde a un cliente activo, vincula la foto; si la cuenta se crea después, volver a guardar el mismo mail para asociarla. No se crean cuentas ni se envían correos desde este flujo. Una foto ya vinculada conserva su cliente.
+
+Los vendedores guardan el mail mediante `sales/photos/assign`, con permiso `sales.create`, puesto autorizado y evento vigente abierto. No se amplían sus permisos sobre la galería general. `sales/photos/sold/access` autoriza la foto contra el detalle de una venta antes de generar su acceso temporal.
+
+Las vistas previas de fotos nuevas y existentes se generan al primer acceso usando sharp: WebP de hasta 960 × 960 px, proporciones conservadas, calidad 60 y sin metadatos EXIF. Se almacenan en `previews/v1/` dentro del mismo bucket privado y se reutilizan. Las URLs temporales sólo entregan esa copia; el original se conserva sin cambios. No requiere las transformaciones de imágenes del plan Pro de Supabase.
 
 ```powershell
 npm test
