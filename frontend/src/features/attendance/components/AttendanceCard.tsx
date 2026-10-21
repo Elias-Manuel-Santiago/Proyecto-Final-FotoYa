@@ -1,8 +1,14 @@
+/**
+ * @file
+ * Presenta entrada, salida y duración. Distingue turnos abiertos y muestra instantes en
+ * horario argentino.
+ */
 import { Text, View } from 'react-native';
 import { styles } from '../../../components/ui/theme';
 import { displayDate, displayInstant, duration } from '../../../domain/dates';
 import type { Attendance } from '../../../domain/models';
 
+// Presenta el turno con empleado, puesto y horarios convertidos para su lectura.
 export function AttendanceCard({
   record,
   employeeName,

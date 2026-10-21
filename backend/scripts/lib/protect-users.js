@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Normaliza datos y convierte contraseñas heredadas a scrypt. Rechaza formatos desconocidos en
+ * lugar de asumir que son válidos.
+ */
 import { decryptLegacy } from './legacy-data.js';
 import { hashPassword, normalizeEmail, normalizeDni } from '../../src/security/crypto.js';
 

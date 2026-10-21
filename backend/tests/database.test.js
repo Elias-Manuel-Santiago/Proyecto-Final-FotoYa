@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Verifica configuración y contratos de persistencia/esquema. Complementa la integración sin
+ * demostrar conectividad real por sí sola.
+ */
 import test, { mock, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';

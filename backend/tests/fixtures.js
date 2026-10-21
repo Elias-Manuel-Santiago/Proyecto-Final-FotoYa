@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Proporciona configuración y datos reutilizables. Mantiene entradas conocidas para validación
+ * y seguridad.
+ */
 import { loadEnv } from '../src/config/env.js';
 
 export const env = loadEnv({

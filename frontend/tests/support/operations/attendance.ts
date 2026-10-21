@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Simula asistencia sobre datos de prueba. Permite comprobar jornada e historial sin API real.
+ */
 import { businessDate } from '../../../src/domain/dates';
 import type { AppData, Employee } from '../../../src/domain/models';
 import { requirePermission } from '../../../src/domain/permissions';

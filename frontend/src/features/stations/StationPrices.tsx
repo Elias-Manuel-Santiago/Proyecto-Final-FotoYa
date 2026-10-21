@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Consulta y administra tarifas de un puesto. Coordina nombre, importe, edición y
+ * disponibilidad mediante el repositorio.
+ */
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button } from '../../components/ui/Button';
@@ -9,6 +14,7 @@ import type { Price } from '../../domain/models';
 import { useWorkspace } from '../../providers/AppProvider';
 import { useAction } from '../../hooks/useAction';
 
+// Carga tarifas del puesto y permite crear, editar o cambiar disponibilidad.
 export function StationPrices({ stationId }: { stationId: string }) {
   const { repository } = useWorkspace();
   const action = useAction();

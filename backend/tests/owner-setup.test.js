@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Verifica preparación del dueño. Cubre validación y credenciales del asistente y modo JSON.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable, PassThrough, Writable } from 'node:stream';

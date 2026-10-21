@@ -1,8 +1,14 @@
+/**
+ * @file
+ * Publica conteos diarios, informes y resumen del período. Distingue permisos de
+ * conteos/informes y valida filtros inclusivos.
+ */
 import { reportsRepository } from './reports.repository.js';
 import { Router } from 'express';
 import { permit } from '../../security/access.js';
 import { endpoint, id, period, validate } from '../../shared/validation.js';
 
+// Separa permisos de conteos e informes y valida filtros antes de consultar.
 export function reportsRoutes() {
   const router = Router();
   router.post('/query', permit('reports.read'), validate(period.safeExtend({ cityId: id.optional(), eventId: id.optional() })), endpoint(req => reportsRepository.query(req.actor, req.input)));

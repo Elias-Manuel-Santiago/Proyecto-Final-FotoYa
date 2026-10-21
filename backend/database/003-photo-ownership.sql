@@ -1,3 +1,6 @@
+-- SQL de transición para cliente opcional y photos.assign. El migrador actual realiza esa
+-- adaptación por inspección y no ejecuta este archivo directamente.
+
 ALTER TABLE fotos
   DROP FOREIGN KEY fk_fotos_cliente,
   MODIFY id_cliente BIGINT UNSIGNED NULL,

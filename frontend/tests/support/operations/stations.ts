@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Simula gestión de puestos y catálogos. Comprueba disponibilidad y alcance sin modificar una
+ * base real.
+ */
 import type {
   AppData,
   Employee,

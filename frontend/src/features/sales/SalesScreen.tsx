@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Consulta ventas por período y presenta tarjetas. Habilita acceso al registro en evento según
+ * permiso.
+ */
 import { Link } from 'expo-router';
 import { Text } from 'react-native';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
@@ -17,6 +22,7 @@ import { usePeriod } from '../../hooks/usePeriod';
 import { useWorkspace } from '../../providers/AppProvider';
 import { SaleCard } from './components/SaleCard';
 
+// Filtra ventas históricas por período y muestra importes y detalles.
 export function SalesScreen() {
   const { employee } = useWorkspace();
   const { period, update, error: periodError } = usePeriod();

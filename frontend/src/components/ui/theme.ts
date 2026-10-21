@@ -1,5 +1,11 @@
+/**
+ * @file
+ * Centraliza colores y estilos compartidos. Sirve de referencia visual para pantallas,
+ * formularios y tarjetas.
+ */
 import { StyleSheet } from 'react-native';
 
+// La paleta centraliza colores semánticos de superficies, texto y mensajes.
 export const colors = {
   background: '#f7f7f7',
   surface: '#ffffff',
@@ -13,6 +19,7 @@ export const colors = {
   success: '#206136',
 };
 
+// Los componentes reutilizan estos estilos para mantener espaciado y legibilidad consistentes.
 export const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.background },
   content: {

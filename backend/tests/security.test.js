@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Verifica contratos de seguridad, validación y alcance. Describe entradas y accesos
+ * admitidos/rechazados.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { hashPassword, verifyPassword, newToken } from '../src/security/crypto.js';

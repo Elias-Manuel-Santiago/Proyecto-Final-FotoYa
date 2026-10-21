@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Reserva una carga por UUID antes de usar Storage. Bajo bloqueo confirma foto/conteos y
+ * devuelve el resultado anterior de operaciones confirmadas.
+ */
 import { db } from '../../config/database.js';
 import { env } from '../../config/env.js';
 import { photoRepository } from './photos.repository.js';
@@ -9,9 +14,11 @@ import { stationScope } from '../../security/access.js';
 import { photoFormat } from './photos.files.js';
 import { requireClient, requirePhotoOperator } from './photos.authorization.js';
 
+// Asigna la carga al día argentino independientemente del huso horario del servidor.
 export const businessDate = now => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(now);
 
 export const photoUploads = {
+  // Reserva el UUID, revalida acceso y confirma archivo, foto y conteos sin duplicar reintentos.
   async upload(actor, input, file) {
     stationScope(actor, input.stationId);
     const format = photoFormat(file), bucket = env.SUPABASE_STORAGE_BUCKET;
@@ -28,6 +35,7 @@ export const photoUploads = {
       const [[job]] = await connection.execute('SELECT * FROM photo_uploads WHERE operation_id = ? FOR UPDATE', [input.operationId]);
       if (job.id_actor !== actor.id || job.request_data !== requestData)
         throw new ApiError(409, 'La operación ya se usó con otros datos.', 'IDEMPOTENCY_CONFLICT');
+      // Una operación confirmada devuelve sus metadatos antes de volver a guardar o contar la foto.
       if (job.id_foto) {
         const { file: storedFile, ...metadata } = await photoRepository.find(job.id_foto, connection);
         return metadata;
@@ -38,15 +46,18 @@ export const photoUploads = {
       await requireClient(connection, input.clientId);
       // Sólo se limpia el objeto de esta reserva sin foto confirmada, bajo bloqueo.
       await uploadFile(job.id_archivo, file.buffer, format.mime);
+      // El día se calcula al confirmar la carga y sus conteos se actualizan bajo el mismo bloqueo.
       const date = businessDate(new Date());
       await connection.execute('INSERT INTO dias (fecha,id_puesto) VALUES (?,?) ON DUPLICATE KEY UPDATE id_dias = id_dias', [date, input.stationId]);
       const [[day]] = await connection.execute('SELECT id_dias,fotos FROM dias WHERE fecha = ? AND id_puesto = ? FOR UPDATE', [date, input.stationId]);
       const [[sales]] = await connection.execute('SELECT COALESCE(SUM(IF(familia_contada, cantidad, 0)),0) AS sold FROM venta WHERE id_dias = ?', [day.id_dias]);
+      // Cada foto suma una familia; los descartes se derivan de las familias compradoras del día.
       const taken = Number(day.fotos) + 1, discarded = taken - Number(sales.sold);
       if (discarded < 0 || taken > 4294967295) throw new ApiError(409, 'Los conteos del día requieren revisión.', 'INVALID_COUNTS');
       const [photo] = await connection.execute('INSERT INTO fotos (id_archivo,id_dia,id_cliente,id_puesto) VALUES (?,?,?,?)',
         [job.id_archivo, day.id_dias, input.clientId, input.stationId]);
       await connection.execute('UPDATE dias SET fotos = ?, descartes = ? WHERE id_dias = ?', [taken, discarded, day.id_dias]);
+      // La reserva queda enlazada a la foto en el mismo commit que confirma sus indicadores.
       await connection.execute('UPDATE photo_uploads SET id_foto = ? WHERE operation_id = ?', [photo.insertId, input.operationId]);
       const { file: storedFile, ...metadata } = await photoRepository.find(String(photo.insertId), connection);
       return metadata;

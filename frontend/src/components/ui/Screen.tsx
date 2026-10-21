@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Proporciona área segura, teclado, scroll y actualización por gesto. La pantalla decide
+ * cuándo habilitar refresco durante operaciones.
+ */
 import type { ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
@@ -9,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, styles } from './theme';
 
+// Organiza encabezado y contenido en el contenedor compartido de las pantallas.
 export function Screen({
   title,
   children,

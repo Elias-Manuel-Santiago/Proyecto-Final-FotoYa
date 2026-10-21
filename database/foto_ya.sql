@@ -1,3 +1,6 @@
+-- Esquema base para una instalación vacía. Define catálogos, usuarios, días, fotos, ventas y
+-- sesiones con restricciones y se completa con backend/scripts/migrate.js.
+
 CREATE TABLE ciudad (
   id_ciudad BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(120) NOT NULL

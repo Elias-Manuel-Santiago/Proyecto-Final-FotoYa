@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Construye navegación según permisos y estado del usuario. Reúne accesos disponibles y cierre
+ * de sesión.
+ */
 import { Link, usePathname, type Href } from 'expo-router';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,6 +33,7 @@ const links: { href: Href; label: string; permission?: Permission }[] = [
   { href: '/profile', label: 'Mi usuario' },
 ];
 
+// Construye accesos de navegación según permisos y contexto del usuario.
 export function WorkspaceHeader() {
   const { employee, data } = useWorkspace();
   const pathname = usePathname();

@@ -1,8 +1,14 @@
+/**
+ * @file
+ * Adapta identidad al contexto social y recupera el retorno web. Entrega un idToken al login
+ * para intercambiarlo por una sesión propia.
+ */
 import { useEffect, useState, type PropsWithChildren } from 'react';
 import { Platform } from 'react-native';
 import { Auth0Provider, useAuth0 } from 'react-native-auth0';
 import { SocialContext } from './social-context';
 
+// Adapta el estado del SDK al contexto social y recupera el token al volver del acceso web.
 function Bridge({ children }: PropsWithChildren) {
   const { authorize, getCredentials, user, isLoading, error } = useAuth0();
   const [pendingToken, setPendingToken] = useState<string>();
@@ -59,6 +65,7 @@ function Bridge({ children }: PropsWithChildren) {
     </SocialContext.Provider>
   );
 }
+// Monta el SDK configurado alrededor del puente de identidad.
 export default function Provider({
   children,
   domain,

@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Mantiene campos de alta/edición y asignación de rol/puesto. Valida y entrega la entrada a la
+ * pantalla controladora.
+ */
 import { useState } from 'react';
 import { View } from 'react-native';
 import { Button } from '../../../components/ui/Button';
@@ -11,6 +16,7 @@ import { assignableRoles, roleLabels } from '../../../domain/permissions';
 import { useAction } from '../../../hooks/useAction';
 import { useWorkspace } from '../../../providers/AppProvider';
 
+// Mantiene datos y asignación para reutilizar el flujo en alta y edición.
 export function EmployeeForm({
   existing,
   onSaved,
@@ -29,11 +35,13 @@ export function EmployeeForm({
     stationId: existing?.stationId ?? employee.stationId,
   }));
   const action = useAction();
+  // Aplica cambios parciales y limpia el resultado de la operación anterior.
   const update = (patch: Partial<EmployeeInput>) => {
     setInput((current) => ({ ...current, ...patch }));
     action.clear();
   };
 
+  // Guarda y refresca; si se editó la propia cuenta, cierra su sesión revocada.
   function save() {
     void action.run(async () => {
       await repository.saveEmployee(input);

@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Valida UUID, foto, puesto, pago y copias por tarifa. Calcula importes aplicados usando
+ * tarifas vigentes del servidor.
+ */
 import { z } from 'zod';
 import { id, pagination } from '../../shared/validation.js';
 
@@ -13,6 +18,7 @@ export const saleInput = z.object({
 export const salePhotosInput = z.object({ stationId: id, photoId: id.optional(), ...pagination }).strict();
 
 // DECIMAL se calcula en centavos enteros; el cliente nunca decide el importe.
+// Calcula en centavos BigInt copias e importes aplicados a las tarifas del servidor.
 export function saleAmounts(prices, lines) {
   let total = 0n, copies = 0;
   const applied = lines.map(line => {

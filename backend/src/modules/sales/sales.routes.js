@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Expone ventas, apertura del evento y acceso/asignación de fotos. Distingue permiso de
+ * creación de permiso de consulta histórica.
+ */
 import { salesRepository } from './sales.repository.js';
 import { salesService } from './sales.service.js';
 import { photoAssignments } from '../photos/photos.assignment.js';
@@ -8,6 +13,7 @@ import { z } from 'zod';
 import { permit } from '../../security/access.js';
 import { endpoint, id, period, validate } from '../../shared/validation.js';
 
+// Separa las operaciones del evento activo de las consultas de ventas históricas.
 export function salesRoutes() {
   const router = Router();
   const station = z.object({ stationId: id }).strict();

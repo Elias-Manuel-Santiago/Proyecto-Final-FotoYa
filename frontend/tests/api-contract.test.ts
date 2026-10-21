@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Compara cuerpos del repositorio con validadores del backend. Detecta diferencias de campos y
+ * contratos entre capas.
+ */
 import assert from 'node:assert/strict';
 import { before, test, mock, afterEach } from 'node:test';
 import { ApiClient, ApiError } from '../src/data/api-client';

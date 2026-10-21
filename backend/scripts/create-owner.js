@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Crea el primer dueño mediante asistente o JSON por stdin. Valida datos y evita sustituir una
+ * cuenta dueña activa existente.
+ */
 import { hashPassword, normalizeEmail } from '../src/security/crypto.js';
 import { readOwnerInput, ownerHelp, ownerErrorMessage, OwnerSetupError } from './lib/owner-input.js';
 

@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Prepara roles, permisos y relaciones iniciales. Distingue la inicialización de las
+ * asignaciones ya administradas.
+ */
 import { rolePermissions } from '../../src/config/permissions.js';
 
 export async function seedPermissions(connection) {

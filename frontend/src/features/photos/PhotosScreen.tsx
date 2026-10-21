@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Une galería por período, carga y asignación según permisos. Consulta metadatos y delega
+ * acceso privado a PhotoPreview.
+ */
 import { Button } from '../../components/ui/Button';
 import { Text, View } from 'react-native';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
@@ -23,6 +28,7 @@ import { Link } from 'expo-router';
 import { useBusinessDate } from '../../hooks/useBusinessDate';
 import { useState } from 'react';
 
+// Combina galería por período, carga y asignación según rol y permisos actuales.
 export function PhotosScreen() {
   const today = useBusinessDate();
   const { employee } = useWorkspace();

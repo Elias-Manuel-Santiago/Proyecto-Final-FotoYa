@@ -1,3 +1,6 @@
+-- Define desafíos con digests, vencimiento e intentos. Mantiene una sola verificación vigente
+-- por usuario.
+
 CREATE TABLE IF NOT EXISTS client_verifications (
   id_usuario BIGINT UNSIGNED PRIMARY KEY,
   challenge CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL UNIQUE,

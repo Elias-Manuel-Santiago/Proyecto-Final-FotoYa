@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Consulta un snapshot por período después de 350 ms. Invalida respuestas antiguas y vacía
+ * datos filtrados mientras espera el resultado actual.
+ */
 import { useCallback, useEffect, useState } from 'react';
 import { useWorkspace } from '../providers/AppProvider';
 import { periodError } from '../domain/dates';
@@ -5,9 +10,11 @@ import { errorMessage } from '../domain/format';
 import type { AppData, Period } from '../domain/models';
 
 // Cada consulta conserva su período; nunca muestra los datos de otro filtro.
+// Consulta el período vigente y descarta resultados de filtros o datos base anteriores.
 export function usePeriodData(period: Period, attendanceSelf = false) {
   const { data: base, repository } = useWorkspace();
   const [revision, setRevision] = useState(0);
+  // Período, revisión y consulta personal identifican qué respuesta puede mostrarse.
   const key = JSON.stringify([period, revision, attendanceSelf]);
   const reload = useCallback(() => setRevision((value) => value + 1), []);
   const [result, setResult] = useState<{
@@ -31,6 +38,7 @@ export function usePeriodData(period: Period, attendanceSelf = false) {
           if (active) setResult({ key, base, error: errorMessage(cause) });
         });
     }, 350);
+    // Al cambiar filtros se cancela la espera y se impide publicar respuestas anteriores.
     return () => {
       active = false;
       clearTimeout(timer);
@@ -40,6 +48,7 @@ export function usePeriodData(period: Period, attendanceSelf = false) {
   const current =
     result?.key === key && result.base === base ? result : undefined;
 
+  // Mientras carga otro período se conserva el catálogo y se vacían las colecciones filtradas.
   const data = current?.data ?? {
     ...base,
     counts: [],

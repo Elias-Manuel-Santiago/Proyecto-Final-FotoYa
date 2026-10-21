@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Verifica archivos y acceso a Storage con dependencias de prueba. Cubre privacidad, formatos
+ * y errores del proveedor.
+ */
 import test, { mock, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { photoService } from '../src/modules/photos/photos.service.js';

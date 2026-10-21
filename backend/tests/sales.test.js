@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Verifica reglas de venta, día e importes. Protege diferencias entre familias, copias y total
+ * aplicado.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { saleInput, saleAmounts } from '../src/modules/sales/sales.schemas.js';

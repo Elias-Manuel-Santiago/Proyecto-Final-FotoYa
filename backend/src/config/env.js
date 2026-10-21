@@ -1,6 +1,12 @@
+/**
+ * @file
+ * Carga y valida el entorno antes de iniciar servicios. Centraliza conexión, límites y
+ * configuración de almacenamiento, correo e identidad externa.
+ */
 import 'dotenv/config';
 import { z } from 'zod';
 
+// Define un entero de configuración con valor predeterminado y límites explícitos.
 const positive = (fallback, max) => z.coerce.number().int().min(1).max(max).default(fallback);
 const storageSecret = z.string().refine(value => {
   if (/^sb_secret_[A-Za-z0-9_-]+$/.test(value)) return true;
@@ -31,6 +37,7 @@ const schema = z.object({
   PHOTO_URL_SECONDS: positive(60, 300), STORAGE_TIMEOUT_MS: positive(15000, 30000),
 });
 
+// Valida el entorno completo y detiene el arranque indicando las opciones inválidas.
 export function loadEnv(source = process.env) {
   const result = schema.safeParse(source);
   if (!result.success) throw new Error(`Configuración inválida: ${result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')}`);

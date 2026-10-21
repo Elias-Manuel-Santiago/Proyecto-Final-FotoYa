@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Carga el proveedor social de forma diferida con configuración y entorno compatibles.
+ * Mantiene el acceso local si el proveedor no se habilita.
+ */
 import {
   lazy,
   Suspense,
@@ -8,7 +13,9 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 
 const Provider = lazy(() => import('./social-auth0'));
+// Ofrece una suscripción estable sin eventos para distinguir hidratación y render del servidor.
 const subscribe = () => () => {};
+// Carga el proveedor diferido cuando hay configuración y un entorno compatible.
 export function SocialProvider({ children }: PropsWithChildren) {
   const ready = useSyncExternalStore(
     subscribe,

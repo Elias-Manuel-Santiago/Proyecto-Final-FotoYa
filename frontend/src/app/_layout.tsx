@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Monta proveedores y navegación tras restaurar sesión. Separa rutas habituales del check-in
+ * mientras el kiosco está bloqueado.
+ */
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider, useApp } from '../providers/AppProvider';
@@ -6,6 +11,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { Button } from '../components/ui/Button';
 import { Feedback } from '../components/ui/Feedback';
 
+// Decide las rutas disponibles según restauración, sesión y bloqueo del kiosco.
 function AppNavigator() {
   const { employee, restoring, loading, error, restoreSession, logout } =
     useApp();
@@ -44,6 +50,7 @@ function AppNavigator() {
   );
 }
 
+// Monta proveedores compartidos antes de crear la navegación de la aplicación.
 export default function RootLayout() {
   return (
     <SafeAreaProvider>

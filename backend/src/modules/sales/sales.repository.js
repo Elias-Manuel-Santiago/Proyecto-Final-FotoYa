@@ -1,8 +1,14 @@
+/**
+ * @file
+ * Consulta ventas y detalle según alcance. Recupera fotos y precios históricos aplicados sin
+ * recalcular con tarifas actuales.
+ */
 import { db } from '../../config/database.js';
 import { stationScope } from '../../security/access.js';
 import { ApiError } from '../../shared/errors.js';
 
 export const salesRepository = {
+  // Pagina ventas distinguiendo familias contadas, copias e importe histórico.
   async query(actor, input) {
     const station = stationScope(actor, input.stationId);
     const [rows] = await db.execute(`SELECT v.id_venta AS id, v.id_dias AS dayId, d.fecha AS date, d.id_puesto AS stationId,
@@ -13,6 +19,7 @@ export const salesRepository = {
     [input.from, input.to, ...(station ? [station] : []), String(input.limit), String(input.offset)]);
     return rows;
   },
+  // Comprueba alcance y reúne la venta con tarifas aplicadas y fotos vinculadas.
   async detail(actor, saleId) {
     const station = stationScope(actor);
     const [[sale]] = await db.execute(`SELECT v.id_venta AS id, IF(v.familia_contada,v.cantidad,0) AS quantity, v.precio_total AS total,

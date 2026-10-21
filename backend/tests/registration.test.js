@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Verifica contratos de alta y códigos. Cubre reglas de identidad sin enviar correo real.
+ */
 import { test, mock, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT, generateKeyPair } from 'jose';

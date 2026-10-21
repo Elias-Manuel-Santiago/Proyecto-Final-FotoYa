@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta estados y acciones de la cola. Delega selección, envío y limpieza en el hook de la
+ * pantalla.
+ */
 import { Text, View } from 'react-native';
 import { Button } from '../../../components/ui/Button';
 import { Feedback } from '../../../components/ui/Feedback';
@@ -11,6 +16,7 @@ const statusLabels = {
   error: 'Error de carga',
 };
 
+// Presenta estados individuales y conecta selección, reintento y limpieza de archivos.
 export function UploadQueue() {
   const { queue, action, select, upload, remove, clearDone } = usePhotoQueue();
   const pending = queue.filter((row) => row.status !== 'done').length;

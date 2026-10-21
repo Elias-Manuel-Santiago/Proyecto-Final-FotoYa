@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta ingresos diarios del período. Usa datos comerciales sin tratarlos como ganancias
+ * netas.
+ */
 import { Text, View } from 'react-native';
 import type { AppData, Period } from '../../../domain/models';
 import { displayDate } from '../../../domain/dates';
@@ -7,6 +12,7 @@ import { sumAmounts } from '../../../domain/amounts';
 import { EmptyState } from '../../../components/ui/Feedback';
 import { styles } from '../../../components/ui/theme';
 
+// Agrupa ingresos por fecha para los puestos y el período seleccionados.
 export function DailyEarnings({
   data,
   stationIds,

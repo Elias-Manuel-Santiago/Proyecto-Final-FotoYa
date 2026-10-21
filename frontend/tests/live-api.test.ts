@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Ejecuta comprobaciones HTTP opcionales con FOTO_YA_LIVE_TESTS. Requiere una API configurada
+ * y no reemplaza integración MySQL.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient, ApiError } from '../src/data/api-client';

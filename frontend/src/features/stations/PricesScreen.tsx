@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Selecciona el contexto de puesto para administrar precios. Delega edición de tarifas a
+ * StationPrices.
+ */
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { Screen } from '../../components/ui/Screen';
@@ -7,6 +12,7 @@ import { visibleStations } from '../../domain/metrics';
 import { useWorkspace } from '../../providers/AppProvider';
 import { StationPrices } from './StationPrices';
 
+// Permite elegir un puesto visible para administrar sus tarifas.
 export function PricesScreen() {
   const { data, employee } = useWorkspace();
   const stations = visibleStations(data, employee).filter(

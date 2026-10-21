@@ -1,8 +1,14 @@
+/**
+ * @file
+ * Presenta confirmación antes de ejecutar una acción. Comparte la interacción de
+ * confirmar/cancelar entre vistas.
+ */
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button } from './Button';
 import { styles } from './theme';
 
+// Solicita confirmación local antes de ejecutar la acción recibida.
 export function ConfirmAction({
   title,
   question,

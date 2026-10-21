@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta empleados y pide credenciales para marcar en kiosco. Refresca asistencia y exige
+ * contraseña del encargado para salir.
+ */
 import { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +16,7 @@ import { errorMessage, fullName } from '../../domain/format';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
 
+// Selecciona empleado y confirma su entrada o salida con sus propias credenciales.
 export function CheckInScreen() {
   const { repository, exitCheckIn, employee } = useWorkspace();
   const [employees, setEmployees] = useState<CheckInEmployee[]>([]);
@@ -44,6 +50,7 @@ export function CheckInScreen() {
       clearInterval(timer);
     };
   }, [reload]);
+  // Limpia selección y credenciales para comenzar una nueva marcación.
   const reset = () => {
     setSelected(null);
     setLeaving(false);

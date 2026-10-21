@@ -1,7 +1,13 @@
+/**
+ * @file
+ * Agrega ventas por día antes de unirlas con puestos. Conserva NULL en métricas
+ * incompletas/inconsistentes y evita duplicar ventas por joins.
+ */
 import { stationScope } from '../../security/access.js';
 
 export const salesByDay = '(SELECT id_dias, SUM(IF(familia_contada, cantidad, 0)) AS sold, SUM(precio_total) AS revenue FROM venta GROUP BY id_dias)';
 
+// Construye la consulta común de informes con filtros y agregados por puesto.
 export function stationReport(actor, input) {
   const station = stationScope(actor, input.stationId), where = [], filters = [];
   for (const [column, value] of [['p.id_puesto', station], ['p.id_ciudad', input.cityId], ['p.id_evento', input.eventId]]) {

@@ -1,8 +1,15 @@
+/**
+ * @file
+ * Bloquea operaciones en modo kiosco o sin jornada para los roles que la requieren. También
+ * protege peticiones directas y sesiones en otros dispositivos.
+ */
 import { ApiError } from '../shared/errors.js';
 
+// Determina qué roles necesitan registrar entrada para operar.
 export const requiresAttendance = role => ['secretario', 'camarografo', 'vendedor'].includes(role);
 
 // Se aplica también a peticiones directas y a sesiones abiertas en otros dispositivos.
+// Restringe las rutas según kiosco y jornada después de autenticar al actor.
 export function workAccess(req, res, next) {
   const auth = req.baseUrl === '/api/auth';
   if (req.actor.kioskMode) {

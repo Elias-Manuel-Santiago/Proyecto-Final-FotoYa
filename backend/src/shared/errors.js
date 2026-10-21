@@ -1,9 +1,15 @@
+/**
+ * @file
+ * Representa errores de negocio y traduce fallos conocidos a HTTP. Oculta detalles internos y
+ * vincula errores con el identificador de solicitud.
+ */
 export class ApiError extends Error {
   constructor(status, message, code = 'REQUEST_ERROR') {
     super(message); this.status = status; this.code = code;
   }
 }
 
+// Traduce fallos conocidos a HTTP y oculta detalles de errores internos.
 export function errorHandler(error, req, res, next) {
   if (res.headersSent) return next(error);
   if (error.code === 'ER_DUP_ENTRY') error = new ApiError(409, 'El registro ya existe.', 'DUPLICATE');

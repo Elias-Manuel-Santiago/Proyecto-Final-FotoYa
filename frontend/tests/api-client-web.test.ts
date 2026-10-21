@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Verifica solicitudes HTTP y errores web. Cubre transporte y contratos del cliente según los
+ * escenarios de la suite.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ApiClient } from '../src/data/api-client';

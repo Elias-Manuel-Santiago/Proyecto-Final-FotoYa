@@ -1,12 +1,23 @@
+/**
+ * @file
+ * Compone etiqueta, entrada y error reutilizables. Propaga propiedades de edición y
+ * accesibilidad del formulario.
+ */
 import type { ReactNode } from 'react';
 import { Text, TextInput, View, type TextInputProps } from 'react-native';
 import { colors, styles } from './theme';
 
+// Integra etiqueta y entrada de texto con el estilo compartido del formulario.
 export function Field({
   label,
   rightAccessory,
+  error,
   ...props
-}: TextInputProps & { label: string; rightAccessory?: ReactNode }) {
+}: TextInputProps & {
+  label: string;
+  rightAccessory?: ReactNode;
+  error?: string;
+}) {
   return (
     <View style={{ gap: 6 }}>
       <Text style={styles.label}>{label}</Text>
@@ -15,10 +26,12 @@ export function Field({
           accessibilityLabel={label}
           placeholderTextColor={colors.muted}
           {...props}
+          accessibilityHint={error || props.accessibilityHint}
           style={[
             styles.input,
             props.style,
             rightAccessory ? { paddingRight: 52 } : undefined,
+            error ? { borderColor: colors.error, borderWidth: 2 } : undefined,
           ]}
         />
         {rightAccessory && (
@@ -27,6 +40,15 @@ export function Field({
           </View>
         )}
       </View>
+      {!!error && (
+        <Text
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+          style={styles.error}
+        >
+          {error}
+        </Text>
+      )}
     </View>
   );
 }

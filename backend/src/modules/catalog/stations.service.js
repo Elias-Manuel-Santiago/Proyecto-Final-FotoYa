@@ -1,7 +1,13 @@
+/**
+ * @file
+ * Crea puestos reutilizando ciudad/evento y permite baja/reactivación. Revalida al dueño y
+ * evita duplicar también puestos inactivos.
+ */
 import { ApiError } from '../../shared/errors.js';
 import { transaction } from '../../shared/transaction.js';
 import { assertPermission } from '../../security/access.js';
 
+// Revalida al dueño y su sesión dentro de la transacción que administra el puesto.
 const managed = (actor, callback) => {
   assertPermission(actor, 'stations.manage');
   if (actor.role !== 'dueno') throw new ApiError(403, 'Solo el administrador puede gestionar puestos.');
@@ -19,6 +25,7 @@ const managed = (actor, callback) => {
     return callback(connection);
   });
 };
+// Reutiliza o crea ciudad/evento por nombre con identificadores SQL definidos por el servicio.
 const reference = async (connection, table, key, name) => {
   const [[existing]] = await connection.execute(`SELECT ${key} AS id FROM ${table} WHERE nombre = ? ORDER BY ${key} LIMIT 1`, [name]);
   if (existing) return existing.id;
@@ -26,6 +33,7 @@ const reference = async (connection, table, key, name) => {
   return created.insertId;
 };
 export const stations = {
+  // Resuelve ciudad y evento y rechaza duplicados antes de crear el puesto.
   create(actor, input) {
     return managed(actor, async connection => {
       const cityId = await reference(connection, 'ciudad', 'id_ciudad', input.city);
@@ -39,6 +47,7 @@ export const stations = {
       return { id: String(result.insertId), active: true };
     });
   },
+  // Modifica disponibilidad conservando relaciones e historial del puesto.
   setActive(actor, input) {
     return managed(actor, async connection => {
       const [[station]] = await connection.execute('SELECT id_puesto FROM puesto WHERE id_puesto = ? FOR UPDATE', [input.stationId]);

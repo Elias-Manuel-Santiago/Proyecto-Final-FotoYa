@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Verifica contratos de asignación. Documenta validación de correo y reglas de la operación.
+ */
 import test, { mock, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../src/config/database.js';

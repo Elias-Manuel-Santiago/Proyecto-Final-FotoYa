@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Centraliza POST, Bearer, timeouts y errores. Detecta respuestas de otra sesión y pagina sin
+ * presentar resultados truncados como totales.
+ */
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -11,6 +16,7 @@ export class ApiError extends Error {
 export class ApiClient {
   private token: string | null = null;
   onUnauthorized?: () => void;
+  // Registra el aviso que permite limpiar la interfaz al vencer la sesión.
   setOnUnauthorized(listener?: () => void) {
     this.onUnauthorized = listener;
   }
@@ -22,15 +28,18 @@ export class ApiClient {
       );
   }
 
+  // Actualiza la credencial usada en las siguientes solicitudes.
   setToken(token: string | null) {
     this.token = token;
   }
 
+  // Envía JSON o multipart, controla timeout y sesión y extrae data o el error de la API.
   async post<T>(
     path: string,
     body: object = {},
     multipart = false,
   ): Promise<T> {
+    // Se conserva la credencial de salida para detectar si la sesión cambió durante la consulta.
     const token = this.token;
     const controller = new AbortController();
     const timer = setTimeout(
@@ -43,6 +52,7 @@ export class ApiClient {
         {
           method: 'POST',
           headers: {
+            // En multipart el navegador o runtime agrega Content-Type con el boundary del formulario.
             ...(multipart ? {} : { 'Content-Type': 'application/json' }),
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
@@ -52,6 +62,7 @@ export class ApiClient {
         },
       );
       const payload = await response.json();
+      // Una respuesta tardía de otra sesión no debe actualizar los datos del usuario actual.
       if (token && token !== this.token)
         throw new ApiError(
           'La sesión cambió. Volvé a consultar.',
@@ -87,6 +98,7 @@ export class ApiClient {
     }
   }
 
+  // Recorre páginas de cien registros y falla si no puede garantizar un resultado completo.
   async all<T>(path: string, body: object = {}): Promise<T[]> {
     const rows: T[] = [];
     for (let offset = 0; offset <= 100000; offset += 100) {

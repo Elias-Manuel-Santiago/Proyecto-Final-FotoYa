@@ -1,9 +1,15 @@
+/**
+ * @file
+ * Presenta filtros de fechas, puesto y opciones del período. Delega cambios al estado de la
+ * pantalla que consulta datos.
+ */
 import { View } from 'react-native';
 import { Field } from '../ui/Field';
 import { Select } from '../ui/Select';
 import { styles } from '../ui/theme';
 import type { Period, Station } from '../../domain/models';
 
+// Vincula fechas, puesto y filtros opcionales con el período controlado por la pantalla.
 export function PeriodFilters({
   period,
   stations,

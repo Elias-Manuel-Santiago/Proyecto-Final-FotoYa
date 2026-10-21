@@ -1,6 +1,12 @@
+/**
+ * @file
+ * Revalida usuario, permiso, sesión y alcance dentro de la transacción. Comprueba que el
+ * cliente opcional exista y esté activo con rol cliente.
+ */
 import { ApiError } from '../../shared/errors.js';
 import { stationScope } from '../../security/access.js';
 
+// Reconsulta usuario, sesión y permiso en la transacción para detectar cambios de autorización.
 export async function requirePhotoOperator(connection, actor, permission, stationId) {
   const [[current]] = await connection.execute(`SELECT id_puesto AS stationId, id_rol AS roleId FROM usuarios
     WHERE id_usuario = ? AND disponible = 1 FOR UPDATE`, [actor.id]);
@@ -14,6 +20,7 @@ export async function requirePhotoOperator(connection, actor, permission, statio
   return { ...current, ...allowed };
 }
 
+// Comprueba que el destinatario opcional sea una cuenta cliente activa.
 export async function requireClient(connection, clientId) {
   if (clientId === null) return;
   const [[client]] = await connection.execute(`SELECT u.id_usuario FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol

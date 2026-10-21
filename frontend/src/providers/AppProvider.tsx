@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Coordina sesión, perfil y datos sobre el repositorio HTTP. Restaura token, refresca al
+ * reactivar y consulta jornada/kiosco cada quince segundos.
+ */
 import {
   createContext,
   useCallback,
@@ -32,6 +37,7 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+// Comparte repositorio, sesión y datos; coordina restauración, refresco y cambios de identidad.
 export function AppProvider({ children }: { children: ReactNode }) {
   const [repository] = useState(() => {
     const apiUrl =
@@ -46,9 +52,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState('');
+  // La generación cambia al limpiar sesión e invalida cargas que todavía estén en vuelo.
   const generation = useRef(0);
   const signedIn = useRef(false);
   const loginRunning = useRef(false);
+  // Borra el usuario y los datos visibles e invalida respuestas iniciadas antes del cierre.
   const clear = useCallback(() => {
     generation.current += 1;
     signedIn.current = false;
@@ -79,6 +87,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [repository, clear]);
 
+  // Publica el snapshot solo si pertenece a la misma generación de sesión.
   const refresh = useCallback(async () => {
     const current = generation.current;
     try {
@@ -93,6 +102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [repository]);
 
+  // Primero restaura la credencial y luego valida el acceso cargando el estado remoto.
   const restoreSession = useCallback(() => {
     const current = generation.current;
     return repository
@@ -130,6 +140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!employee) return;
     let running = false;
+    // Consulta cambios de jornada o kiosco cada quince segundos sin superponer verificaciones.
     const timer = setInterval(() => {
       if (running || !signedIn.current) return;
       running = true;
@@ -150,12 +161,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [employee, repository, refresh]);
 
+  // Actualiza el perfil local una vez confirmado el bloqueo remoto del kiosco.
   const enterCheckIn = async () => {
     await repository.enterCheckIn();
     setEmployee((current) =>
       current ? { ...current, kioskMode: true } : current,
     );
   };
+  // Libera el kiosco con contraseña y vuelve a cargar los datos de trabajo.
   const exitCheckIn = async (password: string) => {
     await repository.exitCheckIn(password);
     setEmployee((current) =>
@@ -164,6 +177,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await refresh();
   };
 
+  // Evita accesos simultáneos y carga los datos antes de marcar la sesión como iniciada.
   const login = async (email: string, password: string) => {
     if (loginRunning.current) return;
     loginRunning.current = true;
@@ -187,6 +201,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   };
+  // Limpia el estado compartido incluso si la revocación remota falla.
   const logout = async () => {
     setError('');
     try {
@@ -198,6 +213,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clear();
     }
   };
+  // Integra una sesión emitida por registro o identidad social y carga sus datos.
   const acceptSession = async (token: string) => {
     setLoading(true);
     setError('');
@@ -240,12 +256,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// Obtiene el contexto global y detecta consumidores fuera del proveedor.
 export function useApp() {
   const context = useContext(AppContext);
   if (!context) throw new Error('Falta AppProvider.');
   return context;
 }
 
+// Exige datos y usuario autenticado antes de entregar contexto a pantallas privadas.
 export function useWorkspace() {
   const context = useApp();
   if (!context.data || !context.employee)

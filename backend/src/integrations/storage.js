@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Accede al bucket privado con credenciales de servidor. Sube originales y genera
+ * previsualizaciones WebP con URL temporal tras la autorización del servicio.
+ */
 import { createClient } from "@supabase/supabase-js";
 import { env } from "../config/env.js";
 import { ApiError } from "../shared/errors.js";
@@ -23,6 +28,7 @@ const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SECRET_KEY, {
 const bucket = supabase.storage.from(env.SUPABASE_STORAGE_BUCKET);
 const pendingPreviews = new Map();
 
+// Comparte la generación concurrente de la miniatura privada y firma su acceso temporal.
 export async function signedPreviewUrl(path) {
   validatePath(path);
   const previewPath = `previews/v1/${createHash('sha256').update(path).digest('hex')}.webp`;
@@ -43,6 +49,7 @@ export async function signedPreviewUrl(path) {
       });
       if (uploadError) throw uploadError;
     })();
+    // Las solicitudes simultáneas del mismo original esperan una sola generación en este proceso.
     pendingPreviews.set(path, pending);
   }
   try {
@@ -55,6 +62,7 @@ export async function signedPreviewUrl(path) {
   }
 }
 
+// Rechaza rutas vacías o relativas antes de enviar una operación al bucket.
 function validatePath(path) {
   if (
     typeof path !== "string" ||
@@ -69,6 +77,7 @@ function validatePath(path) {
     );
 }
 
+// Guarda el original sin sobrescribir objetos y traduce fallos de almacenamiento.
 export async function uploadFile(path, bytes, mime) {
   validatePath(path);
   try {
@@ -91,6 +100,7 @@ export async function uploadFile(path, bytes, mime) {
   }
 }
 
+// Elimina el objeto indicado durante la limpieza de cargas pendientes.
 export async function removeFile(path) {
   validatePath(path);
   try {
@@ -106,6 +116,7 @@ export async function removeFile(path) {
   }
 }
 
+// Emite una URL con vencimiento después de que el servicio haya autorizado el acceso.
 export async function signedUrl(path) {
   validatePath(path);
   try {

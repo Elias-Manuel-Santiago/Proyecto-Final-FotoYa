@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Publica catálogos y operaciones de puestos/tarifas. Los contratos y permisos distinguen
+ * lectura general de administración.
+ */
 import { catalogRepository } from './catalog.repository.js';
 import { stations } from './stations.service.js';
 import { pricesService } from './prices.service.js';
@@ -6,6 +11,7 @@ import { z } from 'zod';
 import { permit } from '../../security/access.js';
 import { endpoint, id, pagination, validate } from '../../shared/validation.js';
 
+// Valida consultas y cambios de puestos/tarifas antes de delegarlos a las capas de datos.
 export function catalogRoutes() {
   const router = Router();
   const priceFields = {

@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Simula fotos y asignaciones. Aísla permisos y estado de los servicios externos.
+ */
 import { businessDate } from '../../../src/domain/dates';
 import { errorMessage, operationId } from '../../../src/domain/format';
 import type {

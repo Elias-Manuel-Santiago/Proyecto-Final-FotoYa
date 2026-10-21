@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Deriva configuración y registro nativo del proveedor social. Habilita su plugin al
+ * configurar dominio y cliente nativo.
+ */
 module.exports = ({ config }) => {
   const domain = process.env.EXPO_PUBLIC_AUTH0_DOMAIN?.trim();
   const clientId = process.env.EXPO_PUBLIC_AUTH0_CLIENT_ID?.trim();

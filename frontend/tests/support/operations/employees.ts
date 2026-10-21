@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Simula gestión de usuarios para tests. Modela permisos y asignaciones en memoria.
+ */
 import type {
   AppData,
   Employee,

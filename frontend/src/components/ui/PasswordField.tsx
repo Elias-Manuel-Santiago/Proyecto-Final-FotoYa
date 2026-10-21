@@ -1,12 +1,21 @@
+/**
+ * @file
+ * Especializa el campo para contraseña con control de visibilidad. Conserva valor controlado y
+ * propiedades de validación.
+ */
 import { useState } from 'react';
 import { Pressable, StyleSheet, View, type TextInputProps } from 'react-native';
 import { Field } from './Field';
 import { colors } from './theme';
 
+// Mantiene la visibilidad de la contraseña y delega la edición al formulario.
 export function PasswordField({
   label,
   ...props
-}: Omit<TextInputProps, 'secureTextEntry'> & { label: string }) {
+}: Omit<TextInputProps, 'secureTextEntry'> & {
+  label: string;
+  error?: string;
+}) {
   const [visible, setVisible] = useState(false);
   return (
     <Field

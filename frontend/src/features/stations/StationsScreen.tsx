@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta puestos y acciones de alta, baja y reactivación. Conserva acceso a historial y
+ * tarifas según permiso.
+ */
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button } from '../../components/ui/Button';
@@ -13,6 +18,7 @@ import { StationPrices } from './StationPrices';
 
 const empty = { name: '', address: '', city: '', event: '' };
 
+// Filtra puestos y coordina alta, disponibilidad y consulta de tarifas.
 export function StationsScreen() {
   const { data, repository, refresh } = useWorkspace();
   const [input, setInput] = useState(empty);
@@ -28,6 +34,7 @@ export function StationsScreen() {
         .toLowerCase()
         .includes(search.trim().toLowerCase()),
   );
+  // Solicita el cambio de estado y refresca la lista al confirmarse.
   const changeAvailability = (stationId: string, active: boolean) =>
     action.run(
       async () => {

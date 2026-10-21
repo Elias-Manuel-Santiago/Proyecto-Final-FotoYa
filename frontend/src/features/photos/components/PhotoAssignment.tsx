@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Guarda el correo para una foto sin cuenta enlazada. Distingue asignación en galería/venta y
+ * muestra el vínculo confirmado.
+ */
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import type { Photo, SalePhoto } from '../../../domain/models';
@@ -8,6 +13,7 @@ import { Button } from '../../../components/ui/Button';
 import { Feedback } from '../../../components/ui/Feedback';
 import { styles } from '../../../components/ui/theme';
 
+// Muestra el destinatario confirmado o guarda un correo por la ruta de galería o venta.
 export function PhotoAssignment({
   photo,
   sale = false,

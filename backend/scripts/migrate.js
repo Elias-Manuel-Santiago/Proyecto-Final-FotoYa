@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Actualiza el esquema inspeccionando columnas/índices bajo bloqueo MySQL. --init importa la
+ * base vacía antes de aplicar extensiones y conversiones.
+ */
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { protectUsers } from './lib/protect-users.js';

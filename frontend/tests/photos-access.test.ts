@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Verifica privacidad y operaciones de fotos. Cubre permisos, acceso temporal y reintentos.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MockFotoYaRepository } from './support/mock-repository';

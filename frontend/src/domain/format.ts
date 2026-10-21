@@ -1,3 +1,9 @@
+/**
+ * @file
+ * Formatea importes, porcentajes y errores para las vistas. Comparte presentación sin mezclar
+ * HTTP con componentes.
+ */
+// Formatea un importe como pesos argentinos para su presentación.
 export function money(value: number) {
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
@@ -5,10 +11,12 @@ export function money(value: number) {
   }).format(value);
 }
 
+// Reúne nombre y apellido para las etiquetas compartidas.
 export function fullName(employee: { firstName: string; lastName: string }) {
   return `${employee.firstName} ${employee.lastName}`;
 }
 
+// Convierte un error desconocido en un mensaje legible para la interfaz.
 export function errorMessage(error: unknown) {
   return error instanceof Error
     ? error.message
@@ -16,6 +24,7 @@ export function errorMessage(error: unknown) {
 }
 
 let sequence = 0;
+// Genera un identificador local combinando prefijo, tiempo y secuencia.
 export function operationId(prefix: string) {
   sequence += 1;
   return `${prefix}-${Date.now()}-${sequence}`;

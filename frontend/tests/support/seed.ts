@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Construye datos del repositorio simulado. No carga demostraciones en base ni pantallas
+ * reales.
+ */
 import type { AppData, Employee } from '../../src/domain/models';
 import { businessDate } from '../../src/domain/dates';
 

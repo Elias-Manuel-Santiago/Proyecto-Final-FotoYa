@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta una foto seleccionable del evento con vista previa privada. Contiene acciones de
+ * asignación/venta aportadas por la pantalla.
+ */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { styles } from '../../../components/ui/theme';
@@ -6,6 +11,7 @@ import { errorMessage } from '../../../domain/format';
 import { useWorkspace } from '../../../providers/AppProvider';
 import type { SalePhoto } from '../../../domain/models';
 
+// Carga la previsualización autorizada y permite elegir la foto para vender.
 export function SalePhotoCard({
   photo,
   selected,

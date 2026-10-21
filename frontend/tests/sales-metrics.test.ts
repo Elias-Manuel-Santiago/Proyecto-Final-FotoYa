@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Verifica ventas e indicadores. Distingue conteos completos, inconsistencias y valores
+ * desconocidos.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {

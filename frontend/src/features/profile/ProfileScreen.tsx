@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta perfil, jornada y sesiones propias. Coordina contraseña, revocación y actualización
+ * del estado de acceso.
+ */
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button } from '../../components/ui/Button';
@@ -10,6 +15,7 @@ import { canWork, roleLabels } from '../../domain/permissions';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
 
+// Gestiona datos propios, sesiones, contraseña y actualización del estado de trabajo.
 export function ProfileScreen() {
   const { data, employee, logout, repository, refresh } = useWorkspace();
   const action = useAction();

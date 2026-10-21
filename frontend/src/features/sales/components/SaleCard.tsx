@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta una venta y su detalle histórico. Solicita acceso autorizado a fotos vendidas y
+ * muestra precios aplicados.
+ */
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import type { AppData, Sale } from '../../../domain/models';
@@ -10,6 +15,7 @@ import { useAction } from '../../../hooks/useAction';
 import { useWorkspace } from '../../../providers/AppProvider';
 import { PhotoPreview } from '../../photos/components/PhotoPreview';
 
+// Muestra la venta y carga a demanda su detalle y las fotos asociadas.
 export function SaleCard({ sale, data }: { sale: Sale; data: AppData }) {
   const { repository } = useWorkspace();
   const [detail, setDetail] =

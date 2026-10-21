@@ -1,3 +1,6 @@
+-- Define reservas por UUID con actor, contenido, bucket y posible foto confirmada. El índice
+-- de pendientes facilita la reconciliación.
+
 CREATE TABLE IF NOT EXISTS photo_uploads (
   operation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
   id_actor BIGINT UNSIGNED NOT NULL,

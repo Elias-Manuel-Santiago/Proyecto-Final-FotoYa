@@ -1,7 +1,13 @@
+/**
+ * @file
+ * Consulta horarios por período y alcance. La consulta propia conserva registros de puestos
+ * anteriores del usuario.
+ */
 import { db } from '../../config/database.js';
 import { stationScope } from '../../security/access.js';
 
 export const attendanceRepository = {
+  // Consulta turnos por período y alcance; la variante self restringe al propio usuario.
   async query(actor, input, self = false) {
     const station = self && actor.role !== 'encargado' ? null : stationScope(actor, input.stationId);
     const params = [input.from, input.to];

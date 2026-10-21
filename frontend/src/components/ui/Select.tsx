@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta selección de opciones con valor controlado. Cada formulario define etiquetas,
+ * valores y disponibilidad.
+ */
 import { Pressable, Text, View } from 'react-native';
 import { colors, styles } from './theme';
 
@@ -6,6 +11,7 @@ export interface Option {
   label: string;
 }
 
+// Presenta opciones y entrega el valor elegido al componente que controla la selección.
 export function Select({
   label,
   value,

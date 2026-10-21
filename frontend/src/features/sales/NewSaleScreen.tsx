@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Coordina evento del día, tarifas y páginas de doce fotos. Reinicia al cambiar día/puesto y
+ * bloquea refresco durante confirmación.
+ */
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Screen } from '../../components/ui/Screen';
@@ -15,6 +20,7 @@ import { SaleForm } from './components/SaleForm';
 import { PhotoAssignment } from '../photos/components/PhotoAssignment';
 import { Link, useLocalSearchParams } from 'expo-router';
 
+// Usa el día comercial para reiniciar el flujo de venta al cambiar la fecha.
 export function NewSaleScreen() {
   const today = useBusinessDate();
   const { employee } = useWorkspace();
@@ -23,6 +29,7 @@ export function NewSaleScreen() {
   );
 }
 
+// Carga evento, tarifas y fotos del puesto y coordina selección y registro de venta.
 function DailySaleScreen({ today }: { today: string }) {
   const { photoId } = useLocalSearchParams<{ photoId?: string }>();
   const { repository, employee } = useWorkspace();
@@ -41,6 +48,7 @@ function DailySaleScreen({ today }: { today: string }) {
     photos: SalePhoto[];
     error?: string;
   }>();
+  // Limpia la foto seleccionada y solicita consultar nuevamente el evento.
   const reload = () => {
     setSelected('');
     setSelling(false);
@@ -69,6 +77,7 @@ function DailySaleScreen({ today }: { today: string }) {
       active = false;
     };
   }, [repository, stationId, offset, key, photoId]);
+  // Solo se muestran resultados correspondientes al puesto, día y página actuales.
   const current = result?.key === key ? result : undefined;
   const loading = !current,
     error = current?.error ?? '';

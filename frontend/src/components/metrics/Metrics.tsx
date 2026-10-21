@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta indicadores comerciales compartidos. Distingue métricas no disponibles de valores
+ * cero.
+ */
 import { Text, View } from 'react-native';
 import { money } from '../../domain/format';
 import { styles } from '../ui/theme';
@@ -10,6 +15,7 @@ export interface MetricValues {
   earnings: number;
 }
 
+// Presenta indicadores conservando una señal visible cuando un valor es desconocido.
 export function Metrics({
   values,
   showMoney = true,

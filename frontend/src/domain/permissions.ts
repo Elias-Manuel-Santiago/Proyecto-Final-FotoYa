@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Resuelve visibilidad, alcance y roles asignables en la interfaz. Usa permisos del servidor y
+ * una matriz de respaldo si falta ese campo.
+ */
 import type { Employee, RoleId } from './models';
 
 export const roleLabels: Record<RoleId, string> = {
@@ -87,6 +92,7 @@ export const rolePermissions: Record<RoleId, readonly Permission[]> = {
 
 const globalRoles: readonly RoleId[] = ['owner', 'secretary'];
 
+// Combina cuenta activa, jornada, kiosco y permisos para habilitar acciones de interfaz.
 export function can(employee: Employee, permission: Permission) {
   return (
     employee.active &&
@@ -98,6 +104,7 @@ export function can(employee: Employee, permission: Permission) {
   );
 }
 
+// Exige jornada abierta a los roles que la necesitan.
 export function canWork(employee: Employee) {
   return (
     !['secretary', 'photographer', 'seller'].includes(employee.roleId) ||
@@ -105,6 +112,7 @@ export function canWork(employee: Employee) {
   );
 }
 
+// Comprueba si el usuario activo tiene alcance global o pertenece al puesto.
 export function hasStationAccess(employee: Employee, stationId: string) {
   return (
     employee.active &&
@@ -112,16 +120,19 @@ export function hasStationAccess(employee: Employee, stationId: string) {
   );
 }
 
+// Detiene una acción local si no está habilitada para el usuario.
 export function requirePermission(employee: Employee, permission: Permission) {
   if (!can(employee, permission))
     throw new Error('No tenés permiso para esta operación.');
 }
 
+// Rechaza una acción local sobre un puesto fuera del alcance.
 export function requireStation(employee: Employee, stationId: string) {
   if (!hasStationAccess(employee, stationId))
     throw new Error('El puesto está fuera de tu alcance.');
 }
 
+// Define los roles ofrecidos en el formulario según quién administra usuarios.
 export function assignableRoles(employee: Employee): RoleId[] {
   return employee.roleId === 'owner'
     ? ['owner', 'manager', 'secretary', 'photographer', 'seller', 'client']

@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Protege el área de trabajo y monta su encabezado. Redirige a login sin sesión y a perfil
+ * cuando falta jornada requerida.
+ */
 import { Redirect, Stack, usePathname } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 import { Feedback } from '../../components/ui/Feedback';
@@ -6,6 +11,7 @@ import { WorkspaceHeader } from '../../components/navigation/WorkspaceHeader';
 import { useApp } from '../../providers/AppProvider';
 import { canWork } from '../../domain/permissions';
 
+// Resuelve sesión y jornada antes de montar pantallas privadas y encabezado.
 export default function WorkspaceLayout() {
   const { employee, loading, error, refresh } = useApp();
   const pathname = usePathname();

@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Verifica recuperación de sesiones por rol. Cubre revocación, cierre sin conexión y carreras
+ * de restauración/borrado.
+ */
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import { ApiClient, ApiError } from '../src/data/api-client';

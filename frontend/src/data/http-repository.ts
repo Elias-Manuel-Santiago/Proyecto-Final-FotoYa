@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Traduce HTTP a modelos de pantalla y concentra operaciones. Recupera permisos actuales,
+ * normaliza IDs/fechas y carga recursos permitidos.
+ */
 import type {
   AppData,
   Attendance,
@@ -23,6 +28,7 @@ import { ApiClient } from './api-client';
 import { photoForm } from './photo-form';
 import type { SessionStorage } from './session-persistence';
 
+// Los nombres del backend se traducen a roles de interfaz; los IDs de base se resuelven por catálogo.
 const roles: Record<string, RoleId> = {
   dueno: 'owner',
   encargado: 'manager',
@@ -62,8 +68,10 @@ interface ReportRow {
   discarded: number | string | null;
   percentage: number | string | null;
 }
+// Convierte valores SQL a número conservando null como dato desconocido.
 const nullableNumber = (value: number | string | null) =>
   value === null ? null : Number(value);
+// Adapta indicadores remotos a los nombres usados por la interfaz.
 const metrics = (
   row: Omit<
     ReportRow,
@@ -76,6 +84,7 @@ const metrics = (
   discarded: nullableNumber(row.discarded),
   percentage: nullableNumber(row.percentage),
 });
+// Traduce roles de la API y normaliza identificadores para el modelo Employee.
 function user(row: UserRow): Employee {
   const roleId = roles[row.role];
   if (!roleId) throw new Error('El servidor devolvió un rol desconocido.');
@@ -90,6 +99,7 @@ function user(row: UserRow): Employee {
 export class HttpFotoYaRepository {
   private profileRevision = 0;
   onProfile?: (employee: Employee) => void;
+  // Permite al proveedor recibir actualizaciones del perfil desde el repositorio.
   setOnProfile(listener?: (employee: Employee) => void) {
     this.onProfile = listener;
   }
@@ -98,6 +108,7 @@ export class HttpFotoYaRepository {
     private sessionStorage?: SessionStorage,
   ) {}
 
+  // Restaura una credencial local solo si una operación más reciente no cambió la sesión.
   async restoreSession() {
     const revision = this.profileRevision;
     const token = await this.sessionStorage?.read();
@@ -111,18 +122,21 @@ export class HttpFotoYaRepository {
     return true;
   }
 
+  // Instala y persiste el Bearer e invalida lecturas anteriores del perfil.
   async acceptSession(token: string) {
     this.profileRevision += 1;
     this.api.setToken(token);
     await this.sessionStorage?.write(token);
   }
 
+  // Invalida la revisión actual y borra el Bearer de memoria y almacenamiento.
   async clearSession() {
     this.profileRevision += 1;
     this.api.setToken(null);
     await this.sessionStorage?.write(null);
   }
 
+  // Intercambia credenciales por una sesión y la persiste antes de continuar.
   async login(email: string, password: string) {
     const result = await this.api.post<{ token: string }>('auth/login', {
       email: email.trim(),
@@ -131,6 +145,7 @@ export class HttpFotoYaRepository {
     await this.acceptSession(result.token);
   }
 
+  // Intenta revocar la sesión remota y elimina siempre su copia local.
   async logout() {
     try {
       await this.api.post('auth/logout');
@@ -139,6 +154,7 @@ export class HttpFotoYaRepository {
     }
   }
 
+  // Consulta el actor y notifica al proveedor solo si la revisión de sesión sigue vigente.
   async profile() {
     const revision = this.profileRevision;
     const actor = user(await this.api.post<UserRow>('auth/me'));
@@ -146,16 +162,19 @@ export class HttpFotoYaRepository {
     return actor;
   }
 
+  // Activa el kiosco remoto e invalida lecturas anteriores del perfil.
   async enterCheckIn() {
     await this.api.post('attendance/kiosk/enter');
     this.profileRevision += 1;
   }
 
+  // Envía la contraseña para liberar el kiosco e invalida el perfil anterior.
   async exitCheckIn(password: string) {
     await this.api.post('attendance/kiosk/exit', { password });
     this.profileRevision += 1;
   }
 
+  // Recupera empleados del kiosco y normaliza el estado de sus turnos.
   async checkInEmployees(): Promise<CheckInEmployee[]> {
     const rows = await this.api.all<CheckInEmployee>(
       'attendance/kiosk/employees',
@@ -168,6 +187,7 @@ export class HttpFotoYaRepository {
     }));
   }
 
+  // Envía entrada o salida con el turno esperado para detectar cambios concurrentes.
   markAttendance(employee: CheckInEmployee, email: string, password: string) {
     return this.api.post('attendance/kiosk/mark', {
       userId: employee.id,
@@ -178,6 +198,7 @@ export class HttpFotoYaRepository {
     });
   }
 
+  // Consulta el perfil y reúne recursos permitidos, adaptándolos a los modelos de pantalla.
   async snapshot(
     period: Period = {
       from: businessDate(),
@@ -189,6 +210,7 @@ export class HttpFotoYaRepository {
     const invalid = periodError(period.from, period.to);
     if (invalid) throw new Error(invalid);
     const actor = await this.profile();
+    // Sin jornada o en kiosco basta el perfil: no se consultan recursos de trabajo bloqueados.
     if (actor.kioskMode || !canWork(actor))
       return {
         employees: [actor],
@@ -198,6 +220,7 @@ export class HttpFotoYaRepository {
         sales: [],
         attendance: [],
       };
+    // Consulta los permisos efectivos del perfil recién recibido.
     const has = (permission: string) => actor.permissions?.includes(permission);
     const body = {
       from: period.from,
@@ -233,6 +256,7 @@ export class HttpFotoYaRepository {
           }
         : {}),
     };
+    // Las consultas independientes se ejecutan juntas, únicamente si el perfil actual tiene permiso.
     const [
       employees,
       roleRows,
@@ -340,18 +364,22 @@ export class HttpFotoYaRepository {
         expectedDays: Number(row.expectedDays),
         invalidDays: Number(row.invalidDays),
       })),
+      // El total proviene del servidor para no depender de las filas visibles de una página.
       summary: summary ? metrics(summary) : undefined,
     };
   }
 
+  // Envía el alta del puesto para que la pantalla refresque los datos tras confirmarse.
   async createStation(input: StationInput) {
     await this.api.post('catalog/stations/create', input);
   }
 
+  // Solicita baja o reactivación del puesto por su identificador.
   async setStationActive(stationId: string, active: boolean) {
     await this.api.post('catalog/stations/availability', { stationId, active });
   }
 
+  // Resuelve el ID real del rol y elige alta o edición según exista un usuario previo.
   async saveEmployee(input: EmployeeInput) {
     const catalog = await this.api.post<
       { id: number | string; name: string }[]
@@ -374,12 +402,15 @@ export class HttpFotoYaRepository {
     );
   }
 
+  // Solicita cambiar la disponibilidad del usuario.
   async setEmployeeActive(userId: string, active: boolean) {
     await this.api.post('users/availability', { userId, active });
   }
+  // Envía el UUID y los datos para que el servidor confirme o reconozca el reintento de venta.
   async recordSale(input: EventSaleInput) {
     return this.api.post<{ id: string }>('sales/create', input);
   }
+  // Recupera tarifas vendibles del puesto y normaliza sus identificadores.
   async salePrices(stationId: string) {
     const rows = await this.api.all<Price>('catalog/query', {
       resource: 'prices',
@@ -391,9 +422,11 @@ export class HttpFotoYaRepository {
       stationId: String(row.stationId),
     }));
   }
+  // Envía nombre e importe decimal de una tarifa nueva.
   createPrice(stationId: string, name: string, amount: string) {
     return this.api.post('catalog/prices/create', { stationId, name, amount });
   }
+  // Lista tarifas administrables, incluidas las inactivas.
   async stationPrices(stationId: string) {
     const rows = await this.api.all<Price>('catalog/prices/query', {
       stationId,
@@ -405,6 +438,7 @@ export class HttpFotoYaRepository {
       active: Boolean(row.active),
     }));
   }
+  // Envía cambios de una tarifa identificada dentro de su puesto.
   updatePrice(
     stationId: string,
     priceId: string,
@@ -418,6 +452,7 @@ export class HttpFotoYaRepository {
       amount,
     });
   }
+  // Solicita habilitar o deshabilitar una tarifa del puesto.
   setPriceActive(stationId: string, priceId: string, active: boolean) {
     return this.api.post('catalog/prices/availability', {
       stationId,
@@ -425,15 +460,18 @@ export class HttpFotoYaRepository {
       active,
     });
   }
+  // Consulta si el evento está abierto y a qué fecha corresponde.
   saleEvent(stationId: string) {
     return this.api.post<{ open: boolean; date: string | null }>(
       'sales/event',
       { stationId },
     );
   }
+  // Solicita abrir o cerrar las ventas del puesto.
   setSaleEvent(stationId: string, open: boolean) {
     return this.api.post('sales/event/set', { stationId, open });
   }
+  // Recupera una página de doce fotos vendibles con filtro opcional por foto.
   async salePhotos(stationId: string, offset = 0, photoId?: string) {
     const rows = await this.api.post<SalePhoto[]>('sales/photos', {
       stationId,
@@ -447,6 +485,7 @@ export class HttpFotoYaRepository {
       sold: Boolean(row.sold),
     }));
   }
+  // Solicita una URL temporal por la ruta autorizada para el evento activo.
   accessSalePhoto(photoId: string) {
     return this.api.post<{ url: string; expiresIn: number }>(
       'sales/photos/access',
@@ -454,6 +493,7 @@ export class HttpFotoYaRepository {
     );
   }
 
+  // Envía cada archivo con su UUID estable y devuelve resultados individuales para reintentar fallos.
   async uploadPhotos(
     stationId: string,
     files: PhotoFile[],
@@ -480,23 +520,27 @@ export class HttpFotoYaRepository {
     return results;
   }
 
+  // Solicita la previsualización privada con los permisos de galería.
   accessPhoto(photoId: string) {
     return this.api.post<{ url: string; expiresIn: number }>('photos/access', {
       photoId,
     });
   }
+  // Solicita acceso a una foto vinculada a una venta histórica.
   accessSoldPhoto(saleId: string, photoId: string) {
     return this.api.post<{ url: string; expiresIn: number }>(
       'sales/photos/sold/access',
       { saleId, photoId },
     );
   }
+  // Normaliza el correo y usa la ruta de asignación de galería o venta.
   assignPhoto(photoId: string, clientEmail: string, sale = false) {
     return this.api.post<PhotoRow>(
       sale ? 'sales/photos/assign' : 'photos/assign',
       { photoId, clientEmail: clientEmail.trim().toLowerCase() },
     );
   }
+  // Recupera copias, pago, fotos y precios históricos de una venta.
   saleDetail(saleId: string) {
     return this.api.post<{
       prices: { priceId: string; unitPrice: string; quantity: number }[];

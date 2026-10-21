@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Proporciona usuarios y datos reutilizables de pruebas. Mantiene escenarios independientes de
+ * pantallas reales.
+ */
 import { businessDate } from '../src/domain/dates';
 import { createSeed } from './support/seed';
 import { MockFotoYaRepository } from './support/mock-repository';

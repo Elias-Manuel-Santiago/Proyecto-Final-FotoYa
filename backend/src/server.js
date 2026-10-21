@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Comprueba que los usuarios fueron migrados antes de arrancar HTTP. Coordina el cierre del
+ * servidor y del pool MySQL al recibir señales de terminación.
+ */
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { db } from './config/database.js';
@@ -7,6 +12,7 @@ try {
   if (Number(row.count)) throw new Error('Ejecutá npm run db:migrate para actualizar los datos y hashear las contraseñas.');
   const app = createApp();
   const server = app.listen(env.PORT, env.HOST, () => console.log(`Foto Ya disponible en http://${env.HOST}:${env.PORT}`));
+  // Deja de aceptar solicitudes y cierra MySQL; fuerza la salida si el cierre supera diez segundos.
   const stop = () => {
     server.close(async () => { await db.end(); process.exit(0); });
     setTimeout(() => process.exit(1), 10000).unref();

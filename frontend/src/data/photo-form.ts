@@ -1,5 +1,11 @@
+/**
+ * @file
+ * Construye el archivo multipart desde File web o URI móvil. El repositorio agrega puesto y
+ * UUID al enviar cada foto.
+ */
 import type { PhotoFile } from '../domain/models';
 
+// Construye multipart desde File/Blob en web o URI y metadatos nativos.
 export async function photoForm(file: PhotoFile) {
   const form = new FormData();
   let blob: Blob | undefined = file.file;

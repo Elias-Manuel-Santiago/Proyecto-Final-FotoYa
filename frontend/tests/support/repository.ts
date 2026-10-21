@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Define el contrato del repositorio simulado. Mantiene soporte de tests separado del cliente
+ * HTTP real.
+ */
 import type {
   AppData,
   EmployeeInput,

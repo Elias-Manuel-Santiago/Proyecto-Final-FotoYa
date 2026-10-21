@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Busca clientes por correo/DNI en páginas de veinte. Confirma la baja con un modal e ignora
+ * respuestas de búsquedas anteriores.
+ */
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Text, View } from 'react-native';
 import { useWorkspace } from '../../providers/AppProvider';
@@ -17,6 +22,7 @@ interface Client {
   dni: string;
   verified: boolean;
 }
+// Busca clientes por correo o DNI y administra su baja en una lista paginada.
 export function ClientsScreen() {
   const { repository, employee } = useWorkspace();
   const [search, setSearch] = useState('');
@@ -33,6 +39,7 @@ export function ClientsScreen() {
     hasMore: boolean;
     error?: string;
   }>();
+  // Cambiar búsqueda o página oculta resultados anteriores mientras llega la respuesta nueva.
   const current = response?.key === key ? response : undefined;
   const rows = current?.clients ?? [];
   const hasMore = current?.hasMore ?? false;
@@ -61,6 +68,7 @@ export function ClientsScreen() {
       active = false;
     };
   }, [repository, key]);
+  // Da de baja al cliente seleccionado y actualiza la lista al completarse.
   async function deactivate() {
     if (!selected || busy) return;
     setBusy(true);

@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Verifica catálogos y puestos/tarifas. Protege contratos y restricciones por puesto.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { image, repository } from './fixtures';

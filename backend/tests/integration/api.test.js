@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Recorre la API con MySQL temporal al habilitar TEST_DB_PORT. Simula Storage, correo e
+ * identidad y elimina sólo su base aleatoria.
+ */
 import { after, before, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import mysql from 'mysql2/promise';

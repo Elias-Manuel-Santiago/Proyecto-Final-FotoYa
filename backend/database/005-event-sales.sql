@@ -1,3 +1,6 @@
+-- Define apertura por puesto/día. La clave foránea compuesta impide asociar una apertura con
+-- el día de otro puesto.
+
 CREATE TABLE IF NOT EXISTS event_sales (
   id_puesto BIGINT UNSIGNED PRIMARY KEY,
   id_dia BIGINT UNSIGNED NOT NULL,

@@ -1,6 +1,13 @@
+/**
+ * @file
+ * Define contratos de pantallas, repositorio y tests. Distingue fotos, ventas, copias,
+ * jornadas, períodos y métricas desconocidas.
+ */
+// Nombres de rol usados por la interfaz; el repositorio los traduce desde los nombres del servidor.
 export type RoleId =
   'owner' | 'manager' | 'secretary' | 'photographer' | 'seller' | 'client';
 
+// Perfil público y estado de acceso del usuario; permisos y jornada pueden actualizarse durante la sesión.
 export interface Employee {
   id: string;
   firstName: string;
@@ -16,6 +23,7 @@ export interface Employee {
   kioskMode?: boolean;
 }
 
+// Datos editables del usuario; id distingue edición y password se envía en el alta.
 export type EmployeeInput = Omit<
   Employee,
   'id' | 'active' | 'permissions' | 'working' | 'kioskMode' | 'stationName'
@@ -24,6 +32,7 @@ export type EmployeeInput = Omit<
   password?: string;
 };
 
+// Puesto con ubicación, evento y disponibilidad; los inactivos siguen en el historial.
 export interface Station {
   id: string;
   name: string;
@@ -35,6 +44,7 @@ export interface Station {
   active?: boolean;
 }
 
+// Campos del formulario de alta de puesto; el servidor resuelve ciudad y evento.
 export interface StationInput {
   name: string;
   address: string;
@@ -42,6 +52,7 @@ export interface StationInput {
   event: string;
 }
 
+// Metadatos de una foto/familia; la URL privada se solicita aparte y puede vencer.
 export interface Photo {
   id: string;
   operationId: string;
@@ -55,6 +66,7 @@ export interface Photo {
   clientEmail?: string | null;
 }
 
+// Archivo seleccionado: key mantiene el UUID de carga entre reintentos.
 export interface PhotoFile {
   key: string;
   name: string;
@@ -65,11 +77,13 @@ export interface PhotoFile {
   clientId?: string;
 }
 
+// Resultado por UUID: la ausencia de error indica que la API confirmó el guardado.
 export interface UploadResult {
   key: string;
   error?: string;
 }
 
+// Conteos por puesto y día; sold representa familias compradoras, no copias impresas.
 export interface DayCount {
   stationId: string;
   date: string;
@@ -79,6 +93,7 @@ export interface DayCount {
   discarded?: number | null;
 }
 
+// Venta histórica: quantity cuenta familias y copies representa unidades físicas.
 export interface Sale {
   id: string;
   operationId: string;
@@ -93,6 +108,7 @@ export interface Sale {
   paymentMethod?: string | null;
 }
 
+// Tarifa por puesto con importe decimal textual para conservar los centavos.
 export interface Price {
   id: string;
   name: string;
@@ -101,6 +117,7 @@ export interface Price {
   active?: boolean;
 }
 
+// Contrato del alta: UUID estable, foto del evento y copias por tarifa, sin importe decidido por el cliente.
 export interface EventSaleInput {
   operationId: string;
   photoId: string;
@@ -109,6 +126,7 @@ export interface EventSaleInput {
   prices: { priceId: string; copies: number }[];
 }
 
+// Foto seleccionable del evento con indicador de ventas y destinatario opcional.
 export interface SalePhoto {
   id: string;
   date: string;
@@ -117,6 +135,7 @@ export interface SalePhoto {
   clientEmail?: string | null;
 }
 
+// Turno de asistencia: checkOut null identifica una jornada todavía abierta.
 export interface Attendance {
   id: string;
   employeeId: string;
@@ -126,6 +145,7 @@ export interface Attendance {
   checkOut: string | null;
 }
 
+// Empleado elegible del kiosco con el turno esperado para validar la siguiente marcación.
 export interface CheckInEmployee {
   id: string;
   firstName: string;
@@ -134,6 +154,7 @@ export interface CheckInEmployee {
   attendanceId: string | null;
 }
 
+// Snapshot compartido que reúne catálogos y colecciones autorizadas para las pantallas.
 export interface AppData {
   employees: Employee[];
   stations: Station[];
@@ -146,6 +167,7 @@ export interface AppData {
   summary?: ReportMetrics;
 }
 
+// Indicadores comerciales: null conserva datos desconocidos o inconsistentes, sin convertirlos en cero.
 export interface ReportMetrics {
   taken: number | null;
   sold: number;
@@ -154,6 +176,7 @@ export interface ReportMetrics {
   percentage: number | null;
 }
 
+// Indicadores de un puesto con cobertura e inconsistencias del período consultado.
 export interface StationReport extends ReportMetrics {
   station: Station;
   registeredDays: number;
@@ -161,6 +184,7 @@ export interface StationReport extends ReportMetrics {
   invalidDays: number;
 }
 
+// Filtros de fecha y puesto; ciudad y evento agregan restricciones a los informes.
 export interface Period {
   from: string;
   to: string;

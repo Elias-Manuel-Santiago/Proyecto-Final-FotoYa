@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Reconoce y convierte datos heredados. Encapsula compatibilidad con valores cifrados y
+ * formatos anteriores para la migración.
+ */
 import { createDecipheriv } from 'node:crypto';
 
 // Compatibilidad exclusiva de la migración: la API no importa este módulo.

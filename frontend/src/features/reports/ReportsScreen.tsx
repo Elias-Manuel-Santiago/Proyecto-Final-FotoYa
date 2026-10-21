@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta informes filtrados y resumen del servidor. Distingue días faltantes,
+ * inconsistencias e ingresos disponibles.
+ */
 import { Text, View } from 'react-native';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
 import { Metrics } from '../../components/metrics/Metrics';
@@ -14,6 +19,7 @@ import { usePeriod } from '../../hooks/usePeriod';
 import { useWorkspace } from '../../providers/AppProvider';
 import { DailyEarnings } from './components/DailyEarnings';
 
+// Consulta informes por período y presenta resumen e ingresos de los puestos filtrados.
 export function ReportsScreen() {
   const { employee } = useWorkspace();
   const { period, update, error: periodError } = usePeriod();

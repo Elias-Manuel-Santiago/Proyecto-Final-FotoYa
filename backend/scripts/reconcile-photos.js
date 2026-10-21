@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Ejecuta la reconciliación de cargas como mantenimiento. Informa el resultado y cierra el
+ * pool al finalizar.
+ */
 import { db } from '../src/config/database.js';
 import { reconcilePhotoUploads } from '../src/modules/photos/photos.reconciliation.js';
 

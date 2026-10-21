@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Define el contrato social y un contexto predeterminado deshabilitado. Permite consumir su
+ * estado sin importar el SDK en pantallas.
+ */
 import { createContext, useContext } from 'react';
 
 export interface SocialAuth {
@@ -18,4 +23,5 @@ export const SocialContext = createContext<SocialAuth>({
     );
   },
 });
+// Consume el contrato social compartido sin importar directamente el SDK.
 export const useSocial = () => useContext(SocialContext);

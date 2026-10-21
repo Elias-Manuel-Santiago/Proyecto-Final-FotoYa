@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Busca clientes activos por correo/DNI en páginas de veinte. La baja lógica revalida
+ * autorización y revoca credenciales conservando el historial.
+ */
 import { Router } from 'express';
 import { z } from 'zod';
 import { db } from '../../config/database.js';
@@ -8,6 +13,7 @@ import { ApiError } from '../../shared/errors.js';
 
 export const clientQuery = z.object({ search: z.string().trim().max(254).default(''),
   offset: z.number().int().min(0).max(100000).multipleOf(20).default(0) }).strict();
+// Expone búsqueda paginada y baja lógica de clientes con revocación de credenciales.
 export function clientRoutes() {
   const router = Router();
   router.post('/query', permit('clients.read'), validate(clientQuery), endpoint(async req => {
@@ -17,6 +23,7 @@ export function clientRoutes() {
       u.email_verified AS verified FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
       WHERE r.nombre = 'cliente' AND u.disponible = TRUE AND (? = '' OR LOCATE(?, u.email) > 0 OR (? <> '' AND LOCATE(?, u.dni) > 0))
       ORDER BY u.id_usuario LIMIT 21 OFFSET ?`, [search, search, search.replace(/[.\s-]/g, ''), search.replace(/[.\s-]/g, ''), String(req.input.offset)]);
+    // La fila adicional solo detecta otra página; se entregan como máximo veinte clientes.
     return { clients: rows.slice(0, 20), hasMore: rows.length > 20 };
   }));
   router.post('/deactivate', permit('clients.manage'), validate(z.object({ clientId: id }).strict()), endpoint(req => transaction(async connection => {

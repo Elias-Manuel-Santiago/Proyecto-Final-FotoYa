@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Presenta inicio con accesos y métricas permitidos. Coordina actualización de datos y entrada
+ * del encargado al check-in.
+ */
 import { Button } from '../../components/ui/Button';
 import { Link } from 'expo-router';
 import { Text } from 'react-native';
@@ -12,6 +17,7 @@ import { usePeriodData } from '../../hooks/usePeriodData';
 import { Feedback } from '../../components/ui/Feedback';
 import { useAction } from '../../hooks/useAction';
 
+// Reúne indicadores y accesos operativos, incluida la entrada al kiosco.
 export function HomeScreen() {
   const { employee, enterCheckIn } = useWorkspace();
   const action = useAction();

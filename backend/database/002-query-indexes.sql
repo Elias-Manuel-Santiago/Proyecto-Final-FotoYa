@@ -1,3 +1,6 @@
+-- Índices de consultas de usuarios, fotos, días, horarios y sesiones. migrate.js inspecciona
+-- índices antes de ejecutar definiciones pendientes.
+
 CREATE INDEX ix_usuarios_puesto ON usuarios (id_puesto, disponible);
 CREATE INDEX ix_fotos_cliente ON fotos (id_cliente, id_fotos);
 CREATE INDEX ix_dias_fecha ON dias (fecha, id_puesto);

@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Verifica usuarios y asistencia. Cubre alcance por rol/puesto y transformaciones de datos.
+ */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MockFotoYaRepository } from './support/mock-repository';

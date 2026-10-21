@@ -1,4 +1,10 @@
+/**
+ * @file
+ * Define roles y permisos iniciales para preparar la base. Los permisos de cada solicitud se
+ * leen de las relaciones persistidas.
+ */
 const administrative = ['reports.read', 'counts.read', 'employees.read', 'employees.manage', 'attendance.read', 'attendance.self', 'sales.read', 'catalog.read'];
+// Esta matriz se usa para preparar datos iniciales; autenticar consulta las asignaciones de MySQL.
 export const rolePermissions = {
   dueno: [...administrative, 'stations.manage', 'prices.manage', 'clients.read', 'clients.manage'],
   encargado: [...administrative, 'photos.read', 'photos.upload', 'photos.assign', 'sales.create', 'prices.manage'],

@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Ensambla Express y la API. El orden de CORS, límites, autenticación, jornada, rutas y
+ * errores determina qué solicitudes llegan a cada operación.
+ */
 import { env } from './config/env.js';
 import express from 'express';
 import cors from 'cors';
@@ -17,12 +22,14 @@ import { reportsRoutes } from './modules/reports/reports.routes.js';
 import { catalogRoutes } from './modules/catalog/catalog.routes.js';
 import { pendingRoutes } from './modules/pending/pending.routes.js';
 
+// Ensambla protección HTTP, rutas públicas, sesión/jornada y módulos privados en ese orden.
 export function createApp() {
   const app = express();
   app.disable('x-powered-by'); app.set('trust proxy', env.TRUST_PROXY);
   app.use((req, res, next) => {
     req.id = randomUUID(); res.set({ 'X-Request-Id': req.id, 'Cache-Control': 'no-store' }); next();
   });
+  // La protección general se ejecuta también sobre login y health, antes de resolver una sesión.
   app.use(helmet(), cors({ methods: ['POST'], origin(origin, callback) {
     callback(origin && !env.CORS_ORIGINS.includes(origin) ? new ApiError(403, 'Origen no permitido.') : null, true);
   } }));
@@ -32,7 +39,9 @@ export function createApp() {
     .json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Usá POST para consultar la API.' } }));
   app.use(express.json({ limit: '64kb' }));
   app.post('/api/health', (req, res) => res.json({ data: { status: 'ok' } }));
+  // Las rutas de autenticación gestionan sus propias operaciones públicas y privadas.
   app.use('/api/auth', authRoutes());
+  // Desde este punto los módulos reciben un actor autenticado y habilitado para trabajar.
   app.use('/api', authenticate, workAccess);
   app.use('/api/users', userRoutes());
   app.use('/api/clients', clientRoutes());
@@ -43,6 +52,7 @@ export function createApp() {
   app.use('/api/reports', reportsRoutes());
   app.use('/api', pendingRoutes());
   app.use((req, res, next) => next(new ApiError(404, 'La ruta no existe.', 'NOT_FOUND')));
+  // El manejador final convierte errores de validación, negocio e infraestructura al contrato común.
   app.use(errorHandler);
   return app;
 }

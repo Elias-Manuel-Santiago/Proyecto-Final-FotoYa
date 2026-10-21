@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Conecta consulta, detalle, acceso privado, asignación y carga. La carga recibe un archivo
+ * multipart y limita solicitudes adicionales.
+ */
 import { photoService } from './photos.service.js';
 import { photoAssignments } from './photos.assignment.js';
 import { photoUploads } from './photos.upload.js';
@@ -8,6 +13,7 @@ import { endpoint, validate } from '../../shared/validation.js';
 import { readPhoto } from './photos.files.js';
 import * as schema from './photos.schemas.js';
 
+// Encadena permiso, validación y servicio para consultar, subir, asignar y previsualizar fotos.
 export function photoRoutes() {
   const router = Router(), detail = validate(schema.detail);
   router.post('/query', permit('photos.read'), validate(schema.query), endpoint(req => photoService.query(req.actor, req.input)));

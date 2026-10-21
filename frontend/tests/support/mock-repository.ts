@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Implementa el repositorio en memoria para pruebas. Las pantallas reales usan
+ * HttpFotoYaRepository.
+ */
 import type {
   AppData,
   EmployeeInput,

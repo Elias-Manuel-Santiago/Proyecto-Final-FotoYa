@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Lee y valida el asistente y el JSON de creación del dueño. Gestiona contraseña oculta,
+ * confirmación y cancelación.
+ */
 import { createInterface } from 'node:readline/promises';
 import { Writable } from 'node:stream';
 import { create as schema } from '../../src/modules/users/users.schemas.js';

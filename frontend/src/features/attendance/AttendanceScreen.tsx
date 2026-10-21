@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Consulta asistencia administrativa por período y alcance. Delega presentación del horario a
+ * AttendanceCard.
+ */
 import { Text } from 'react-native';
 import { styles } from '../../components/ui/theme';
 import { useLocalSearchParams } from 'expo-router';
@@ -14,6 +19,7 @@ import { usePeriod } from '../../hooks/usePeriod';
 import { useWorkspace } from '../../providers/AppProvider';
 import { AttendanceCard } from './components/AttendanceCard';
 
+// Combina filtros y datos del período para consultar asistencia de empleados visibles.
 export function AttendanceScreen() {
   const { employeeId: initialId } = useLocalSearchParams<{
     employeeId?: string;

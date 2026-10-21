@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Lista usuarios del alcance recibido. Expone acciones de alta y detalle según permisos.
+ */
 import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
@@ -10,6 +14,7 @@ import { fullName } from '../../domain/format';
 import { can, hasStationAccess, roleLabels } from '../../domain/permissions';
 import { useWorkspace } from '../../providers/AppProvider';
 
+// Filtra empleados visibles y ofrece acceso a detalle y alta según permisos.
 export function EmployeesScreen() {
   const { data, employee } = useWorkspace();
   const [search, setSearch] = useState('');

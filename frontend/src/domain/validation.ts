@@ -1,5 +1,11 @@
+/**
+ * @file
+ * Valida formularios antes del envío. Complementa los contratos obligatorios del servidor
+ * facilitando correcciones en la interfaz.
+ */
 import type { AppData, EmployeeInput } from './models';
 
+// Comprueba datos y asignaciones del formulario antes de operar.
 export function validateEmployee(input: EmployeeInput, data: AppData) {
   const station = data.stations.find((row) => row.id === input.stationId);
   const existing = data.employees.find((row) => row.id === input.id);
@@ -38,6 +44,7 @@ export function validateEmployee(input: EmployeeInput, data: AppData) {
   }
 }
 
+// Valida cantidad y precio textual y devuelve los importes de la venta.
 export function saleAmounts(quantityText: string, priceText: string) {
   if (!/^\d+$/.test(quantityText))
     throw new Error('Ingresá una cantidad entera mayor a cero.');

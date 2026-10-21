@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Coordina evento, fotos vendibles y registro idempotente de ventas. Serializa por evento,
+ * conserva importes y cuenta una familia en su primera compra.
+ */
 import { db } from '../../config/database.js';
 import { transaction } from '../../shared/transaction.js';
 import { ApiError } from '../../shared/errors.js';
@@ -9,25 +14,30 @@ import { businessDate, currentEvent } from './sales.rules.js';
 import { salesRepository } from './sales.repository.js';
 
 const columns = 'e.abierta AS open, d.fecha AS date';
+// Consulta la apertura del puesto; el bloqueo opcional serializa cambios y ventas del evento.
 const event = async (executor, stationId, lock = false) => {
   const [[row]] = await executor.execute(`SELECT ${columns}, e.id_dia AS dayId FROM event_sales e
     JOIN dias d ON d.id_dias = e.id_dia WHERE e.id_puesto = ? ${lock ? 'FOR UPDATE' : ''}`, [stationId]);
   return row;
 };
+// Revalida en la transacción el permiso de venta y la asignación del operador.
 const operator = (connection, actor, stationId) => requirePhotoOperator(connection, actor, 'sales.create', stationId);
 
 export const salesService = {
+  // Comprueba que la foto pertenezca a la venta autorizada antes de pedir su previsualización.
   async accessSoldPhoto(actor, input) {
     const sale = await salesRepository.detail(actor, input.saleId);
     if (!sale.photos.some(photo => String(photo.photoId) === input.photoId))
       throw new ApiError(404, 'La foto no pertenece a esta venta.');
     return photoService.access(actor, input.photoId);
   },
+  // Consulta la apertura del puesto; el bloqueo opcional serializa cambios y ventas del evento.
   async event(actor, input) {
     stationScope(actor, input.stationId);
     const row = await event(db, input.stationId);
     return { open: currentEvent(row), date: row?.date ?? null };
   },
+  // Permite al encargado abrir o cerrar ventas y vincula la apertura al día argentino.
   setEvent(actor, input) {
     assertPermission(actor, 'sales.create');
     if (actor.role !== 'encargado') throw new ApiError(403, 'Solo el encargado puede abrir o cerrar las ventas del evento.');
@@ -50,6 +60,7 @@ export const salesService = {
       return { open: currentEvent(row), date: row?.date ?? null };
     });
   },
+  // Lista fotos del evento vigente con destinatario e indicador de ventas anteriores.
   async photos(actor, input) {
     stationScope(actor, input.stationId);
     const current = await event(db, input.stationId);
@@ -61,14 +72,17 @@ export const salesService = {
       ORDER BY f.id_fotos DESC LIMIT ? OFFSET ?`, [input.stationId, current.dayId, ...(input.photoId ? [input.photoId] : []), String(input.limit), String(input.offset)]);
     return rows;
   },
+  // Exige foto autorizada del día y evento abierto antes de emitir acceso temporal.
   async accessPhoto(actor, photoId) {
     const photo = await photoService.detail(actor, photoId);
     const current = await event(db, photo.stationId);
     if (photo.date !== businessDate() || !currentEvent(current)) throw new ApiError(404, 'La foto no está disponible para esta venta.');
     return photoService.access(actor, photoId);
   },
+  // Valida el reintento y registra venta, tarifas, foto e indicadores como una unidad indivisible.
   create(actor, input) {
     stationScope(actor, input.stationId);
+    // Ordenar tarifas hace equivalentes los reintentos que solo cambian el orden de las líneas.
     const requestData = JSON.stringify({ ...input, prices: [...input.prices].sort((a, b) => a.priceId.localeCompare(b.priceId)) });
     return transaction(async connection => {
       await operator(connection, actor, input.stationId);
@@ -76,6 +90,7 @@ export const salesService = {
       // El bloqueo del evento serializa las ventas del puesto, incluidas las de una misma familia.
       const current = await event(connection, input.stationId, true);
       const [[existing]] = await connection.execute('SELECT id_venta AS id, request_data, id_vendedor FROM venta WHERE operation_id=? FOR UPDATE', [input.operationId]);
+      // Se reconoce el UUID ya confirmado antes de exigir que el evento siga abierto.
       if (existing) {
         if (existing.request_data !== requestData || String(existing.id_vendedor) !== actor.id)
           throw new ApiError(409, 'La operación ya se usó con otros datos.', 'IDEMPOTENCY_CONFLICT');
@@ -90,6 +105,7 @@ export const salesService = {
       const amounts = saleAmounts(prices, input.prices);
       if (amounts.applied.some(line => !line)) throw new ApiError(422, 'Una tarifa no está disponible en este puesto.', 'INVALID_PRICE');
       const [[previous]] = await connection.execute('SELECT id_venta FROM fotos_venta WHERE id_foto=? LIMIT 1 FOR UPDATE', [input.photoId]);
+      // Una segunda compra de la misma foto agrega ingreso y copias, sin contar otra familia.
       const counted = !previous;
       const [[totals]] = await connection.execute('SELECT COALESCE(SUM(IF(familia_contada,cantidad,0)),0) AS sold FROM venta WHERE id_dias=? FOR UPDATE', [current.dayId]);
       const discarded = Number(day.fotos) - Number(totals.sold) - Number(counted);
@@ -99,6 +115,7 @@ export const salesService = {
         VALUES (1,?,?,?,?,?,?,?,?,UTC_TIMESTAMP(6))`,
       [amounts.total, current.dayId, input.operationId, requestData, actor.id, input.paymentMethod, amounts.copies, counted]);
       await connection.execute('INSERT INTO fotos_venta (id_foto,id_venta) VALUES (?,?)', [input.photoId, sale.insertId]);
+      // Cada línea conserva el precio unitario aplicado aunque la tarifa cambie en el futuro.
       for (const line of amounts.applied) await connection.execute(`INSERT INTO precios_venta
         (id_venta,id_precio,precio_unitario_aplicado,cantidad) VALUES (?,?,?,?)`, [sale.insertId, line.priceId, line.unitPrice, line.copies]);
       await connection.execute('UPDATE dias SET descartes=?, venta_total=venta_total+? WHERE id_dias=?', [discarded, amounts.total, current.dayId]);

@@ -1,3 +1,7 @@
+/**
+ * @file
+ * Simula registro y consulta de ventas. Mantiene escenarios de conteos e importes en memoria.
+ */
 import { businessDate } from '../../../src/domain/dates';
 import { operationId } from '../../../src/domain/format';
 import type { AppData, Employee } from '../../../src/domain/models';

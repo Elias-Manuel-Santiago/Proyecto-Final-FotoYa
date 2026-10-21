@@ -1,13 +1,20 @@
+/**
+ * @file
+ * Filtra puestos/períodos y adapta indicadores. Prioriza informes remotos y conserva valores
+ * desconocidos ante días faltantes o inconsistentes.
+ */
 import type { AppData, Employee, Period, Station } from './models';
 import { hasStationAccess } from './permissions';
 import { sumAmounts } from './amounts';
 
+// Filtra puestos visibles según el alcance del usuario.
 export function visibleStations(data: AppData, employee: Employee) {
   return data.stations.filter((station) =>
     hasStationAccess(employee, station.id),
   );
 }
 
+// Comprueba fecha y puesto contra el filtro seleccionado.
 export function matchesPeriod(
   row: { stationId: string; date: string },
   period: Period,
@@ -19,6 +26,7 @@ export function matchesPeriod(
   );
 }
 
+// Prioriza el informe remoto; si falta, calcula indicadores preservando datos desconocidos.
 export function stationMetrics(
   data: AppData,
   station: Station,
@@ -65,6 +73,7 @@ export function stationMetrics(
   };
 }
 
+// Aplica alcance y filtros de puesto, ciudad y evento antes de construir filas.
 export function reportRows(data: AppData, employee: Employee, period: Period) {
   return visibleStations(data, employee)
     .filter(
@@ -76,6 +85,7 @@ export function reportRows(data: AppData, employee: Employee, period: Period) {
     .map((station) => stationMetrics(data, station, period));
 }
 
+// Suma indicadores sin presentar conteos incompletos o inconsistentes como conocidos.
 export function totalMetrics(rows: ReturnType<typeof reportRows>) {
   const known = rows.filter((row) => row.taken !== null);
   const taken = known.reduce((sum, row) => sum + (row.taken ?? 0), 0);

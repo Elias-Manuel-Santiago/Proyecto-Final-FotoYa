@@ -1,9 +1,15 @@
+/**
+ * @file
+ * Administra tarifas de un puesto activo para dueño/encargado autorizado. Conserva los precios
+ * históricos aplicados a ventas previas.
+ */
 import { db } from '../../config/database.js';
 import { ApiError } from '../../shared/errors.js';
 import { transaction } from '../../shared/transaction.js';
 import { assertPermission, stationScope } from '../../security/access.js';
 import { requirePhotoOperator } from '../photos/photos.authorization.js';
 
+// Revalida permiso, rol y puesto activo bajo bloqueo antes de cambiar tarifas.
 const managed = (actor, input, callback) => {
   assertPermission(actor, 'prices.manage');
   stationScope(actor, input.stationId);
@@ -16,23 +22,27 @@ const managed = (actor, input, callback) => {
     return callback(connection);
   });
 };
+// Bloquea la tarifa y verifica que pertenezca al puesto solicitado.
 const target = async (connection, input) => {
   const [[row]] = await connection.execute('SELECT id_precios FROM precios WHERE id_precios=? AND id_puesto=? FOR UPDATE', [input.priceId, input.stationId]);
   if (!row) throw new ApiError(404, 'El precio no existe.');
 };
 export const pricesService = {
+  // Lista tarifas del puesto, incluidas las inactivas para su administración.
   async query(actor, input) {
     stationScope(actor, input.stationId);
     const [rows] = await db.execute(`SELECT id_precios AS id, nombre AS name, monto AS amount, id_puesto AS stationId, disponible AS active
       FROM precios WHERE id_puesto=? ORDER BY id_precios LIMIT ? OFFSET ?`, [input.stationId, String(input.limit), String(input.offset)]);
     return rows;
   },
+  // Agrega una tarifa al puesto autorizado dentro de la transacción.
   create(actor, input) {
     return managed(actor, input, async connection => {
       const [result] = await connection.execute('INSERT INTO precios (nombre,monto,id_puesto) VALUES (?,?,?)', [input.name, input.amount, input.stationId]);
       return { id: String(result.insertId) };
     });
   },
+  // Cambia nombre e importe sin reescribir precios aplicados a ventas anteriores.
   update(actor, input) {
     return managed(actor, input, async connection => {
       await target(connection, input);
@@ -40,6 +50,7 @@ export const pricesService = {
       return { id: input.priceId };
     });
   },
+  // Habilita o deshabilita la tarifa conservando su registro histórico.
   setActive(actor, input) {
     return managed(actor, input, async connection => {
       await target(connection, input);

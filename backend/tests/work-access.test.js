@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Verifica bloqueo por jornada y kiosco. Documenta excepciones necesarias para perfil y check-
+ * in.
+ */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { workAccess } from '../src/security/work-access.js';

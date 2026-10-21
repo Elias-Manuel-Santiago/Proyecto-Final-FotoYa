@@ -1,13 +1,20 @@
+/**
+ * @file
+ * Lee un multipart en memoria hasta 6 MiB. Reconoce JPG, PNG y WebP por firma binaria sin
+ * confiar en extensión o MIME declarado.
+ */
 import multer from 'multer';
 import { ApiError } from '../../shared/errors.js';
 
 export const MAX_PHOTO_BYTES = 6 * 1024 * 1024;
+// Recibe un único archivo en memoria con límites antes de procesar la carga.
 export function readPhoto(req, res, next) {
   multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_PHOTO_BYTES, files: 1, fields: 3, parts: 4, fieldSize: 128 } })
     .single('photo')(req, res, error => next(error ? new ApiError(error.code === 'LIMIT_FILE_SIZE' ? 413 : 422,
       error.code === 'LIMIT_FILE_SIZE' ? 'La foto supera los 6 MB.' : 'Formulario de foto inválido.', 'INVALID_PHOTO') : undefined));
 }
 
+// Reconoce JPEG, PNG o WebP por sus bytes y rechaza contenido no admitido.
 export function photoFormat(file) {
   const bytes = file?.buffer;
   if (!bytes?.length || bytes.length > MAX_PHOTO_BYTES) throw new ApiError(422, 'Adjuntá una foto de hasta 6 MB.', 'INVALID_PHOTO');

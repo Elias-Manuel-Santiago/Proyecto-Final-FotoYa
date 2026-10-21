@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Recoge copias por tarifa y pago. Conserva UUID al reintentar el mismo cuerpo y marca
+ * guardado tras confirmar el servidor.
+ */
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { randomUUID } from 'expo-crypto';
@@ -11,6 +16,7 @@ import type { EventSaleInput, Price } from '../../../domain/models';
 import { useAction } from '../../../hooks/useAction';
 import { useWorkspace } from '../../../providers/AppProvider';
 
+// Recoge copias y pago, conserva el UUID del intento y espera confirmación del guardado.
 export function SaleForm({
   prices,
   photoId,
@@ -40,6 +46,7 @@ export function SaleForm({
   const valid = Object.values(quantities).every(
     (value) => !value || (/^\d{1,5}$/.test(value) && Number(value) <= 10000),
   );
+  // El total local orienta al usuario; el servidor recalcula con las tarifas vigentes.
   const totalCents = prices.reduce(
     (sum, row) =>
       sum +
@@ -90,11 +97,13 @@ export function SaleForm({
               prices: lines,
             };
             const body = JSON.stringify(payload);
+            // Mismo cuerpo conserva UUID ante una respuesta perdida; cambiar datos inicia otra operación.
             const id = attempt?.body === body ? attempt.id : randomUUID();
             setAttempt({ body, id });
             onBusy(true);
             try {
               await repository.recordSale({ ...payload, operationId: id });
+              // La interfaz marca la venta como guardada únicamente después de la confirmación de la API.
               setSaved(true);
               onSaved();
             } finally {

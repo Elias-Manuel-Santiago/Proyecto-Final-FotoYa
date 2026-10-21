@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Separa login, registro y verificación públicos de las operaciones autenticadas. Aplica
+ * límites de intentos y contratos antes de delegar.
+ */
 import { authService } from './auth.service.js';
 import { authRepository } from './auth.repository.js';
 import { userService } from '../users/users.service.js';
@@ -9,6 +14,7 @@ import { endpoint, paged, validate } from '../../shared/validation.js';
 import * as schema from './auth.schemas.js';
 import { registrationService } from './registration.service.js';
 
+// Registra el acceso público antes de exigir sesión para perfil y gestión de credenciales.
 export function authRoutes() {
   const router = Router();
   const sensitive = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,

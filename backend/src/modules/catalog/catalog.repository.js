@@ -1,8 +1,14 @@
+/**
+ * @file
+ * Consulta puestos, ciudades, eventos, roles y tarifas según recurso/actor. Conserva puestos
+ * inactivos para el historial y restringe tarifas por puesto.
+ */
 import { db } from '../../config/database.js';
 import { globalScope, stationScope } from '../../security/access.js';
 import { ApiError } from '../../shared/errors.js';
 
 export const catalogRepository = {
+  // Resuelve el catálogo solicitado aplicando alcance y restricciones de roles o tarifas.
   async query(actor, input) {
     if (input.resource === 'stations') {
       const station = stationScope(actor, input.stationId);

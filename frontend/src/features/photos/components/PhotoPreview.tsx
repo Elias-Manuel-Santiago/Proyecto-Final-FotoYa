@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Solicita una URL temporal al abrir una foto autorizada. Mantiene carga, resultado y error de
+ * la previsualización en el componente.
+ */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Image, Modal, Pressable, Text, View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +11,7 @@ import { styles } from '../../../components/ui/theme';
 import { useWorkspace } from '../../../providers/AppProvider';
 import { errorMessage } from '../../../domain/format';
 
+// Gestiona miniatura y modal con URLs temporales obtenidas por la API autorizada.
 export function PhotoPreview({
   uri: localUri,
   photoId,
@@ -48,6 +54,7 @@ export function PhotoPreview({
       active = false;
     };
   }, [repository, photoId, saleId, retry]);
+  // Abre la imagen local o pide una URL renovada antes de mostrar la foto remota.
   const open = () => {
     setFailed(false);
     setError('');

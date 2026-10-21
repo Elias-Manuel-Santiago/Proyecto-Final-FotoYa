@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Expone consultas de asistencia y operaciones del kiosco. Limita intentos con contraseña y
+ * distingue historial propio de consulta administrativa.
+ */
 import { attendanceRepository } from './attendance.repository.js';
 import { Router } from 'express';
 import { permit } from '../../security/access.js';
@@ -7,6 +12,7 @@ import { empty } from '../auth/auth.schemas.js';
 import { kioskService } from './kiosk.service.js';
 import * as kiosk from './kiosk.schemas.js';
 
+// Conecta consultas y operaciones de kiosco con sus permisos y validadores.
 export function attendanceRoutes() {
   const router = Router();
   const sensitive = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, skipSuccessfulRequests: true,

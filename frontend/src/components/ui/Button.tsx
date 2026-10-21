@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Unifica botones, variantes y estado ocupado. Comparte interacción y accesibilidad entre
+ * formularios y pantallas.
+ */
 import { ActivityIndicator, Pressable, Text } from 'react-native';
 import { colors } from './theme';
 
@@ -10,6 +15,7 @@ interface Props {
   danger?: boolean;
 }
 
+// Unifica apariencia, accesibilidad y bloqueo mientras la acción está ocupada o deshabilitada.
 export function Button({
   title,
   onPress,

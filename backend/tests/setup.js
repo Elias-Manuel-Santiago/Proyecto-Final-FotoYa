@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Configura variables aisladas antes de importar el backend. Evita heredar credenciales del
+ * entorno real.
+ */
 // Las pruebas no toman las credenciales del .env real.
 Object.assign(process.env, {
   NODE_ENV: 'test', CORS_ORIGINS: 'http://localhost:8081', DB_HOST: '127.0.0.1',

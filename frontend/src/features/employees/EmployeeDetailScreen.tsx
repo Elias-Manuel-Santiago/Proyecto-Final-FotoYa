@@ -1,3 +1,8 @@
+/**
+ * @file
+ * Carga un usuario para edición y cambio de disponibilidad. Coordina confirmaciones y efectos
+ * sobre la sesión propia.
+ */
 import { Link, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
@@ -17,6 +22,7 @@ import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
 import { EmployeeForm } from './components/EmployeeForm';
 
+// Resuelve el usuario de la ruta y presenta edición, disponibilidad y acceso a asistencia.
 export function EmployeeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, employee, repository, refresh } = useWorkspace();
@@ -36,6 +42,7 @@ export function EmployeeDetailScreen() {
     assignableRoles(employee).includes(target.roleId);
   const station = data.stations.find((row) => row.id === target.stationId);
 
+  // Cambia disponibilidad con la acción compartida y refresca los datos confirmados.
   async function toggleActive() {
     await action.run(async () => {
       await repository.setEmployeeActive(target!.id, !target!.active);
