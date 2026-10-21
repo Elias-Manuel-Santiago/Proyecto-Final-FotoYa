@@ -115,7 +115,7 @@ test('fotos sin cliente no entregan metadatos ni archivos a ningún cliente', as
 });
 
 test('metadatos admiten cliente opcional sin aceptar filtros contradictorios', () => {
-  const input = schema.upload.parse({ operationId: '12345678-1234-4234-8234-123456789abc', stationId: '1' });
+  const input = schema.upload.parse({ stationId: '1' });
   assert.equal(input.clientId, null);
   assert.equal(schema.assign.safeParse({ photoId: '1', clientId: null }).success, false);
   assert.equal(schema.query.safeParse({ from: '2026-10-15', to: '2026-10-15', clientId: '1', unassigned: true }).success, false);

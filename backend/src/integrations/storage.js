@@ -100,7 +100,7 @@ export async function uploadFile(path, bytes, mime) {
   }
 }
 
-// Elimina el objeto indicado durante la limpieza de cargas pendientes.
+// Elimina el archivo nuevo cuando falla una carga.
 export async function removeFile(path) {
   validatePath(path);
   try {

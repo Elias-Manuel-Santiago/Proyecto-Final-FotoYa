@@ -11,11 +11,13 @@ import { actor } from './fixtures.js';
 import { businessDate } from '../src/modules/sales/sales.rules.js';
 import { salesService } from '../src/modules/sales/sales.service.js';
 import { salesRepository } from '../src/modules/sales/sales.repository.js';
+import { eventCache } from '../src/modules/sales/sales.events.js';
 
 afterEach(() => mock.restoreAll());
 after(() => db.end());
 
 function setup({ client, photoClient = null, stationId = '10', open = true, permission = true } = {}) {
+  mock.method(eventCache, 'get', () => ({ open, date: businessDate() }));
   const photo = { id: '1', stationId, date: businessDate(), clientId: photoClient, file: 'private.jpg' };
   const updates = [];
   let commits = 0, rollbacks = 0;
@@ -25,7 +27,6 @@ function setup({ client, photoClient = null, stationId = '10', open = true, perm
     execute: async (sql, params) => {
       if (sql.includes('SELECT id_puesto AS stationId')) return [[{ stationId: '10', roleId: '2' }]];
       if (sql.includes('JOIN permisos_rol')) return [permission ? [{ role: 'encargado' }] : []];
-      if (sql.includes('FROM event_sales')) return [[{ open, date: businessDate() }]];
       if (sql.includes('WHERE u.email')) return [client ? [client] : []];
       if (sql.startsWith('UPDATE fotos')) {
         updates.push(params); photo.clientId = params[0]; photo.clientEmail = params[1];

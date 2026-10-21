@@ -36,7 +36,7 @@ El actualizador inspecciona columnas e índices existentes y aplica únicamente 
 
 Sólo las contraseñas se guardan hasheadas con scrypt. Nombre, apellido, email y DNI se guardan directamente; email se normaliza a minúsculas y DNI sin separadores, con índices únicos. La migración convierte contraseñas antiguas en texto a scrypt y rechaza hashes de formatos desconocidos.
 
-La actualización adapta instalaciones anteriores: descifra los datos personales con la `DATA_ENCRYPTION_KEY` anterior (necesaria sólo para esa conversión), elimina hashes de búsqueda y cambia `token_hash` por `token`. Las sesiones y tokens anteriores se invalidan porque sus valores originales no se pueden recuperar; será necesario iniciar sesión otra vez. Las reservas de carga anteriores se conservan para reconciliación, pero sus UUID no pueden reutilizarse porque sólo guardaban hashes: requieren una nueva operación. No borrar la clave anterior hasta completar la conversión. Al terminar elimina `backend_locks` y `backend_migrations`; no vuelve a crearlas. Los cambios de usuarios se coordinan bloqueando las filas del catálogo de roles dentro de la transacción. Las asignaciones de permisos existentes se conservan.
+La actualización adapta instalaciones anteriores: descifra los datos personales con la `DATA_ENCRYPTION_KEY` anterior (necesaria sólo para esa conversión), elimina hashes de búsqueda y cambia `token_hash` por `token`. Las sesiones y tokens anteriores se invalidan porque sus valores originales no se pueden recuperar; será necesario iniciar sesión otra vez. La antigua tabla de reservas de carga se elimina; las fotos confirmadas se conservan. No borrar la clave anterior hasta completar la conversión. Al terminar elimina `backend_locks` y `backend_migrations`; no vuelve a crearlas. Los cambios de usuarios se coordinan bloqueando las filas del catálogo de roles dentro de la transacción. Las asignaciones de permisos existentes se conservan.
 
 Crear el primer dueño desde una terminal, dentro de `backend`:
 
@@ -127,7 +127,7 @@ Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`.
 | `/api/photos/query` | Período, paginación y `clientId` o `unassigned: true` opcionales; cliente siempre limitado a sí mismo |
 | `/api/photos/detail` | `photoId`; metadatos sin ruta privada del archivo |
 | `/api/photos/access` | `photoId`; autoriza y firma una URL temporal de consulta |
-| `/api/photos/upload` | Multipart: `photo` (archivo), `operationId` (UUID), `stationId` y `clientId` opcional |
+| `/api/photos/upload` | Multipart: `photo` (archivo), `stationId` y `clientId` opcional |
 | `/api/photos/assign` | JSON: `photoId`, `clientEmail`; guarda el mail y asocia si existe una cuenta cliente activa |
 | `/api/sales/query` | Período y paginación; cabeceras sin multiplicar totales |
 | `/api/sales/detail` | `saleId`; cabecera, fotos y tarifas históricas consultadas por separado |
@@ -158,11 +158,11 @@ Cada foto representa una familia. Las consultas diarias calculan `descartes = fo
 
 ## Ventas en eventos y tarifas por puesto
 
-Ejecutar `npm run db:migrate` antes de iniciar esta versión. La migración agrega `precios.id_puesto`, disponibilidad de tarifas, pago/copias/vendedor e identificación de reintentos en las ventas, y `event_sales` para apertura/cierre por puesto. Conserva las ventas y tarifas históricas sin reinterpretar sus cantidades. En bases anteriores, los precios sin puesto quedan con `id_puesto = NULL` y no se ofrecen para vender: asignar cada tarifa a su puesto explícitamente o crear las nuevas desde **Puestos → Precios del puesto**. En instalaciones nuevas `id_puesto` es obligatorio; la API exige puesto para todo precio nuevo. No se copian automáticamente tarifas a todos los puestos.
+Ejecutar `npm run db:migrate` antes de iniciar esta versión. La migración agrega `precios.id_puesto`, disponibilidad de tarifas, pago/copias/vendedor e identificación de reintentos en las ventas. También elimina la antigua tabla `event_sales`: la apertura/cierre por puesto ahora vive en memoria del backend. Conserva las ventas y tarifas históricas sin reinterpretar sus cantidades. En bases anteriores, los precios sin puesto quedan con `id_puesto = NULL` y no se ofrecen para vender: asignar cada tarifa a su puesto explícitamente o crear las nuevas desde **Puestos → Precios del puesto**. En instalaciones nuevas `id_puesto` es obligatorio; la API exige puesto para todo precio nuevo. No se copian automáticamente tarifas a todos los puestos.
 
 El dueño y el encargado administran tarifas desde **Precios** con el permiso `prices.manage`; el encargado sólo consulta y modifica las de su puesto. El dueño conserva el acceso desde **Puestos → Precios del puesto**. La migración agrega el permiso a estos dos roles al incorporarlo por primera vez, sin restablecerlo si se revoca después. Las consultas de usuarios, horarios, informes, fotos y ventas del encargado se limitan a su puesto; su asistencia propia también respeta ese alcance.
 
-El encargado abre o cierra las ventas de su puesto desde **Registrar venta en evento**. La apertura corresponde al día actual de Argentina. Al cruzar medianoche, la apertura anterior deja de habilitar ventas: es necesario abrir las del nuevo día. Se listan, previsualizan y venden únicamente fotos de ese puesto tomadas el día actual. Este flujo no registra ventas fuera del evento; esa categoría e interfaz quedan para una implementación independiente.
+El encargado abre o cierra las ventas de su puesto desde **Registrar venta en evento**. La apertura se guarda en una caché en memoria por puesto y corresponde al día actual de Argentina. Al reiniciar o desplegar el backend, todos los puestos quedan cerrados. Ejecutar una sola instancia/proceso del backend: esta caché no se comparte entre réplicas. Las aperturas, cierres, ventas y asignaciones se coordinan por puesto; el estado se publica después de confirmar la transacción. Al cruzar medianoche, la apertura anterior deja de habilitar ventas: es necesario abrir las del nuevo día. Se listan, previsualizan y venden únicamente fotos de ese puesto tomadas el día actual. Este flujo no registra ventas fuera del evento; esa categoría e interfaz quedan para una implementación independiente.
 
 El vendedor o encargado elige una foto, toca **Vender**, ingresa copias por tarifa y selecciona `efectivo`, `transferencia` o `tarjeta`. Se registra el método; no se procesa un cobro electrónico. La API rechaza eventos cerrados, puestos inactivos, fotos ajenas al evento, tarifas de otros puestos/no disponibles y ventas sin tarifas. Calcula el total en centavos enteros con los precios actuales del servidor y conserva cada importe unitario aplicado. Cabecera, foto, tarifas y conteos se confirman en una transacción. Las compras adicionales generan operaciones e ingresos, pero `familia_contada = false`, conservando el porcentaje. `quantity` en las consultas representa familias contabilizadas; `copies` informa las copias físicas.
 
@@ -184,14 +184,13 @@ El campo `clientId` puede omitirse o enviarse vacío: la foto queda con `id_clie
 
 Para localizar pendientes, usar `/photos/query` con `unassigned: true`. `/photos/assign` permite asignarlas después. Repetir la asignación al mismo cliente es válido; cambiarla a otro cliente responde 409 porque la reasignación no está definida. Dos asignaciones concurrentes a clientes distintos no se sobrescriben. Asignar no vuelve a cargar el archivo ni cambia conteos o ventas.
 
-Enviar un `operationId` UUID nuevo por foto y conservarlo al reintentar, junto con el mismo archivo, puesto y cliente inicial. Cambiar estos datos con el mismo UUID devuelve 409. Una respuesta perdida o dos solicitudes concurrentes no crean dos fotos ni incrementan dos veces el conteo. La fecha se calcula después de que Storage confirme la carga, en `America/Argentina/Buenos_Aires`. La referencia, el incremento de fotos, los descartes y la confirmación de la reserva se guardan en una transacción MySQL; la carga no registra una venta.
+Cada solicitud sube una foto nueva. La fecha se calcula después de que Storage confirme la carga, en `America/Argentina/Buenos_Aires`. La referencia, el incremento de fotos y los descartes se guardan en una transacción MySQL; la carga no registra una venta.
 
 Ejemplo del cuerpo multipart desde un cliente que usa Axios:
 
 ```javascript
 const form = new FormData();
 form.append('photo', file);
-form.append('operationId', operationId); // Conservar este UUID para los reintentos.
 form.append('stationId', stationId);
 if (clientId) form.append('clientId', clientId);
 await axios.post('/api/photos/upload', form, {
@@ -199,9 +198,9 @@ await axios.post('/api/photos/upload', form, {
 });
 ```
 
-`photo_uploads` conserva la solicitud original (puesto, cliente, contenido en base64 y bucket) y la ruta reservada antes de contactar Storage, sin hashing. Esta comparación exacta conserva la detección de reintentos con archivos diferentes y supone guardar una copia adicional del contenido en la reserva. El archivo consultable sigue almacenado en Storage. Si falla el almacenamiento o MySQL, la carga no se presenta como exitosa. Un reintento reconcilia el archivo incompleto de esa reserva antes de volver a subirlo, bajo bloqueo. Si COMMIT se confirmó pero se perdió su respuesta, el reintento recupera la foto ya registrada.
+Las imágenes se guardan exclusivamente en Storage. MySQL conserva los metadatos en `fotos`, sin reservas de carga ni copias Base64. Se validan permisos, puesto, cliente y archivo antes de subir. Si falla Storage o el registro en MySQL, se intenta eliminar el archivo nuevo y se devuelve el error original. Antes de borrar se comprueba que la foto no haya quedado registrada, para proteger un COMMIT confirmado cuya respuesta se perdió. Si la comprobación o el borrado fallan, puede quedar un archivo suelto; no hay reconciliación automática.
 
-Para reconciliar archivos parciales de operaciones que el cliente abandonó, ejecutar `npm run photos:reconcile`. Procesa hasta 100 reservas sin confirmar y sin intentos durante al menos cinco minutos; se puede repetir. Sólo elimina archivos de esas reservas, conserva su identificación para reintentos y nunca elimina una foto confirmada. No hay una tarea programada automáticamente. Ejecutar este comando con una cuenta de mantenimiento que pueda SELECT/UPDATE sobre estas tablas y con la misma configuración de bucket.
+Cada reenvío es una carga independiente: si se pierde la respuesta de una carga confirmada, repetirla puede duplicar la foto. `npm run db:migrate` elimina la antigua tabla `photo_uploads`, incluidas sus copias Base64; conserva las fotos registradas y no borra archivos de Storage. Aplicar con la API detenida. El comando `photos:reconcile` fue retirado.
 
 ## Operaciones pendientes por decisión del usuario
 
@@ -243,7 +242,7 @@ Los reemplazos de red, base de datos y reloj usados para probar pertenecen a `te
 
 ## Registro de clientes, Auth0 y Mailtrap
 
-Ejecutar `npm run db:migrate` antes de iniciar esta versión. Agrega `usuarios.email_verified` (las cuentas existentes se conservan verificadas), `usuarios.auth0_sub`, `client_verifications` y los permisos `clients.read`/`clients.manage`, inicialmente para el dueño. Las cuentas nuevas se crean exclusivamente como cliente y sin puesto; no reciben sesión hasta confirmar el correo.
+Ejecutar `npm run db:migrate` antes de iniciar esta versión. Agrega `usuarios.email_verified` (las cuentas existentes se conservan verificadas), `usuarios.auth0_sub`, los campos de verificación de correo en `tokens_autenticacion` y los permisos `clients.read`/`clients.manage`, inicialmente para el dueño. Las cuentas nuevas se crean exclusivamente como cliente y sin puesto; no reciben sesión hasta confirmar el correo.
 
 Configurar `MAIL_API_KEY`, `MAIL_INBOX_ID` y `SENDER` según el sandbox de Mailtrap, como en RN1. El cliente usa siempre `sandbox: true`: los mensajes se consultan en el inbox de pruebas de Mailtrap y no se entregan a la casilla real. No hay credenciales de estos servicios en RN1 adjunto; sus `.env.example` son referencias, no configuraciones operativas.
 
@@ -263,6 +262,8 @@ Todas estas rutas usan POST y el envelope habitual:
 
 El código tiene seis dígitos, vence en diez minutos y admite cinco intentos. El reenvío espera un minuto; estas rutas tienen límite por IP. Se guarda un digest del desafío y del código combinado con el desafío aleatorio; no se guarda el código en claro ni se devuelve en la API. Un fallo del correo revierte el registro/reenvío. Si se cierra el formulario, el usuario local puede continuar entrando con sus credenciales; el social puede volver a entrar con el mismo proveedor.
 
-`clients/query` devuelve únicamente clientes disponibles, busca por coincidencia parcial de correo o DNI y usa una fila adicional para `hasMore`. La baja conserva la fila y el historial, pone `disponible=FALSE`, revoca sesiones y tokens y elimina la verificación pendiente. Se revalida el permiso dentro de la transacción.
+`clients/query` devuelve únicamente clientes disponibles, busca por coincidencia parcial de correo o DNI y usa una fila adicional para `hasMore`. La baja conserva la fila y el historial, pone `disponible=FALSE` y revoca sesiones y tokens, incluida la verificación pendiente. Se revalida el permiso dentro de la transacción.
 
 Quedan pendientes ganancias netas, recuperación de contraseña, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API; las simulaciones sólo se usan en `frontend/tests/support`.
+
+La verificación de correo usa `tokens_autenticacion` con `tipo = 'email_verification'`: `token` contiene el digest del desafío, `code_hash` el digest del código vinculado al desafío, y `sent_at`/`attempts` controlan reenvíos e intentos. Se conserva una fila por usuario para este tipo; los demás tipos admiten varias. La confirmación marca `used_at` y el reenvío reemplaza el desafío. `db:migrate` copia las verificaciones de la antigua `client_verifications`, conserva códigos, fechas e intentos y elimina esa tabla después de confirmar la copia. Ejecutar con la API detenida y respaldo previo.

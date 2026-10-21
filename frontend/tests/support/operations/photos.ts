@@ -30,17 +30,6 @@ export function uploadPhotos(
   const date = businessDate(now);
   return files.map((file): UploadResult => {
     try {
-      const existing = data.photos.find(
-        (photo) => photo.operationId === file.key,
-      );
-      if (existing) {
-        if (
-          existing.stationId !== stationId ||
-          existing.employeeId !== actor.id
-        )
-          throw new Error('La operación pertenece a otra carga.');
-        return { key: file.key };
-      }
       if (
         data.stations.find((station) => station.id === stationId)?.active ===
         false

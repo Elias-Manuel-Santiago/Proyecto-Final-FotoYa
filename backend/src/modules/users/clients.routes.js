@@ -40,7 +40,6 @@ export function clientRoutes() {
     await connection.execute('UPDATE usuarios SET disponible = FALSE WHERE id_usuario = ?', [req.input.clientId]);
     await connection.execute('UPDATE sesiones_usuario SET revoked_at = COALESCE(revoked_at, UTC_TIMESTAMP(6)) WHERE id_usuario = ?', [req.input.clientId]);
     await connection.execute('UPDATE tokens_autenticacion SET used_at = COALESCE(used_at, UTC_TIMESTAMP(6)) WHERE id_usuario = ?', [req.input.clientId]);
-    await connection.execute('DELETE FROM client_verifications WHERE id_usuario = ?', [req.input.clientId]);
     return { deactivated: true };
   })));
   return router;

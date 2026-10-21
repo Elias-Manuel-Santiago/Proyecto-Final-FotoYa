@@ -10,7 +10,7 @@ import { can } from '../src/domain/permissions';
 import { visibleStations } from '../src/domain/metrics';
 import { image, now, repository, sale, today } from './fixtures';
 
-test('una carga suma una sola vez, conserva su referencia y no registra ventas', async () => {
+test('cada envío registra una foto nueva, conserva su referencia y no registra ventas', async () => {
   const repo = repository();
   await repo.uploadPhotos('photographer', 'centro', [image]);
   await repo.uploadPhotos('photographer', 'centro', [image]);
@@ -18,9 +18,10 @@ test('una carga suma una sola vez, conserva su referencia y no registra ventas',
   assert.equal(
     data.counts.find((row) => row.stationId === 'centro' && row.date === today)
       ?.taken,
-    101,
+    102,
   );
-  assert.equal(data.photos.length, 1);
+  assert.equal(data.photos.length, 2);
+  assert.notEqual(data.photos[0].id, data.photos[1].id);
   assert.equal(data.photos[0].uri, image.uri);
   assert.equal(data.sales.length, 2);
 });
@@ -39,7 +40,7 @@ test('una carga parcial cuenta solo confirmadas y admite reintentar la fallida',
   assert.equal(results[1].error, 'Fallo de prueba');
   assert.equal((await repo.snapshot()).counts[0].taken, 101);
   failing = false;
-  await repo.uploadPhotos('photographer', 'centro', batch);
+  await repo.uploadPhotos('photographer', 'centro', [batch[1]]);
   assert.equal((await repo.snapshot()).counts[0].taken, 102);
 });
 

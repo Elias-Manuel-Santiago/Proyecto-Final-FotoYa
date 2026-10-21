@@ -12,14 +12,8 @@ import { photoService } from '../photos/photos.service.js';
 import { saleAmounts } from './sales.schemas.js';
 import { businessDate, currentEvent } from './sales.rules.js';
 import { salesRepository } from './sales.repository.js';
+import { eventCache } from './sales.events.js';
 
-const columns = 'e.abierta AS open, d.fecha AS date';
-// Consulta la apertura del puesto; el bloqueo opcional serializa cambios y ventas del evento.
-const event = async (executor, stationId, lock = false) => {
-  const [[row]] = await executor.execute(`SELECT ${columns}, e.id_dia AS dayId FROM event_sales e
-    JOIN dias d ON d.id_dias = e.id_dia WHERE e.id_puesto = ? ${lock ? 'FOR UPDATE' : ''}`, [stationId]);
-  return row;
-};
 // Revalida en la transacción el permiso de venta y la asignación del operador.
 const operator = (connection, actor, stationId) => requirePhotoOperator(connection, actor, 'sales.create', stationId);
 
@@ -31,39 +25,40 @@ export const salesService = {
       throw new ApiError(404, 'La foto no pertenece a esta venta.');
     return photoService.access(actor, input.photoId);
   },
-  // Consulta la apertura del puesto; el bloqueo opcional serializa cambios y ventas del evento.
+  // Consulta la apertura en memoria del proceso.
   async event(actor, input) {
     stationScope(actor, input.stationId);
-    const row = await event(db, input.stationId);
+    const row = eventCache.get(input.stationId);
     return { open: currentEvent(row), date: row?.date ?? null };
   },
   // Permite al encargado abrir o cerrar ventas y vincula la apertura al día argentino.
   setEvent(actor, input) {
     assertPermission(actor, 'sales.create');
     if (actor.role !== 'encargado') throw new ApiError(403, 'Solo el encargado puede abrir o cerrar las ventas del evento.');
-    return transaction(async connection => {
-      const authorized = await operator(connection, actor, input.stationId);
-      if (authorized.role !== 'encargado') throw new ApiError(403, 'Solo el encargado puede abrir o cerrar ventas.');
-      const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto = ? FOR UPDATE', [input.stationId]);
-      if (!station || (input.open && !station.active)) throw new ApiError(409, 'El puesto no está disponible.');
-      const current = await event(connection, input.stationId, true);
-      if (input.open && !currentEvent(current)) {
-        const date = businessDate();
-        await connection.execute('INSERT INTO dias (fecha,id_puesto) VALUES (?,?) ON DUPLICATE KEY UPDATE id_dias=id_dias', [date, input.stationId]);
-        const [[day]] = await connection.execute('SELECT id_dias AS id FROM dias WHERE fecha=? AND id_puesto=? FOR UPDATE', [date, input.stationId]);
-        await connection.execute(`INSERT INTO event_sales (id_puesto,id_dia,abierta) VALUES (?,?,1)
-          ON DUPLICATE KEY UPDATE id_dia=VALUES(id_dia), abierta=1, updated_at=UTC_TIMESTAMP(6)`, [input.stationId, day.id]);
-      } else if (!input.open && current) {
-        await connection.execute('UPDATE event_sales SET abierta=0, updated_at=UTC_TIMESTAMP(6) WHERE id_puesto=?', [input.stationId]);
-      }
-      const row = await event(connection, input.stationId);
+    return eventCache.run(input.stationId, async () => {
+      const row = await transaction(async connection => {
+        const authorized = await operator(connection, actor, input.stationId);
+        if (authorized.role !== 'encargado') throw new ApiError(403, 'Solo el encargado puede abrir o cerrar ventas.');
+        const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto = ? FOR UPDATE', [input.stationId]);
+        if (!station || (input.open && !station.active)) throw new ApiError(409, 'El puesto no está disponible.');
+        const current = eventCache.get(input.stationId);
+        if (input.open && !currentEvent(current)) {
+          const date = businessDate();
+          await connection.execute('INSERT INTO dias (fecha,id_puesto) VALUES (?,?) ON DUPLICATE KEY UPDATE id_dias=id_dias', [date, input.stationId]);
+          const [[day]] = await connection.execute('SELECT id_dias AS id FROM dias WHERE fecha=? AND id_puesto=? FOR UPDATE', [date, input.stationId]);
+          return { open: true, date, dayId: day.id };
+        }
+        return current ? { ...current, open: input.open } : undefined;
+      });
+      // Publicar la apertura sólo después de confirmar el día en MySQL.
+      if (row) eventCache.set(input.stationId, row);
       return { open: currentEvent(row), date: row?.date ?? null };
     });
   },
   // Lista fotos del evento vigente con destinatario e indicador de ventas anteriores.
   async photos(actor, input) {
     stationScope(actor, input.stationId);
-    const current = await event(db, input.stationId);
+    const current = eventCache.get(input.stationId);
     if (!currentEvent(current)) return [];
     const [rows] = await db.execute(`SELECT f.id_fotos AS id, d.fecha AS date, f.id_cliente AS clientId,
       COALESCE(f.email_cliente, (SELECT email FROM usuarios WHERE id_usuario = f.id_cliente)) AS clientEmail,
@@ -75,7 +70,7 @@ export const salesService = {
   // Exige foto autorizada del día y evento abierto antes de emitir acceso temporal.
   async accessPhoto(actor, photoId) {
     const photo = await photoService.detail(actor, photoId);
-    const current = await event(db, photo.stationId);
+    const current = eventCache.get(photo.stationId);
     if (photo.date !== businessDate() || !currentEvent(current)) throw new ApiError(404, 'La foto no está disponible para esta venta.');
     return photoService.access(actor, photoId);
   },
@@ -84,11 +79,10 @@ export const salesService = {
     stationScope(actor, input.stationId);
     // Ordenar tarifas hace equivalentes los reintentos que solo cambian el orden de las líneas.
     const requestData = JSON.stringify({ ...input, prices: [...input.prices].sort((a, b) => a.priceId.localeCompare(b.priceId)) });
-    return transaction(async connection => {
+    return eventCache.run(input.stationId, () => transaction(async connection => {
       await operator(connection, actor, input.stationId);
-      const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto=? LOCK IN SHARE MODE', [input.stationId]);
-      // El bloqueo del evento serializa las ventas del puesto, incluidas las de una misma familia.
-      const current = await event(connection, input.stationId, true);
+      const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto=? FOR UPDATE', [input.stationId]);
+      const current = eventCache.get(input.stationId);
       const [[existing]] = await connection.execute('SELECT id_venta AS id, request_data, id_vendedor FROM venta WHERE operation_id=? FOR UPDATE', [input.operationId]);
       // Se reconoce el UUID ya confirmado antes de exigir que el evento siga abierto.
       if (existing) {
@@ -120,6 +114,6 @@ export const salesService = {
         (id_venta,id_precio,precio_unitario_aplicado,cantidad) VALUES (?,?,?,?)`, [sale.insertId, line.priceId, line.unitPrice, line.copies]);
       await connection.execute('UPDATE dias SET descartes=?, venta_total=venta_total+? WHERE id_dias=?', [discarded, amounts.total, current.dayId]);
       return { id: String(sale.insertId), total: amounts.total, copies: amounts.copies, counted };
-    });
+    }));
   },
 };

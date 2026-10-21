@@ -45,15 +45,15 @@ test('Auth0 rechaza firma falsa, issuer, audience, vencimiento y proveedores dis
 
 function verificationDb({ available = true, valid = true } = {}) {
   const token = 'A'.repeat(43), code = '123456';
-  const state = { attempts: 0, verified: false, deleted: false, sessions: 0, commits: 0 };
+  const state = { attempts: 0, verified: false, used: false, sessions: 0, commits: 0 };
   const connection = { beginTransaction: async () => {}, rollback: async () => {}, release: () => {},
     commit: async () => { state.commits++; },
     execute: async (sql, params) => {
-      if (sql.includes('SELECT u.*')) return [[state.deleted || params[0] !== digest(token) ? undefined : { id_usuario: '12', disponible: available, email_verified: state.verified }]];
+      if (sql.includes('SELECT u.*')) return [[state.used || params[0] !== digest(token) ? undefined : { id_usuario: '12', disponible: available, email_verified: state.verified }]];
       if (sql.includes('SELECT *, expires_at')) return [[{ valid, attempts: state.attempts, code_hash: codeDigest(token, code) }]];
       if (sql.includes('attempts = attempts + 1')) state.attempts++;
       else if (sql.includes('SET email_verified')) state.verified = true;
-      else if (sql.includes('DELETE FROM client_verifications')) state.deleted = true;
+      else if (sql.includes('SET used_at')) state.used = true;
       else if (sql.includes('INSERT INTO sesiones_usuario')) state.sessions++;
       else throw new Error(`SQL inesperado: ${sql}`);
       return [{}];

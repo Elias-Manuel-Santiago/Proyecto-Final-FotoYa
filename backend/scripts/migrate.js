@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { protectUsers } from './lib/protect-users.js';
 import { seedPermissions } from './lib/seed-permissions.js';
+import { migrateVerifications } from './lib/migrate-verifications.js';
 
 // Inspeccionar el esquema permite repetir la actualización sin tablas auxiliares.
 export async function migrate(db, env, { init = false } = {}) {
@@ -71,10 +72,9 @@ export async function migrate(db, env, { init = false } = {}) {
       if (!await hasColumn('venta', name)) await connection.query(`ALTER TABLE venta ADD ${name} ${definition}`);
     }
     if (!await hasIndex('venta', 'uq_venta_operation')) await connection.query('CREATE UNIQUE INDEX uq_venta_operation ON venta (operation_id)');
-    await runFile('../database/005-event-sales.sql');
     if (!await hasColumn('usuarios', 'email_verified')) await connection.query('ALTER TABLE usuarios ADD email_verified BOOLEAN NOT NULL DEFAULT TRUE');
     if (!await hasColumn('usuarios', 'auth0_sub')) await connection.query('ALTER TABLE usuarios ADD auth0_sub VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL UNIQUE');
-    await runFile('../database/006-client-registration.sql');
+    await migrateVerifications(connection, { hasColumn, hasIndex });
     if (!await hasColumn('fotos', 'email_cliente')) await connection.query('ALTER TABLE fotos ADD email_cliente VARCHAR(254) NULL');
     const photoColumns = await columns('fotos');
     if (photoColumns.some(column => column.name === 'id_cliente' && column.nullable === 'NO')) {
@@ -88,11 +88,6 @@ export async function migrate(db, env, { init = false } = {}) {
       if (!await hasIndex(table, name)) await connection.query(statement);
     }
     if (!await hasIndex('fotos', 'ix_fotos_puesto_cliente')) await connection.query('CREATE INDEX ix_fotos_puesto_cliente ON fotos (id_puesto, id_cliente, id_fotos)');
-    await runFile('../database/004-photo-uploads.sql');
-    if (!await hasColumn('photo_uploads', 'request_data')) await connection.query('ALTER TABLE photo_uploads ADD request_data LONGTEXT CHARACTER SET ascii COLLATE ascii_bin NULL');
-    for (const column of ['request_hash', 'content_hash']) {
-      if (await hasColumn('photo_uploads', column)) await connection.query(`ALTER TABLE photo_uploads DROP COLUMN ${column}`);
-    }
     await connection.beginTransaction();
     await seedPermissions(connection);
     for (const name of ['clients.read', 'clients.manage']) {
@@ -112,6 +107,10 @@ export async function migrate(db, env, { init = false } = {}) {
     // Se retiran sólo después de convertir correctamente los datos existentes.
     await connection.query('DROP TABLE IF EXISTS backend_locks');
     await connection.query('DROP TABLE IF EXISTS backend_migrations');
+    // Las fotos confirmadas y sus archivos se conservan; ya no hay reservas de carga.
+    await connection.query('DROP TABLE IF EXISTS photo_uploads');
+    // La apertura/cierre es volátil y vive en la caché del proceso.
+    await connection.query('DROP TABLE IF EXISTS event_sales');
   } catch (error) { await connection.rollback().catch(() => {}); throw error; }
   finally {
     if (acquired) await connection.query("SELECT RELEASE_LOCK('foto_ya_schema')").catch(() => {});

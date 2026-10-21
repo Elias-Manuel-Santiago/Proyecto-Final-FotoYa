@@ -320,12 +320,13 @@ test('el alta resuelve rol numérico, conserva password y envía puesto NULL; ed
   assert.deepEqual(requests.at(-1)?.body, { userId: '90', active: false });
 });
 
-test('carga multipart conserva UUID y cliente en reintentos, y respeta el tamaño máximo', async () => {
+test('carga multipart envía puesto y cliente sin UUID, y respeta el tamaño máximo', async () => {
   const { repo, requests } = fixture();
   await repo.uploadPhotos('1', [{ ...file, clientId: '42' }]);
   await repo.uploadPhotos('1', [{ ...file, clientId: '42' }]);
-  assert.equal(requests[0].body.operationId, file.key);
-  assert.equal(requests[1].body.operationId, file.key);
+  assert.equal(requests[0].body.operationId, undefined);
+  assert.equal(requests[0].body.stationId, '1');
+  assert.equal(requests[1].body.operationId, undefined);
   assert.equal(requests[0].body.clientId, '42');
   const results = await repo.uploadPhotos('1', [
     { ...file, size: 0 },
@@ -335,7 +336,7 @@ test('carga multipart conserva UUID y cliente en reintentos, y respeta el tamañ
   assert.equal(requests.length, 2);
 });
 
-test('fallo parcial no se presenta como éxito y el UUID se conserva al reintentar', async () => {
+test('fallo parcial no se presenta como éxito y se puede enviar una nueva carga', async () => {
   let attempt = 0;
   const requests: FormData[] = [];
   const api = testApi('http://api.test/api', async (_url, init) => {
@@ -356,7 +357,9 @@ test('fallo parcial no se presenta como éxito y el UUID se conserva al reintent
   const repo = new HttpFotoYaRepository(api);
   assert((await repo.uploadPhotos('1', [file]))[0].error);
   assert.equal((await repo.uploadPhotos('1', [file]))[0].error, undefined);
-  assert.equal(requests[0].get('operationId'), requests[1].get('operationId'));
+  assert.equal(requests[0].has('operationId'), false);
+  assert.equal(requests[1].has('operationId'), false);
+  assert(requests.every((request) => request.get('photo') instanceof Blob));
 });
 
 test('cada apertura obtiene acceso temporal; asignación no envía metadatos inventados', async () => {

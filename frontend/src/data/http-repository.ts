@@ -493,7 +493,7 @@ export class HttpFotoYaRepository {
     );
   }
 
-  // Envía cada archivo con su UUID estable y devuelve resultados individuales para reintentar fallos.
+  // Envía cada archivo como una carga nueva y devuelve resultados individuales.
   async uploadPhotos(
     stationId: string,
     files: PhotoFile[],
@@ -508,7 +508,6 @@ export class HttpFotoYaRepository {
         )
           throw new Error('La foto debe pesar entre 1 byte y 6 MiB.');
         const form = await photoForm(file);
-        form.append('operationId', file.key);
         form.append('stationId', stationId);
         if (file.clientId) form.append('clientId', file.clientId);
         await this.api.post('photos/upload', form, true);

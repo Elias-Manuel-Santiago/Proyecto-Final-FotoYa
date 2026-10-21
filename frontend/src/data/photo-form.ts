@@ -1,7 +1,7 @@
 /**
  * @file
  * Construye el archivo multipart desde File web o URI móvil. El repositorio agrega puesto y
- * UUID al enviar cada foto.
+ * cliente opcional al enviar cada foto.
  */
 import type { PhotoFile } from '../domain/models';
 

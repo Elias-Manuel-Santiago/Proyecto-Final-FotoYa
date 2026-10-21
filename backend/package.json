@@ -10,8 +10,7 @@
     "test:integration": "node --import ./tests/setup.js --experimental-test-module-mocks --test tests/integration/*.test.js",
     "db:init": "node scripts/migrate.js --init",
     "db:migrate": "node scripts/migrate.js",
-    "owner:create": "node scripts/create-owner.js",
-    "photos:reconcile": "node scripts/reconcile-photos.js"
+    "owner:create": "node scripts/create-owner.js"
   },
   "engines": {
     "node": ">=22"

@@ -18,13 +18,13 @@ export const digest = value => createHash('sha256').update(value).digest('hex');
 export const codeDigest = (token, code) => digest(`${token}:${code}`);
 // Aplica la espera entre envíos, renueva el desafío y envía un código válido por diez minutos.
 const issueCode = async (connection, user) => {
-  const [[recent]] = await connection.execute('SELECT sent_at > TIMESTAMPADD(SECOND, -60, UTC_TIMESTAMP(6)) AS recent FROM client_verifications WHERE id_usuario = ?', [user.id_usuario]);
+  const [[recent]] = await connection.execute("SELECT sent_at > TIMESTAMPADD(SECOND, -60, UTC_TIMESTAMP(6)) AS recent FROM tokens_autenticacion WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL", [user.id_usuario]);
   if (Number(recent?.recent)) throw new ApiError(429, 'Esperá un minuto antes de pedir otro código.', 'CODE_COOLDOWN');
   const verificationToken = newToken(), code = String(randomInt(0, 1000000)).padStart(6, '0');
-  await connection.execute(`INSERT INTO client_verifications (id_usuario, challenge, code_hash, expires_at)
-    VALUES (?, ?, ?, TIMESTAMPADD(MINUTE, 10, UTC_TIMESTAMP(6)))
-    ON DUPLICATE KEY UPDATE challenge = ?, code_hash = ?,
-    expires_at = TIMESTAMPADD(MINUTE, 10, UTC_TIMESTAMP(6)), sent_at = UTC_TIMESTAMP(6), attempts = 0`,
+  await connection.execute(`INSERT INTO tokens_autenticacion (id_usuario, tipo, token, code_hash, expires_at)
+    VALUES (?, 'email_verification', ?, ?, TIMESTAMPADD(MINUTE, 10, UTC_TIMESTAMP(6)))
+    ON DUPLICATE KEY UPDATE token = ?, code_hash = ?, used_at = NULL,
+    created_at = UTC_TIMESTAMP(6), expires_at = TIMESTAMPADD(MINUTE, 10, UTC_TIMESTAMP(6)), sent_at = UTC_TIMESTAMP(6), attempts = 0`,
     [user.id_usuario, digest(verificationToken), codeDigest(verificationToken, code), digest(verificationToken), codeDigest(verificationToken, code)]);
   await sendVerification(user.email, code);
   return { verificationToken, email: user.email, expiresIn: 600 };
@@ -62,8 +62,8 @@ export const registrationService = {
   // Localiza la cuenta por el desafío y reemplaza el código respetando la espera entre envíos.
   async resend({ verificationToken }) {
     return transaction(async connection => {
-      const [[user]] = await connection.execute(`SELECT u.* FROM usuarios u JOIN client_verifications v ON v.id_usuario = u.id_usuario
-        WHERE v.challenge = ? FOR UPDATE`, [digest(verificationToken)]);
+      const [[user]] = await connection.execute(`SELECT u.* FROM usuarios u JOIN tokens_autenticacion v ON v.id_usuario = u.id_usuario
+        WHERE v.token = ? AND v.tipo = 'email_verification' AND v.used_at IS NULL FOR UPDATE`, [digest(verificationToken)]);
       if (!user?.disponible || user.email_verified) throw new ApiError(422, 'La verificación ya no está disponible.');
       return issueCode(connection, user);
     });
@@ -72,19 +72,19 @@ export const registrationService = {
   async verify({ verificationToken, code }) {
     const result = await transaction(async connection => {
       // Bloquear usuario antes de cambiar su verificación o emitir una sesión.
-      const [[user]] = await connection.execute(`SELECT u.* FROM usuarios u JOIN client_verifications v ON v.id_usuario = u.id_usuario
-        WHERE v.challenge = ? FOR UPDATE`, [digest(verificationToken)]);
+      const [[user]] = await connection.execute(`SELECT u.* FROM usuarios u JOIN tokens_autenticacion v ON v.id_usuario = u.id_usuario
+        WHERE v.token = ? AND v.tipo = 'email_verification' AND v.used_at IS NULL FOR UPDATE`, [digest(verificationToken)]);
       if (!user?.disponible || user.email_verified) return null;
       const [[verification]] = await connection.execute(`SELECT *, expires_at > UTC_TIMESTAMP(6) AS valid
-        FROM client_verifications WHERE id_usuario = ? FOR UPDATE`, [user.id_usuario]);
+        FROM tokens_autenticacion WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL FOR UPDATE`, [user.id_usuario]);
       if (!Number(verification.valid) || verification.attempts >= 5) return null;
       if (verification.code_hash !== codeDigest(verificationToken, code)) {
         // Se devuelve null para confirmar el incremento; lanzar aquí revertiría el intento fallido.
-        await connection.execute('UPDATE client_verifications SET attempts = attempts + 1 WHERE id_usuario = ?', [user.id_usuario]);
+        await connection.execute("UPDATE tokens_autenticacion SET attempts = attempts + 1 WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL", [user.id_usuario]);
         return null;
       }
       await connection.execute('UPDATE usuarios SET email_verified = TRUE WHERE id_usuario = ?', [user.id_usuario]);
-      await connection.execute('DELETE FROM client_verifications WHERE id_usuario = ?', [user.id_usuario]);
+      await connection.execute("UPDATE tokens_autenticacion SET used_at = UTC_TIMESTAMP(6) WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL", [user.id_usuario]);
       return session(connection, user);
     });
     // El error se emite después del commit para conservar el límite de intentos.

@@ -144,10 +144,16 @@ CREATE TABLE tokens_autenticacion (
   id_usuario BIGINT UNSIGNED NOT NULL,
   tipo VARCHAR(50) NOT NULL,
   token VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  code_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  sent_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  id_usuario_verificacion BIGINT UNSIGNED GENERATED ALWAYS AS
+    (CASE WHEN tipo = 'email_verification' THEN id_usuario ELSE NULL END) STORED,
   expires_at DATETIME(6) NOT NULL,
   used_at DATETIME(6) NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   CONSTRAINT uq_tokens_token UNIQUE (token),
+  CONSTRAINT uq_tokens_verificacion_usuario UNIQUE (id_usuario_verificacion),
   CONSTRAINT fk_tokens_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario),
   CONSTRAINT ck_tokens_expiracion CHECK (expires_at > created_at),
   CONSTRAINT ck_tokens_uso CHECK (used_at IS NULL OR used_at >= created_at)

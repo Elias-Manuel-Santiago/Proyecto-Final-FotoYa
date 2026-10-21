@@ -45,12 +45,11 @@ Cada archivo ejecutable de las carpetas vigentes tiene un comentario de responsa
 | [backend/src/modules/photos/photos.assignment.js](../backend/src/modules/photos/photos.assignment.js) | Guarda el correo y enlaza una cuenta cliente activa si existe. Impide cambiar el cliente enlazado y exige evento vigente al asignar desde ventas. |
 | [backend/src/modules/photos/photos.authorization.js](../backend/src/modules/photos/photos.authorization.js) | Revalida usuario, permiso, sesión y alcance dentro de la transacción. Comprueba que el cliente opcional exista y esté activo con rol cliente. |
 | [backend/src/modules/photos/photos.files.js](../backend/src/modules/photos/photos.files.js) | Lee un multipart en memoria hasta 6 MiB. Reconoce JPG, PNG y WebP por firma binaria sin confiar en extensión o MIME declarado. |
-| [backend/src/modules/photos/photos.reconciliation.js](../backend/src/modules/photos/photos.reconciliation.js) | Limpia objetos de reservas sin foto confirmada ni intentos recientes. Comprueba bajo bloqueo el bucket y la ausencia de foto antes de eliminar. |
 | [backend/src/modules/photos/photos.repository.js](../backend/src/modules/photos/photos.repository.js) | Lee metadatos por período, puesto y cliente sin generar URLs. find admite conexión transaccional y bloqueo para escrituras coordinadas. |
 | [backend/src/modules/photos/photos.routes.js](../backend/src/modules/photos/photos.routes.js) | Conecta consulta, detalle, acceso privado, asignación y carga. La carga recibe un archivo multipart y limita solicitudes adicionales. |
-| [backend/src/modules/photos/photos.schemas.js](../backend/src/modules/photos/photos.schemas.js) | Valida filtros, correo de asignación y UUID de carga. Normaliza el multipart para entregar un contrato definido al servicio. |
+| [backend/src/modules/photos/photos.schemas.js](../backend/src/modules/photos/photos.schemas.js) | Valida filtros y correo de asignación. Normaliza el multipart para entregar un contrato definido al servicio. |
 | [backend/src/modules/photos/photos.service.js](../backend/src/modules/photos/photos.service.js) | Autoriza metadatos y vistas previas por cliente o alcance del personal. Omite la ruta interna del archivo en los detalles públicos. |
-| [backend/src/modules/photos/photos.upload.js](../backend/src/modules/photos/photos.upload.js) | Reserva una carga por UUID antes de usar Storage. Bajo bloqueo confirma foto/conteos y devuelve el resultado anterior de operaciones confirmadas. |
+| [backend/src/modules/photos/photos.upload.js](../backend/src/modules/photos/photos.upload.js) | Sube una foto y confirma metadatos y conteos en una transacción. Si falla, intenta retirar el archivo nuevo que no quedó registrado. |
 | [backend/src/modules/reports/reports.queries.js](../backend/src/modules/reports/reports.queries.js) | Agrega ventas por día antes de unirlas con puestos. Conserva NULL en métricas incompletas/inconsistentes y evita duplicar ventas por joins. |
 | [backend/src/modules/reports/reports.repository.js](../backend/src/modules/reports/reports.repository.js) | Ejecuta conteos e informes según alcance. Calcula el resumen sobre todo el filtro, sin depender de la página del listado. |
 | [backend/src/modules/reports/reports.routes.js](../backend/src/modules/reports/reports.routes.js) | Publica conteos diarios, informes y resumen del período. Distingue permisos de conteos/informes y valida filtros inclusivos. |
@@ -75,7 +74,6 @@ Cada archivo ejecutable de las carpetas vigentes tiene un comentario de responsa
 | [backend/scripts/lib/protect-users.js](../backend/scripts/lib/protect-users.js) | Normaliza datos y convierte contraseñas heredadas a scrypt. Rechaza formatos desconocidos en lugar de asumir que son válidos. |
 | [backend/scripts/lib/seed-permissions.js](../backend/scripts/lib/seed-permissions.js) | Prepara roles, permisos y relaciones iniciales. Distingue la inicialización de las asignaciones ya administradas. |
 | [backend/scripts/migrate.js](../backend/scripts/migrate.js) | Actualiza el esquema inspeccionando columnas/índices bajo bloqueo MySQL. --init importa la base vacía antes de aplicar extensiones y conversiones. |
-| [backend/scripts/reconcile-photos.js](../backend/scripts/reconcile-photos.js) | Ejecuta la reconciliación de cargas como mantenimiento. Informa el resultado y cierra el pool al finalizar. |
 
 ## Frontend: rutas
 
@@ -107,7 +105,7 @@ Cada archivo ejecutable de las carpetas vigentes tiene un comentario de responsa
 | --- | --- |
 | [frontend/src/data/api-client.ts](../frontend/src/data/api-client.ts) | Centraliza POST, Bearer, timeouts y errores. Detecta respuestas de otra sesión y pagina sin presentar resultados truncados como totales. |
 | [frontend/src/data/http-repository.ts](../frontend/src/data/http-repository.ts) | Traduce HTTP a modelos de pantalla y concentra operaciones. Recupera permisos actuales, normaliza IDs/fechas y carga recursos permitidos. |
-| [frontend/src/data/photo-form.ts](../frontend/src/data/photo-form.ts) | Construye el archivo multipart desde File web o URI móvil. El repositorio agrega puesto y UUID al enviar cada foto. |
+| [frontend/src/data/photo-form.ts](../frontend/src/data/photo-form.ts) | Construye el archivo multipart desde File web o URI móvil. El repositorio agrega puesto y cliente opcional al enviar cada foto. |
 | [frontend/src/data/session-persistence.ts](../frontend/src/data/session-persistence.ts) | Define almacenamiento mínimo de sesión y ordena escrituras/borrados. Deriva una clave por URL de API para separar entornos. |
 | [frontend/src/data/session-storage.native.ts](../frontend/src/data/session-storage.native.ts) | Persiste el token nativo con SecureStore. Comparte interfaz y orden de escrituras con web usando protección del dispositivo. |
 | [frontend/src/data/session-storage.ts](../frontend/src/data/session-storage.ts) | Persiste el token web en localStorage. Tolera ausencia de window en exportación estática y serializa escrituras con el adaptador común. |
@@ -191,7 +189,6 @@ Cada archivo ejecutable de las carpetas vigentes tiene un comentario de responsa
 | --- | --- |
 | [backend/database/002-query-indexes.sql](../backend/database/002-query-indexes.sql) | Índices de consultas de usuarios, fotos, días, horarios y sesiones. migrate.js inspecciona índices antes de ejecutar definiciones pendientes. |
 | [backend/database/003-photo-ownership.sql](../backend/database/003-photo-ownership.sql) | SQL de transición para cliente opcional y photos.assign. El migrador actual realiza esa adaptación por inspección y no ejecuta este archivo directamente. |
-| [backend/database/004-photo-uploads.sql](../backend/database/004-photo-uploads.sql) | Define reservas por UUID con actor, contenido, bucket y posible foto confirmada. El índice de pendientes facilita la reconciliación. |
 | [backend/database/005-event-sales.sql](../backend/database/005-event-sales.sql) | Define apertura por puesto/día. La clave foránea compuesta impide asociar una apertura con el día de otro puesto. |
 | [backend/database/006-client-registration.sql](../backend/database/006-client-registration.sql) | Define desafíos con digests, vencimiento e intentos. Mantiene una sola verificación vigente por usuario. |
 | [database/foto_ya.sql](../database/foto_ya.sql) | Esquema base para una instalación vacía. Define catálogos, usuarios, días, fotos, ventas y sesiones con restricciones y se completa con backend/scripts/migrate.js. |
