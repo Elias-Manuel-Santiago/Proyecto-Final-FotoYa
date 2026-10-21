@@ -21,6 +21,7 @@ import { businessDate, periodError, utcInstant } from '../domain/dates';
 import { errorMessage } from '../domain/format';
 import { ApiClient } from './api-client';
 import { photoForm } from './photo-form';
+import type { SessionStorage } from './session-persistence';
 
 const roles: Record<string, RoleId> = {
   dueno: 'owner',
@@ -92,21 +93,49 @@ export class HttpFotoYaRepository {
   setOnProfile(listener?: (employee: Employee) => void) {
     this.onProfile = listener;
   }
-  constructor(public api: ApiClient) {}
+  constructor(
+    public api: ApiClient,
+    private sessionStorage?: SessionStorage,
+  ) {}
+
+  async restoreSession() {
+    const revision = this.profileRevision;
+    const token = await this.sessionStorage?.read();
+    if (revision !== this.profileRevision) return false;
+    if (!token) return false;
+    if (!/^[\w-]{43}$/.test(token)) {
+      await this.clearSession();
+      return false;
+    }
+    this.api.setToken(token);
+    return true;
+  }
+
+  async acceptSession(token: string) {
+    this.profileRevision += 1;
+    this.api.setToken(token);
+    await this.sessionStorage?.write(token);
+  }
+
+  async clearSession() {
+    this.profileRevision += 1;
+    this.api.setToken(null);
+    await this.sessionStorage?.write(null);
+  }
 
   async login(email: string, password: string) {
     const result = await this.api.post<{ token: string }>('auth/login', {
       email: email.trim(),
       password,
     });
-    this.api.setToken(result.token);
+    await this.acceptSession(result.token);
   }
 
   async logout() {
     try {
       await this.api.post('auth/logout');
     } finally {
-      this.api.setToken(null);
+      await this.clearSession();
     }
   }
 

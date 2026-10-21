@@ -7,6 +7,7 @@ import { ApiError } from '../../data/api-client';
 import { errorMessage } from '../../domain/format';
 import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
+import { PasswordField } from '../../components/ui/PasswordField';
 import { Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
 import { styles } from '../../components/ui/theme';
@@ -191,11 +192,11 @@ export function LoginScreen() {
         />
       )}
       {(mode === 'login' || mode === 'register') && (
-        <Field
+        <PasswordField
+          key={mode}
           label="Contraseña"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
           maxLength={128}
           autoCapitalize="none"
           autoCorrect={false}
@@ -205,11 +206,10 @@ export function LoginScreen() {
       {mode === 'register' && (
         <>
           <Text style={styles.muted}>Usá entre 12 y 128 caracteres.</Text>
-          <Field
+          <PasswordField
             label="Repetir contraseña"
             value={confirmation}
             onChangeText={setConfirmation}
-            secureTextEntry
             maxLength={128}
             autoCapitalize="none"
             autoCorrect={false}

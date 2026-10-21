@@ -1,0 +1,327 @@
+import { Redirect } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { Text } from 'react-native';
+import { useApp } from '../../providers/AppProvider';
+import { useSocial } from '../../providers/social-context';
+import { ApiError } from '../../data/api-client';
+import { errorMessage } from '../../domain/format';
+import { Button } from '../../components/ui/Button';
+import { Field } from '../../components/ui/Field';
+import { PasswordField } from '../../components/ui/PasswordField';
+import { Feedback } from '../../components/ui/Feedback';
+import { Screen } from '../../components/ui/Screen';
+import { styles } from '../../components/ui/theme';
+
+interface AuthResult {
+  token?: string;
+  verificationToken?: string;
+  registrationRequired?: boolean;
+  email?: string;
+}
+export function LoginScreen() {
+  const { employee, loading, error, login, repository, acceptSession } =
+    useApp();
+  const social = useSocial();
+  const [mode, setMode] = useState<'login' | 'register' | 'verify' | 'social'>(
+    'login',
+  );
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [dni, setDni] = useState('');
+  const [code, setCode] = useState('');
+  const [verificationToken, setVerificationToken] = useState('');
+  const [idToken, setIdToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [canResend, setCanResend] = useState(false);
+  const consumed = useRef('');
+  const locked = busy || loading || social.loading;
+  useEffect(() => {
+    if (!verificationToken) return;
+    const timer = setTimeout(() => setCanResend(true), 60000);
+    return () => clearTimeout(timer);
+  }, [verificationToken]);
+  async function result(value: AuthResult) {
+    if (value.token) {
+      setIdToken('');
+      setPassword('');
+      await acceptSession(value.token);
+    } else if (value.verificationToken) {
+      setVerificationToken(value.verificationToken);
+      setCanResend(false);
+      setCode('');
+      setPassword('');
+      setConfirmation('');
+      setEmail(value.email ?? email);
+      setMode('verify');
+      setNotice(
+        'Enviamos un código de seis dígitos a tu correo. Vence en diez minutos.',
+      );
+    } else if (value.registrationRequired) {
+      setEmail(value.email ?? '');
+      setMode('social');
+    }
+  }
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    setLocalError('');
+    setNotice('');
+    try {
+      await action();
+    } catch (cause) {
+      setLocalError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  useEffect(() => {
+    const token = social.pendingToken;
+    if (!token || consumed.current === token) return;
+    consumed.current = token;
+    social.consume();
+    setIdToken(token);
+    void run(async () =>
+      result(
+        await repository.api.post<AuthResult>('auth/social', {
+          idToken: token,
+        }),
+      ),
+    );
+    // El token se consume una sola vez al regresar de Auth0 en web.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [social.pendingToken]);
+  async function submit() {
+    if (mode === 'login') {
+      try {
+        await login(email, password);
+      } catch (cause) {
+        if (!(cause instanceof ApiError) || cause.code !== 'EMAIL_UNVERIFIED')
+          throw cause;
+        await result(
+          await repository.api.post<AuthResult>('auth/verification/start', {
+            email: email.trim(),
+            password,
+          }),
+        );
+      }
+    } else if (mode === 'register') {
+      if (password !== confirmation)
+        throw new Error('Las contraseñas no coinciden.');
+      if (password.length < 12)
+        throw new Error('La contraseña debe tener al menos 12 caracteres.');
+      await result(
+        await repository.api.post<AuthResult>('auth/register', {
+          firstName,
+          lastName,
+          dni,
+          email: email.trim(),
+          password,
+        }),
+      );
+    } else if (mode === 'social') {
+      await result(
+        await repository.api.post<AuthResult>('auth/social', {
+          idToken,
+          firstName,
+          lastName,
+          dni,
+        }),
+      );
+    } else {
+      await result(
+        await repository.api.post<AuthResult>('auth/verification/confirm', {
+          verificationToken,
+          code,
+        }),
+      );
+    }
+  }
+  if (employee) return <Redirect href="/home" />;
+  const creating = mode === 'register' || mode === 'social';
+  return (
+    <Screen title="Foto Ya">
+      <Text style={styles.heading}>
+        {mode === 'verify'
+          ? 'Confirmá tu correo'
+          : creating
+            ? 'Crear cuenta de cliente'
+            : 'Iniciar sesión'}
+      </Text>
+      {creating && (
+        <>
+          <Field
+            label="Nombre"
+            value={firstName}
+            onChangeText={setFirstName}
+            maxLength={100}
+            editable={!locked}
+          />
+          <Field
+            label="Apellido"
+            value={lastName}
+            onChangeText={setLastName}
+            maxLength={100}
+            editable={!locked}
+          />
+          <Field
+            label="DNI"
+            value={dni}
+            onChangeText={setDni}
+            keyboardType="numeric"
+            maxLength={20}
+            editable={!locked}
+          />
+        </>
+      )}
+      {mode === 'verify' || mode === 'social' ? (
+        <Text style={styles.text}>{email}</Text>
+      ) : (
+        <Field
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={254}
+          editable={!locked}
+        />
+      )}
+      {(mode === 'login' || mode === 'register') && (
+        <PasswordField
+          key={mode}
+          label="Contraseña"
+          value={password}
+          onChangeText={setPassword}
+          maxLength={128}
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!locked}
+        />
+      )}
+      {mode === 'register' && (
+        <>
+          <Text style={styles.muted}>Usá entre 12 y 128 caracteres.</Text>
+          <PasswordField
+            label="Repetir contraseña"
+            value={confirmation}
+            onChangeText={setConfirmation}
+            maxLength={128}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!locked}
+          />
+        </>
+      )}
+      {mode === 'verify' && (
+        <Field
+          label="Código de verificación"
+          value={code}
+          onChangeText={setCode}
+          keyboardType="numeric"
+          maxLength={6}
+          editable={!locked}
+        />
+      )}
+      <Feedback
+        error={localError || (mode === 'login' ? error : '') || social.error}
+        success={notice}
+      />
+      <Button
+        title={
+          mode === 'verify'
+            ? 'Confirmar correo'
+            : creating
+              ? 'Crear cuenta'
+              : 'Ingresar'
+        }
+        busy={locked}
+        disabled={
+          mode === 'verify'
+            ? !/^\d{6}$/.test(code)
+            : creating
+              ? !firstName.trim() ||
+                !lastName.trim() ||
+                !dni.trim() ||
+                !email.trim() ||
+                (mode === 'register' && !password)
+              : !email.trim() || !password
+        }
+        onPress={() => {
+          void run(submit);
+        }}
+      />
+      {mode === 'verify' && (
+        <Button
+          title="Reenviar código"
+          secondary
+          disabled={locked || !canResend}
+          onPress={() => {
+            void run(async () =>
+              result(
+                await repository.api.post<AuthResult>(
+                  'auth/verification/resend',
+                  { verificationToken },
+                ),
+              ),
+            );
+          }}
+        />
+      )}
+      <Button
+        title={mode === 'login' ? 'Crear cuenta de cliente' : 'Volver al login'}
+        secondary
+        disabled={locked}
+        onPress={() => {
+          setMode(mode === 'login' ? 'register' : 'login');
+          setLocalError('');
+          setNotice('');
+          setPassword('');
+          setConfirmation('');
+          setIdToken('');
+          setVerificationToken('');
+        }}
+      />
+      {(mode === 'login' || mode === 'register') && (
+        <>
+          <Text style={styles.heading}>Continuar con</Text>
+          {(
+            [
+              ['Google', 'google-oauth2'],
+              ['GitHub', 'github'],
+              ['Apple', 'apple'],
+            ] as const
+          ).map(([label, connection]) => (
+            <Button
+              key={connection}
+              title={label}
+              secondary
+              disabled={locked || !social.enabled}
+              onPress={() => {
+                void run(async () => {
+                  const token = await social.signIn(connection);
+                  setIdToken(token);
+                  await result(
+                    await repository.api.post<AuthResult>('auth/social', {
+                      idToken: token,
+                    }),
+                  );
+                });
+              }}
+            />
+          ))}
+          {!social.enabled && (
+            <Text style={styles.muted}>
+              El acceso con servicios externos no está disponible por el
+              momento.
+            </Text>
+          )}
+        </>
+      )}
+    </Screen>
+  );
+}

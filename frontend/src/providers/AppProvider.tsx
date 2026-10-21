@@ -11,17 +11,20 @@ import { AppState } from 'react-native';
 import type { AppData, Employee } from '../domain/models';
 import { ApiClient } from '../data/api-client';
 import { HttpFotoYaRepository } from '../data/http-repository';
+import { createSessionStorage } from '../data/session-storage';
 import { errorMessage } from '../domain/format';
 
 interface AppContextValue {
   data: AppData | null;
   employee: Employee | null;
   loading: boolean;
+  restoring: boolean;
   error: string;
   login: (email: string, password: string) => Promise<void>;
   acceptSession: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  restoreSession: () => Promise<void>;
   enterCheckIn: () => Promise<void>;
   exitCheckIn: (password: string) => Promise<void>;
   repository: HttpFotoYaRepository;
@@ -30,17 +33,18 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [repository] = useState(
-    () =>
-      new HttpFotoYaRepository(
-        new ApiClient(
-          process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api',
-        ),
-      ),
-  );
+  const [repository] = useState(() => {
+    const apiUrl =
+      process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+    return new HttpFotoYaRepository(
+      new ApiClient(apiUrl),
+      createSessionStorage(apiUrl),
+    );
+  });
   const [data, setData] = useState<AppData | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [restoring, setRestoring] = useState(true);
   const [error, setError] = useState('');
   const generation = useRef(0);
   const signedIn = useRef(false);
@@ -51,6 +55,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setData(null);
     setEmployee(null);
     setLoading(false);
+    setRestoring(false);
   }, []);
 
   useEffect(() => {
@@ -62,6 +67,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     repository.api.setOnUnauthorized(() => {
       clear();
       setError('La sesión venció o fue revocada. Volvé a iniciar sesión.');
+      void repository.clearSession().catch(() => {
+        setError(
+          'No se pudo borrar la sesión guardada. Volvé a intentar cerrar sesión.',
+        );
+      });
     });
     return () => {
       repository.api.setOnUnauthorized();
@@ -82,6 +92,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       throw cause;
     }
   }, [repository]);
+
+  const restoreSession = useCallback(() => {
+    const current = generation.current;
+    return repository
+      .restoreSession()
+      .then(async (restored) => {
+        if (current !== generation.current) return;
+        if (restored) {
+          await refresh();
+          if (current !== generation.current) return;
+          signedIn.current = true;
+        }
+        setRestoring(false);
+      })
+      .catch((cause) => {
+        // Un fallo de red no elimina una credencial que todavía puede ser válida.
+        if (current === generation.current) setError(errorMessage(cause));
+      })
+      .finally(() => {
+        if (current === generation.current) setLoading(false);
+      });
+  }, [repository, refresh]);
+
+  useEffect(() => {
+    void restoreSession();
+  }, [restoreSession]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -152,18 +188,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
   const logout = async () => {
+    setError('');
     try {
       await repository.logout();
+    } catch (cause) {
+      setError(errorMessage(cause));
+      throw cause;
     } finally {
       clear();
-      setError('');
     }
   };
   const acceptSession = async (token: string) => {
     setLoading(true);
     setError('');
-    repository.api.setToken(token);
     try {
+      await repository.acceptSession(token);
       await refresh();
       signedIn.current = true;
     } catch (cause) {
@@ -180,11 +219,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         data,
         employee,
         loading,
+        restoring,
         error,
         login,
         acceptSession,
         logout,
         refresh,
+        restoreSession: async () => {
+          setLoading(true);
+          setError('');
+          await restoreSession();
+        },
         enterCheckIn,
         exitCheckIn,
         repository,
