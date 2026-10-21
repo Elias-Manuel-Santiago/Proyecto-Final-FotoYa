@@ -15,11 +15,13 @@ export function PeriodFilters({
   stations,
   onChange,
   extended = false,
+  allowScopeChange = true,
 }: {
   period: Period;
   stations: Station[];
   onChange: (value: Partial<Period>) => void;
   extended?: boolean;
+  allowScopeChange?: boolean;
 }) {
   return (
     <View style={styles.card}>
@@ -35,7 +37,7 @@ export function PeriodFilters({
         onChangeText={(to) => onChange({ to })}
         autoCapitalize="none"
       />
-      {stations.length > 1 && (
+      {allowScopeChange && stations.length > 1 && (
         <Select
           label="Puesto"
           value={period.stationId}
@@ -46,7 +48,7 @@ export function PeriodFilters({
           onChange={(stationId) => onChange({ stationId })}
         />
       )}
-      {extended && (
+      {allowScopeChange && extended && (
         <>
           <Select
             label="Ciudad"

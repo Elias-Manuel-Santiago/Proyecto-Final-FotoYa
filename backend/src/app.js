@@ -33,7 +33,7 @@ export function createApp() {
   app.use(helmet(), cors({ methods: ['POST'], origin(origin, callback) {
     callback(origin && !env.CORS_ORIGINS.includes(origin) ? new ApiError(403, 'Origen no permitido.') : null, true);
   } }));
-  app.use(rateLimit({ windowMs: 60000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false,
+  app.use(rateLimit({ windowMs: 60000, limit: 600, standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: { code: 'RATE_LIMIT', message: 'Demasiadas solicitudes. Probá más tarde.' } } }));
   app.use((req, res, next) => req.method === 'POST' ? next() : res.status(405).set('Allow', 'POST, OPTIONS')
     .json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Usá POST para consultar la API.' } }));

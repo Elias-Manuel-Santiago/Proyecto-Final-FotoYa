@@ -63,6 +63,8 @@ Los tests de contratos verifican los cuerpos contra validadores del backend, per
 
 ## Registro y clientes
 
+En **Estadísticas e ingresos**, el encargado consulta únicamente su puesto asignado: se muestra su nombre y sólo se permite cambiar las fechas, sin selectores de puesto, ciudad o evento. El listado y la gestión de **Usuarios** también se limitan a su puesto. El servidor valida este alcance en cada consulta. Dueño y secretario conservan sus filtros globales según sus permisos.
+
 Desde el login se puede crear una cuenta local de cliente o continuar con Google, GitHub o Apple. El alta pide nombre, apellido y DNI; la local también pide correo y contraseña confirmada de 12–128 caracteres. Ambos registros exigen confirmar un código enviado mediante el sandbox de Mailtrap, con opción de reenvío. El backend debe tener aplicada la migración y configurado Mailtrap.
 
 Configurar las variables de `frontend/.env.example`: `EXPO_PUBLIC_AUTH0_DOMAIN`, `EXPO_PUBLIC_AUTH0_CLIENT_ID` (aplicación Native) y `EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID` (aplicación SPA). Sus IDs deben coincidir con `AUTH0_CLIENT_IDS` del backend. `app.config.js` habilita el plugin de Auth0 cuando hay configuración nativa; usa el esquema `fotoya`, bundle ID y package `com.fotoya.app`. Se incluyó `expo-dev-client`: Auth0 móvil requiere una nueva build de desarrollo, no Expo Go.

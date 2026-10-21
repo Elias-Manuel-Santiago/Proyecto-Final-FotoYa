@@ -22,7 +22,11 @@ import { DailyEarnings } from './components/DailyEarnings';
 // Consulta informes por período y presenta resumen e ingresos de los puestos filtrados.
 export function ReportsScreen() {
   const { employee } = useWorkspace();
-  const { period, update, error: periodError } = usePeriod();
+  const { period: filters, update, error: periodError } = usePeriod();
+  const ownStationOnly = employee.roleId === 'manager';
+  const period = ownStationOnly
+    ? { ...filters, stationId: employee.stationId, city: '', event: '' }
+    : filters;
   const { data, loading, reload, error: queryError } = usePeriodData(period);
   const error = periodError || queryError;
   const rows = error ? [] : reportRows(data, employee, period);
@@ -32,11 +36,21 @@ export function ReportsScreen() {
       refreshing={loading}
       onRefresh={reload}
     >
+      {ownStationOnly && (
+        <Text style={styles.muted}>
+          Puesto:{' '}
+          {employee.stationName ||
+            data.stations.find((station) => station.id === employee.stationId)
+              ?.name ||
+            'Sin puesto asignado'}
+        </Text>
+      )}
       <PeriodFilters
         period={period}
         stations={visibleStations(data, employee)}
         onChange={update}
         extended
+        allowScopeChange={!ownStationOnly}
       />
       <Feedback error={error} />
       {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
