@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider, useApp } from '../providers/AppProvider';
+import { SocialProvider } from '../providers/SocialProvider';
 
 function AppNavigator() {
   const { employee } = useApp();
@@ -21,9 +22,11 @@ function AppNavigator() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <AppProvider>
-        <AppNavigator />
-      </AppProvider>
+      <SocialProvider>
+        <AppProvider>
+          <AppNavigator />
+        </AppProvider>
+      </SocialProvider>
     </SafeAreaProvider>
   );
 }

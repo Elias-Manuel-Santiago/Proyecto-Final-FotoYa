@@ -17,6 +17,8 @@ let admin, db, server, http, passwordHash, authRepository, photoUploads, busines
 const users = {}, tokens = {};
 const objects = new Map(), storageCalls = { uploads: 0 };
 let failureMode = null;
+const verificationMail = [];
+let mailFailure = false;
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=', 'base64');
 const storage = {
   signedUrl: async file => ({ url: `https://private.example/${file}`, expiresIn: 60 }),
@@ -53,6 +55,13 @@ before(async () => {
   mock.module('../../src/integrations/storage.js', { namedExports: {
     uploadFile: storage.upload, removeFile: storage.remove, signedUrl: storage.signedUrl, signedPreviewUrl: storage.signedUrl,
   } });
+  mock.module('../../src/integrations/mail.js', { namedExports: { sendVerification: async (email, code) => {
+    if (mailFailure) throw new ApiError(502, 'Correo no disponible.', 'MAIL_UNAVAILABLE');
+    verificationMail.push({ email, code });
+  } } });
+  mock.module('../../src/integrations/auth0.js', { namedExports: { socialIdentity: async idToken => ({
+    subject: `google-oauth2|${idToken}`, email: idToken === 'owner' ? 'dueno@example.com' : `${idToken}@social.example.com`,
+  }) } });
   ({ authRepository } = await import('../../src/modules/auth/auth.repository.js'));
   ({ photoUploads, businessDate } = await import('../../src/modules/photos/photos.upload.js'));
   ({ reconcilePhotoUploads } = await import('../../src/modules/photos/photos.reconciliation.js'));
@@ -576,6 +585,91 @@ integration('sesiones vencidas y revocación de sesiones ajenas', async () => {
   assert.equal(row.revoked_at, null);
 });
 
+integration('registro local exige código, permite reenvío y revoca acceso tras la baja lógica del cliente', async () => {
+  const input = { firstName: 'Cliente nuevo', lastName: 'Apellido', email: 'nuevo@example.com', dni: '87654321', password: 'Password-test-1234' };
+  assert.equal((await call('auth/register', { ...input, roleId: '1' }, 'anon')).status, 422);
+  const registration = await call('auth/register', input, 'anon');
+  assert.equal(registration.status, 200);
+  let verificationToken = registration.data.data.verificationToken;
+  assert(verificationToken);
+  assert.equal((await call('auth/login', { email: input.email, password: input.password }, 'anon')).data.error.code, 'EMAIL_UNVERIFIED');
+  assert.equal((await call('auth/verification/resend', { verificationToken }, 'anon')).status, 429);
+  await db.execute('UPDATE client_verifications SET sent_at = TIMESTAMPADD(MINUTE,-2,UTC_TIMESTAMP(6))');
+  const resend = await call('auth/verification/resend', { verificationToken }, 'anon');
+  assert.equal(resend.status, 200);
+  const oldToken = verificationToken;
+  verificationToken = resend.data.data.verificationToken;
+  assert.notEqual(oldToken, verificationToken);
+  assert.equal((await call('auth/verification/confirm', { verificationToken: oldToken, code: verificationMail.at(-1).code }, 'anon')).status, 422);
+  assert.equal((await call('auth/verification/confirm', { verificationToken, code: 'bad' }, 'anon')).status, 422);
+  const verified = await call('auth/verification/confirm', { verificationToken, code: verificationMail.at(-1).code }, 'anon');
+  assert.equal(verified.status, 200);
+  tokens.newClient = verified.data.data.token;
+  assert.equal((await call('auth/me', {}, 'newClient')).status, 200);
+  assert.equal((await call('auth/verification/confirm', { verificationToken, code: verificationMail.at(-1).code }, 'anon')).status, 422);
+  const listed = await call('clients/query', { search: 'nuevo@example.com' });
+  assert.equal(listed.data.data.clients.length, 1);
+  const clientId = String(listed.data.data.clients[0].id);
+  for (const role of ['newClient', 'encargado', 'secretario']) {
+    if (role !== 'newClient') {
+      tokens[role] = newToken();
+      await db.execute('INSERT INTO sesiones_usuario (id_usuario,token,expires_at) VALUES (?,?,TIMESTAMPADD(HOUR,1,UTC_TIMESTAMP(6)))', [users[role], tokens[role]]);
+    }
+    assert.equal((await call('clients/query', {}, role)).status, 403);
+    assert.equal((await call('clients/deactivate', { clientId }, role)).status, 403);
+  }
+  assert.equal((await call('clients/deactivate', { clientId: users.dueno })).status, 404);
+  assert.equal((await call('clients/deactivate', { clientId })).status, 200);
+  assert.equal((await call('auth/me', {}, 'newClient')).status, 401);
+  assert.equal((await call('auth/login', { email: input.email, password: input.password }, 'anon')).status, 401);
+  assert.equal((await call('clients/query', { search: input.email })).data.data.clients.length, 0);
+  const [[persisted]] = await db.execute('SELECT disponible FROM usuarios WHERE id_usuario = ?', [clientId]);
+  assert.equal(persisted.disponible, 0);
+});
+
+integration('clientes se consultan de a veinte, con búsqueda parcial por correo o DNI y sin empleados', async () => {
+  for (let index = 0; index < 21; index++) await db.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, password, id_rol)
+    SELECT 'Cliente', 'Página', ?, ?, ?, id_rol FROM rol WHERE nombre = 'cliente'`, [`pagina-${index}@example.com`, String(90000000 + index), passwordHash]);
+  const first = (await call('clients/query', { search: 'pagina-' })).data.data;
+  assert.equal(first.clients.length, 20); assert.equal(first.hasMore, true);
+  const second = (await call('clients/query', { search: 'pagina-', offset: 20 })).data.data;
+  assert.equal(second.clients.length, 1); assert.equal(second.hasMore, false);
+  assert(!first.clients.some(row => row.id === second.clients[0].id));
+  assert.equal((await call('clients/query', { search: '90.000.020' })).data.data.clients.length, 1);
+  assert.equal((await call('clients/query', { search: '%' })).data.data.clients.length, 0);
+  assert.equal((await call('clients/query', { search: '-' })).data.data.clients.length, 20);
+  assert.equal((await call('clients/query', { limit: 100 })).status, 422);
+  assert.equal((await call('clients/query', { search: 'dueno@example.com' })).data.data.clients.length, 0);
+});
+
+integration('registro social completa datos y código, conserva identidad y no vincula cuentas por correo', async () => {
+  assert.equal((await call('auth/social', { idToken: 'owner' }, 'anon')).data.error.code, 'ACCOUNT_EXISTS');
+  assert.equal((await call('auth/social', { idToken: 'social-test' }, 'anon')).data.data.registrationRequired, true);
+  const result = await call('auth/social', { idToken: 'social-test', firstName: 'Social', lastName: 'Cliente', dni: '88888888' }, 'anon');
+  assert.equal(result.status, 200);
+  const { verificationToken } = result.data.data;
+  assert.equal((await call('auth/verification/confirm', { verificationToken, code: verificationMail.at(-1).code }, 'anon')).status, 200);
+  const login = await call('auth/social', { idToken: 'social-test' }, 'anon');
+  assert.equal(login.status, 200);
+  tokens.socialClient = login.data.data.token;
+  const profile = await call('auth/me', {}, 'socialClient');
+  assert.equal(profile.data.data.role, 'cliente');
+  const clientId = String(profile.data.data.id);
+  await call('clients/deactivate', { clientId });
+  assert.equal((await call('auth/social', { idToken: 'social-test' }, 'anon')).status, 403);
+  assert.equal((await call('auth/me', {}, 'socialClient')).status, 401);
+});
+
+integration('fallo al enviar correo revierte el registro y permite reintentar', async () => {
+  const input = { firstName: 'Correo', lastName: 'Fallido', email: 'fallo@example.com', dni: '77777777', password: 'Password-test-1234' };
+  mailFailure = true;
+  try { assert.equal((await call('auth/register', input, 'anon')).status, 502); }
+  finally { mailFailure = false; }
+  const [[row]] = await db.execute('SELECT COUNT(*) AS count FROM usuarios WHERE email = ?', [input.email]);
+  assert.equal(Number(row.count), 0);
+  assert.equal((await call('auth/register', input, 'anon')).status, 200);
+});
+
 integration('convierte el esquema anterior, descifra datos y elimina tablas auxiliares sin recrearlas', async () => {
   const key = randomBytes(32), iv = randomBytes(12), cipher = createCipheriv('aes-256-gcm', key, iv);
   cipher.setAAD(Buffer.from('nombre'));
@@ -596,6 +690,6 @@ integration('convierte el esquema anterior, descifra datos y elimina tablas auxi
   await migrate(db, env);
   const [tables] = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('backend_locks','backend_migrations')");
   assert.equal(tables.length, 0);
-  const [hashColumns] = await db.query("SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND column_name LIKE '%hash%'");
+  const [hashColumns] = await db.query("SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name <> 'client_verifications' AND column_name LIKE '%hash%'");
   assert.equal(hashColumns.length, 0);
 });

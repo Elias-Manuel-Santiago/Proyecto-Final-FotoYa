@@ -14,6 +14,7 @@ const links: { href: Href; label: string; permission?: Permission }[] = [
   { href: '/home', label: 'Inicio' },
   { href: '/reports', label: 'Estadísticas', permission: 'reports.read' },
   { href: '/employees', label: 'Usuarios', permission: 'employees.read' },
+  { href: '/clients', label: 'Clientes', permission: 'clients.read' },
   { href: '/stations', label: 'Puestos', permission: 'stations.manage' },
   { href: '/prices', label: 'Precios', permission: 'prices.manage' },
   { href: '/attendance', label: 'Horarios', permission: 'attendance.read' },

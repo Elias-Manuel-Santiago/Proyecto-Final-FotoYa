@@ -211,7 +211,6 @@ Ejecutar `npm run db:migrate` antes de desplegar esta versión: agrega `sesiones
 
 Las entradas usan el día de Argentina y horas UTC del servidor. Se permite volver a entrar después de una salida y un turno puede cruzar medianoche: su día y puesto siguen siendo los de entrada. Una jornada abierta en otro puesto debe cerrarse antes de abrir otra. Camarógrafos, vendedores y secretarios necesitan una jornada abierta en su puesto actual para acceder a operaciones; fuera de jornada conservan su perfil y administración de su cuenta. El dueño, encargado y cliente no requieren jornada para usar la aplicación. Un secretario sin puesto asignado necesita que el dueño se lo asigne para poder marcar. El estado se verifica en cada petición, incluyendo sesiones de otros dispositivos.
 
-También quedan por definir ganancias netas, recuperación de contraseña y entrega de tokens de un solo uso, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API. Las simulaciones quedan en `frontend/tests/support`.
 
 ## Pruebas
 
@@ -241,3 +240,29 @@ La integración crea una base `foto_ya_test_<aleatorio>` y la elimina al termina
 `transaction(callback)` abre una transacción y entrega su conexión al callback. Esa conexión sí se pasa a las consultas que deben confirmarse juntas; es necesaria para la consistencia de los datos. Las migraciones también reciben la conexión sobre la que trabajan.
 
 Los reemplazos de red, base de datos y reloj usados para probar pertenecen a `tests`; no se agregan parámetros a los servicios para permitirlos.
+
+## Registro de clientes, Auth0 y Mailtrap
+
+Ejecutar `npm run db:migrate` antes de iniciar esta versión. Agrega `usuarios.email_verified` (las cuentas existentes se conservan verificadas), `usuarios.auth0_sub`, `client_verifications` y los permisos `clients.read`/`clients.manage`, inicialmente para el dueño. Las cuentas nuevas se crean exclusivamente como cliente y sin puesto; no reciben sesión hasta confirmar el correo.
+
+Configurar `MAIL_API_KEY`, `MAIL_INBOX_ID` y `SENDER` según el sandbox de Mailtrap, como en RN1. El cliente usa siempre `sandbox: true`: los mensajes se consultan en el inbox de pruebas de Mailtrap y no se entregan a la casilla real. No hay credenciales de estos servicios en RN1 adjunto; sus `.env.example` son referencias, no configuraciones operativas.
+
+Configurar `AUTH0_DOMAIN` (hostname sin protocolo) y `AUTH0_CLIENT_IDS` (IDs Native y SPA separados por coma). Habilitar las conexiones Google (`google-oauth2`), GitHub (`github`) y Apple (`apple`) en ambas aplicaciones de Auth0. El backend valida firma RS256/JWKS, issuer, audiencia y vencimiento del ID token; nunca toma correo, rol o ID social declarados por el frontend. Las identidades sociales se vinculan por `sub`, y no se fusionan automáticamente con cuentas existentes que compartan correo. El registro social pide nombre, apellido y DNI y también confirma correo mediante el código local.
+
+Todas estas rutas usan POST y el envelope habitual:
+
+| Ruta | Cuerpo y resultado |
+| --- | --- |
+| `auth/register` | `{ firstName, lastName, email, dni, password }` → `{ verificationToken, email, expiresIn }` |
+| `auth/social` | `{ idToken, firstName?, lastName?, dni? }` → sesión, verificación o `{ registrationRequired: true, email }` |
+| `auth/verification/start` | `{ email, password }` → reinicia verificación de una cuenta local pendiente |
+| `auth/verification/resend` | `{ verificationToken }` → nuevo desafío; invalida el anterior |
+| `auth/verification/confirm` | `{ verificationToken, code }` → confirma correo y crea sesión |
+| `clients/query` | `{ search?: string, offset?: number }` → `{ clients, hasMore }`; 20 filas, offset múltiplo de 20 |
+| `clients/deactivate` | `{ clientId }` → `{ deactivated: true }` |
+
+El código tiene seis dígitos, vence en diez minutos y admite cinco intentos. El reenvío espera un minuto; estas rutas tienen límite por IP. Se guarda un digest del desafío y del código combinado con el desafío aleatorio; no se guarda el código en claro ni se devuelve en la API. Un fallo del correo revierte el registro/reenvío. Si se cierra el formulario, el usuario local puede continuar entrando con sus credenciales; el social puede volver a entrar con el mismo proveedor.
+
+`clients/query` devuelve únicamente clientes disponibles, busca por coincidencia parcial de correo o DNI y usa una fila adicional para `hasMore`. La baja conserva la fila y el historial, pone `disponible=FALSE`, revoca sesiones y tokens y elimina la verificación pendiente. Se revalida el permiso dentro de la transacción.
+
+Quedan pendientes ganancias netas, recuperación de contraseña, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API; las simulaciones sólo se usan en `frontend/tests/support`.

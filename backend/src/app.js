@@ -9,6 +9,7 @@ import { workAccess } from './security/work-access.js';
 import { ApiError, errorHandler } from './shared/errors.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { userRoutes } from './modules/users/users.routes.js';
+import { clientRoutes } from './modules/users/clients.routes.js';
 import { photoRoutes } from './modules/photos/photos.routes.js';
 import { salesRoutes } from './modules/sales/sales.routes.js';
 import { attendanceRoutes } from './modules/attendance/attendance.routes.js';
@@ -34,6 +35,7 @@ export function createApp() {
   app.use('/api/auth', authRoutes());
   app.use('/api', authenticate, workAccess);
   app.use('/api/users', userRoutes());
+  app.use('/api/clients', clientRoutes());
   app.use('/api/catalog', catalogRoutes());
   app.use('/api/photos', photoRoutes());
   app.use('/api/sales', salesRoutes());

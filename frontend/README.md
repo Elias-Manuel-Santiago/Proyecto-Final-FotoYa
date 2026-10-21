@@ -60,3 +60,20 @@ npm exec -- tsx --test tests/live-api.test.ts
 ```
 
 Los tests de contratos verifican los cuerpos contra validadores del backend, permisos, paginación, roles, URLs de fotos, errores de sesión, reintentos multipart, horarios UTC e informes. La validación de MySQL y Storage reales requiere una API configurada y credenciales de prueba.
+
+## Registro y clientes
+
+Desde el login se puede crear una cuenta local de cliente o continuar con Google, GitHub o Apple. El alta pide nombre, apellido y DNI; la local también pide correo y contraseña confirmada de 12–128 caracteres. Ambos registros exigen confirmar un código enviado mediante el sandbox de Mailtrap, con opción de reenvío. El backend debe tener aplicada la migración y configurado Mailtrap.
+
+Configurar las variables de `frontend/.env.example`: `EXPO_PUBLIC_AUTH0_DOMAIN`, `EXPO_PUBLIC_AUTH0_CLIENT_ID` (aplicación Native) y `EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID` (aplicación SPA). Sus IDs deben coincidir con `AUTH0_CLIENT_IDS` del backend. `app.config.js` habilita el plugin de Auth0 cuando hay configuración nativa; usa el esquema `fotoya`, bundle ID y package `com.fotoya.app`. Se incluyó `expo-dev-client`: Auth0 móvil requiere una nueva build de desarrollo, no Expo Go.
+
+En Auth0, configurar callbacks/logout para Native:
+
+```text
+fotoya://TU_DOMINIO_AUTH0/ios/com.fotoya.app/callback
+fotoya://TU_DOMINIO_AUTH0/android/com.fotoya.app/callback
+```
+
+En la aplicación SPA, agregar el origen web exacto (por ejemplo `http://localhost:8081`) a Allowed Callback URLs, Allowed Logout URLs, Allowed Web Origins y CORS. Los proveedores deben estar habilitados para las aplicaciones utilizadas; Apple requiere sus credenciales de desarrollador. El flujo web redirige al origen y el SDK procesa el callback con PKCE. Las credenciales y sesiones propias de Foto Ya permanecen en memoria.
+
+El dueño dispone de **Clientes**, con búsqueda por correo o DNI, páginas de 20 y confirmación de baja en un modal. El listado no muestra el ID interno. Los permisos efectivos se reciben del backend; una baja oculta al cliente del listado y bloquea su acceso conservando el historial.

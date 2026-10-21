@@ -1,7 +1,7 @@
 import { db } from '../../config/database.js';
 export const authRepository = {
   async byEmail(email) {
-    const [rows] = await db.execute('SELECT id_usuario, password, disponible FROM usuarios WHERE email = ?', [email]);
+    const [rows] = await db.execute('SELECT id_usuario, password, disponible, email_verified FROM usuarios WHERE email = ?', [email]);
     return rows[0];
   },
   async actor(token) {
@@ -11,13 +11,13 @@ export const authRepository = {
         WHERE h.id_usuario = u.id_usuario AND h.check_out IS NULL AND d.id_puesto = u.id_puesto) AS working
       FROM sesiones_usuario s
       JOIN usuarios u ON u.id_usuario = s.id_usuario JOIN rol r ON r.id_rol = u.id_rol
-      WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6) AND u.disponible = 1`, [token]);
+      WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6) AND u.disponible = 1 AND u.email_verified = 1`, [token]);
     if (!rows[0]) return null;
     const [permissions] = await db.execute(`SELECT p.tipo_de_permiso AS name FROM permisos p
       JOIN permisos_rol pr ON pr.id_permiso = p.id_permisos JOIN usuarios u ON u.id_rol = pr.id_rol
       WHERE u.id_usuario = ?`, [rows[0].id]);
     await db.execute('UPDATE sesiones_usuario SET last_seen_at = UTC_TIMESTAMP(6) WHERE id_sesiones_usuario = ?', [rows[0].sessionId]);
-    return { ...rows[0], kioskMode: Boolean(rows[0].kioskMode), working: Boolean(rows[0].working), permissions: permissions.map(p => p.name) };
+    return { ...rows[0], kioskMode: Boolean(Number(rows[0].kioskMode)), working: Boolean(Number(rows[0].working)), permissions: permissions.map(p => p.name) };
   },
   async sessions(actor, { limit, offset }) {
     const [rows] = await db.execute(`SELECT id_sesiones_usuario AS id, created_at, expires_at, last_seen_at, revoked_at

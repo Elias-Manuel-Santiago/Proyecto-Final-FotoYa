@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS client_verifications (
+  id_usuario BIGINT UNSIGNED PRIMARY KEY,
+  challenge CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL UNIQUE,
+  code_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  expires_at DATETIME(6) NOT NULL,
+  sent_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario)
+) ENGINE = InnoDB;

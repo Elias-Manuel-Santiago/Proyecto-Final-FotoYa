@@ -67,6 +67,9 @@ export async function migrate(db, env, { init = false } = {}) {
     }
     if (!await hasIndex('venta', 'uq_venta_operation')) await connection.query('CREATE UNIQUE INDEX uq_venta_operation ON venta (operation_id)');
     await runFile('../database/005-event-sales.sql');
+    if (!await hasColumn('usuarios', 'email_verified')) await connection.query('ALTER TABLE usuarios ADD email_verified BOOLEAN NOT NULL DEFAULT TRUE');
+    if (!await hasColumn('usuarios', 'auth0_sub')) await connection.query('ALTER TABLE usuarios ADD auth0_sub VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL UNIQUE');
+    await runFile('../database/006-client-registration.sql');
     if (!await hasColumn('fotos', 'email_cliente')) await connection.query('ALTER TABLE fotos ADD email_cliente VARCHAR(254) NULL');
     const photoColumns = await columns('fotos');
     if (photoColumns.some(column => column.name === 'id_cliente' && column.nullable === 'NO')) {
@@ -87,6 +90,11 @@ export async function migrate(db, env, { init = false } = {}) {
     }
     await connection.beginTransaction();
     await seedPermissions(connection);
+    for (const name of ['clients.read', 'clients.manage']) {
+      const [inserted] = await connection.execute('INSERT IGNORE INTO permisos (tipo_de_permiso) VALUES (?)', [name]);
+      if (inserted.affectedRows) await connection.execute(`INSERT IGNORE INTO permisos_rol (id_rol, id_permiso)
+        SELECT r.id_rol, p.id_permisos FROM rol r CROSS JOIN permisos p WHERE r.nombre = 'dueno' AND p.tipo_de_permiso = ?`, [name]);
+    }
     const [pricePermission] = await connection.execute("INSERT IGNORE INTO permisos (tipo_de_permiso) VALUES ('prices.manage')");
     if (pricePermission.affectedRows) await connection.execute(`INSERT IGNORE INTO permisos_rol (id_rol, id_permiso)
       SELECT r.id_rol, p.id_permisos FROM rol r CROSS JOIN permisos p

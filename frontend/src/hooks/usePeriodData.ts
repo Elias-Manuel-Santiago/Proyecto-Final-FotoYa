@@ -20,7 +20,7 @@ export function usePeriodData(period: Period, attendanceSelf = false) {
     let active = true;
     const [requested] = JSON.parse(key) as [Period, number, boolean];
     if (periodError(requested.from, requested.to)) return;
-    
+
     const timer = setTimeout(() => {
       void repository
         .snapshot(requested, attendanceSelf)

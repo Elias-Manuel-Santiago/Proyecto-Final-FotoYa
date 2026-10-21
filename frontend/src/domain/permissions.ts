@@ -10,6 +10,8 @@ export const roleLabels: Record<RoleId, string> = {
 };
 
 export type Permission =
+  | 'clients.read'
+  | 'clients.manage'
   | 'reports.read'
   | 'employees.read'
   | 'employees.manage'
@@ -28,6 +30,8 @@ export type Permission =
 // Adaptador inicial de la relación roles-permisos. El backend proveerá las asignaciones.
 export const rolePermissions: Record<RoleId, readonly Permission[]> = {
   owner: [
+    'clients.read',
+    'clients.manage',
     'prices.manage',
     'stations.manage',
     'counts.read',

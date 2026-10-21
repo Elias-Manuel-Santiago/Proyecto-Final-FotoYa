@@ -10,10 +10,12 @@ export const authService = {
     const user = await authRepository.byEmail(normalizeEmail(input.email));
     const valid = await verifyPassword(input.password, user?.password ?? dummyHash);
     if (!valid || !user?.disponible) throw new ApiError(401, 'Correo o contraseña incorrectos.', 'INVALID_CREDENTIALS');
+    if (!user.email_verified) throw new ApiError(403, 'Confirmá tu correo para ingresar.', 'EMAIL_UNVERIFIED');
     const token = newToken();
     await transaction(async connection => {
-      const [[current]] = await connection.execute('SELECT password, disponible FROM usuarios WHERE id_usuario = ? FOR UPDATE', [user.id_usuario]);
+      const [[current]] = await connection.execute('SELECT password, disponible, email_verified FROM usuarios WHERE id_usuario = ? FOR UPDATE', [user.id_usuario]);
       if (!current?.disponible || current.password !== user.password) throw new ApiError(401, 'Correo o contraseña incorrectos.', 'INVALID_CREDENTIALS');
+      if (!current.email_verified) throw new ApiError(403, 'Confirmá tu correo para ingresar.', 'EMAIL_UNVERIFIED');
       await connection.execute(`INSERT INTO sesiones_usuario (id_usuario, token, expires_at)
         VALUES (?, ?, TIMESTAMPADD(HOUR, ?, UTC_TIMESTAMP(6)))`, [user.id_usuario, token, env.SESSION_HOURS]);
     });

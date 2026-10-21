@@ -19,6 +19,7 @@ interface AppContextValue {
   loading: boolean;
   error: string;
   login: (email: string, password: string) => Promise<void>;
+  acceptSession: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   enterCheckIn: () => Promise<void>;
@@ -158,6 +159,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setError('');
     }
   };
+  const acceptSession = async (token: string) => {
+    setLoading(true);
+    setError('');
+    repository.api.setToken(token);
+    try {
+      await refresh();
+      signedIn.current = true;
+    } catch (cause) {
+      await repository.logout().catch(() => undefined);
+      clear();
+      throw cause;
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <AppContext.Provider
       value={{
@@ -166,6 +182,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         loading,
         error,
         login,
+        acceptSession,
         logout,
         refresh,
         enterCheckIn,
