@@ -140,7 +140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!employee) return;
     let running = false;
-    // Consulta cambios de jornada o kiosco cada quince segundos sin superponer verificaciones.
+    // Consulta cambios de jornada o kiosco cada minuto sin superponer verificaciones.
     const timer = setInterval(() => {
       if (running || !signedIn.current) return;
       running = true;
@@ -157,7 +157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         .finally(() => {
           running = false;
         });
-    }, 15000);
+    }, 60000);
     return () => clearInterval(timer);
   }, [employee, repository, refresh]);
 

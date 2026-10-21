@@ -23,12 +23,13 @@ export function HomeScreen() {
   const action = useAction();
   const today = businessDate();
   const period = { from: today, to: today, stationId: '' };
-  const { data, loading, error, reload } = usePeriodData(period);
+  const { data, loading, refreshing, error, refreshError, reload } =
+    usePeriodData(period);
   const rows = reportRows(data, employee, period);
   return (
     <Screen
       title={roleLabels[employee.roleId]}
-      refreshing={loading}
+      refreshing={refreshing}
       onRefresh={reload}
     >
       {employee.roleId === 'manager' && (
@@ -44,8 +45,10 @@ export function HomeScreen() {
         </>
       )}
       <Text style={styles.heading}>{displayDate(today)}</Text>
-      <Feedback error={error} />
-      {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
+      <Feedback error={error || refreshError} />
+      <Text style={styles.muted}>
+        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+      </Text>
       {!error && !loading && employee.permissions?.includes('counts.read') && (
         <>
           <Metrics

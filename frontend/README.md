@@ -31,6 +31,8 @@ Iniciar el backend siguiendo `../backend/README.md`: requiere MySQL configurado,
 
 En Android e iOS, las vistas Inicio, Fotos, Ventas, Venta en evento, Informes, Asistencia, Mi asistencia, Check-in y Mi usuario se actualizan deslizando hacia abajo desde el inicio del contenido con `RefreshControl`. El gesto conserva los filtros y queda bloqueado durante una venta o mientras se completa el check-in. React Native Web no implementa este control; el gesto de actualización está disponible en móvil.
 
+Inicio, Fotos, Ventas, Informes y las consultas de asistencia mantienen los últimos datos visibles al actualizar el mismo período. Muestran «Actualizando…» y reemplazan el contenido al recibir la respuesta; si falla, conservan lo mostrado con un aviso. Cambiar filtros o el alcance de autorización limpia los resultados anteriores. `usePeriodData.ts` espera 350 ms tras los cambios de filtros; esa espera no es una actualización periódica. Los intervalos automáticos están en `AppProvider.tsx` (perfil, jornada y modo kiosco cada 15000 ms) y `CheckInScreen.tsx` (listado cada 15000 ms). Volver a la aplicación también refresca los datos.
+
 ## Operaciones pendientes del backend
 
 La recuperación de contraseña y el procesamiento de cobros electrónicos siguen pendientes. Iniciar/cerrar sesión no marca asistencia.

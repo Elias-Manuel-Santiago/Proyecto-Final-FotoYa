@@ -27,13 +27,20 @@ export function ReportsScreen() {
   const period = ownStationOnly
     ? { ...filters, stationId: employee.stationId, city: '', event: '' }
     : filters;
-  const { data, loading, reload, error: queryError } = usePeriodData(period);
+  const {
+    data,
+    loading,
+    refreshing,
+    reload,
+    refreshError,
+    error: queryError,
+  } = usePeriodData(period);
   const error = periodError || queryError;
   const rows = error ? [] : reportRows(data, employee, period);
   return (
     <Screen
       title="Estadísticas e ingresos"
-      refreshing={loading}
+      refreshing={refreshing}
       onRefresh={reload}
     >
       {ownStationOnly && (
@@ -52,8 +59,10 @@ export function ReportsScreen() {
         extended
         allowScopeChange={!ownStationOnly}
       />
-      <Feedback error={error} />
-      {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
+      <Feedback error={error || refreshError} />
+      <Text style={styles.muted}>
+        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+      </Text>
       {!error && !loading && (
         <>
           <Metrics values={data.summary ?? totalMetrics(rows)} />

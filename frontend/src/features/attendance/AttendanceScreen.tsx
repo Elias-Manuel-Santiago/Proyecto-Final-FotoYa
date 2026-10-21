@@ -26,7 +26,14 @@ export function AttendanceScreen() {
   }>();
   const { employee } = useWorkspace();
   const { period, update, error: periodError } = usePeriod();
-  const { data, loading, reload, error: queryError } = usePeriodData(period);
+  const {
+    data,
+    loading,
+    refreshing,
+    reload,
+    refreshError,
+    error: queryError,
+  } = usePeriodData(period);
   const error = periodError || queryError;
   const [employeeId, setEmployeeId] = useState(initialId ?? '');
   const employees = data.employees.filter((row) => row.roleId !== 'client');
@@ -43,7 +50,7 @@ export function AttendanceScreen() {
   return (
     <Screen
       title="Horarios de empleados"
-      refreshing={loading}
+      refreshing={refreshing}
       onRefresh={reload}
     >
       <PeriodFilters
@@ -60,8 +67,10 @@ export function AttendanceScreen() {
           ...employees.map((row) => ({ value: row.id, label: fullName(row) })),
         ]}
       />
-      <Feedback error={error} />
-      {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
+      <Feedback error={error || refreshError} />
+      <Text style={styles.muted}>
+        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+      </Text>
       {!error && !loading && !records.length && <EmptyState />}
       {records.map((record) => {
         const person = data.employees.find(

@@ -33,7 +33,14 @@ export function PhotosScreen() {
   const today = useBusinessDate();
   const { employee } = useWorkspace();
   const { period, update, error: periodError } = usePeriod();
-  const { data, loading, reload, error: queryError } = usePeriodData(period);
+  const {
+    data,
+    loading,
+    refreshing,
+    reload,
+    refreshError,
+    error: queryError,
+  } = usePeriodData(period);
   const periodKey = JSON.stringify(period);
   const [page, setPage] = useState({ key: periodKey, offset: 0 });
   const error = periodError || queryError;
@@ -55,15 +62,17 @@ export function PhotosScreen() {
         )
       : 0;
   return (
-    <Screen title="Fotos" refreshing={loading} onRefresh={reload}>
+    <Screen title="Fotos" refreshing={refreshing} onRefresh={reload}>
       {can(employee, 'photos.upload') && <UploadQueue />}
       <PeriodFilters
         period={period}
         stations={visibleStations(data, employee)}
         onChange={update}
       />
-      <Feedback error={error} />
-      {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
+      <Feedback error={error || refreshError} />
+      <Text style={styles.muted}>
+        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+      </Text>
       {!error && !loading && (
         <>
           {employee.permissions?.includes('counts.read') && (

@@ -20,6 +20,8 @@ export function MyAttendanceScreen() {
   const {
     data,
     loading,
+    refreshing,
+    refreshError,
     reload,
     error: queryError,
   } = usePeriodData(period, true);
@@ -28,14 +30,16 @@ export function MyAttendanceScreen() {
   );
   const error = periodError || queryError;
   return (
-    <Screen title="Mi asistencia" refreshing={loading} onRefresh={reload}>
+    <Screen title="Mi asistencia" refreshing={refreshing} onRefresh={reload}>
       <Text style={styles.muted}>
         Registrá tu entrada y salida en la vista de check-in del encargado con
         tu mail y contraseña. Iniciar o cerrar sesión no registra asistencia.
       </Text>
       <PeriodFilters period={period} stations={[]} onChange={update} />
-      <Feedback error={error} />
-      {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
+      <Feedback error={error || refreshError} />
+      <Text style={styles.muted}>
+        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+      </Text>
       {!loading && !error && !records.length && (
         <EmptyState message="No hay horarios en este período." />
       )}

@@ -44,7 +44,7 @@ export function CheckInScreen() {
     }, 0);
     const timer = setInterval(() => {
       void reload();
-    }, 15000);
+    }, 60000);
     return () => {
       clearTimeout(initial);
       clearInterval(timer);

@@ -26,7 +26,14 @@ import { SaleCard } from './components/SaleCard';
 export function SalesScreen() {
   const { employee } = useWorkspace();
   const { period, update, error: periodError } = usePeriod();
-  const { data, loading, reload, error: queryError } = usePeriodData(period);
+  const {
+    data,
+    loading,
+    refreshing,
+    reload,
+    refreshError,
+    error: queryError,
+  } = usePeriodData(period);
   const error = periodError || queryError;
   const sales = error
     ? []
@@ -38,7 +45,7 @@ export function SalesScreen() {
         )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return (
-    <Screen title="Ventas" refreshing={loading} onRefresh={reload}>
+    <Screen title="Ventas" refreshing={refreshing} onRefresh={reload}>
       {can(employee, 'sales.create') && (
         <Link href="/sales/new" style={styles.card}>
           Registrar venta en evento
@@ -49,8 +56,10 @@ export function SalesScreen() {
         stations={visibleStations(data, employee)}
         onChange={update}
       />
-      <Feedback error={error} />
-      {loading && <Text style={styles.muted}>Consultando servidor…</Text>}
+      <Feedback error={error || refreshError} />
+      <Text style={styles.muted}>
+        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+      </Text>
       {!error && !loading && (
         <>
           <Metrics
