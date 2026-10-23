@@ -4,7 +4,7 @@
     "slug": "foto-ya",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.jpg",
+    "icon": "./assets/images/main-icon.jpg",
     "scheme": "fotoya",
     "userInterfaceStyle": "light",
     "ios": {

@@ -11,7 +11,7 @@ import { useAction } from '../../../hooks/useAction';
 import { Field } from '../../../components/ui/Field';
 import { Button } from '../../../components/ui/Button';
 import { Feedback } from '../../../components/ui/Feedback';
-import { styles } from '../../../components/ui/theme';
+import { useTheme } from '../../../components/ui/theme';
 
 // Muestra el destinatario confirmado o guarda un correo por la ruta de galería o venta.
 export function PhotoAssignment({
@@ -23,6 +23,7 @@ export function PhotoAssignment({
   sale?: boolean;
   onSaved?: (photo: Pick<Photo, 'clientId' | 'clientEmail'>) => void;
 }) {
+  const { styles } = useTheme();
   const { employee, repository } = useWorkspace();
   const [saved, setSaved] = useState<Pick<Photo, 'clientId' | 'clientEmail'>>();
   const current = saved ?? photo;

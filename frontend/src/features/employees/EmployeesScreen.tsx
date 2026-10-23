@@ -1,3 +1,4 @@
+import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
 /**
  * @file
  * Lista usuarios del alcance recibido. Expone acciones de alta y detalle según permisos.
@@ -9,13 +10,14 @@ import { Field } from '../../components/ui/Field';
 import { Select } from '../../components/ui/Select';
 import { EmptyState } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import { fullName } from '../../domain/format';
 import { can, hasStationAccess, roleLabels } from '../../domain/permissions';
 import { useWorkspace } from '../../providers/AppProvider';
 
 // Filtra empleados visibles y ofrece acceso a detalle y alta según permisos.
 export function EmployeesScreen() {
+  const { styles } = useTheme();
   const { data, employee } = useWorkspace();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
@@ -30,7 +32,7 @@ export function EmployeesScreen() {
   return (
     <Screen title="Usuarios">
       {can(employee, 'employees.manage') && (
-        <Link href="/employees/new" style={styles.card}>
+        <Link href="/employees/new" style={[styles.card, styles.text]}>
           Alta de usuario
         </Link>
       )}
@@ -50,25 +52,29 @@ export function EmployeesScreen() {
         ]}
       />
       {!rows.length && <EmptyState />}
-      {rows.map((row) => (
-        <View style={styles.card} key={row.id}>
-          <Text style={styles.heading}>{fullName(row)}</Text>
-          <Text style={styles.text}>
-            {roleLabels[row.roleId]} ·{' '}
-            {
-              data.stations.find((station) => station.id === row.stationId)
-                ?.name
-            }
-          </Text>
-          <Text style={styles.muted}>{row.active ? 'Activo' : 'Inactivo'}</Text>
-          <Link
-            href={{ pathname: '/employees/[id]', params: { id: row.id } }}
-            style={styles.text}
-          >
-            Ver ficha de {fullName(row)}
-          </Link>
-        </View>
-      ))}
+      <ResponsiveGrid>
+        {rows.map((row) => (
+          <View style={styles.card} key={row.id}>
+            <Text style={styles.heading}>{fullName(row)}</Text>
+            <Text style={styles.text}>
+              {roleLabels[row.roleId]} ·{' '}
+              {
+                data.stations.find((station) => station.id === row.stationId)
+                  ?.name
+              }
+            </Text>
+            <Text style={styles.muted}>
+              {row.active ? 'Activo' : 'Inactivo'}
+            </Text>
+            <Link
+              href={{ pathname: '/employees/[id]', params: { id: row.id } }}
+              style={styles.text}
+            >
+              Ver ficha de {fullName(row)}
+            </Link>
+          </View>
+        ))}
+      </ResponsiveGrid>
     </Screen>
   );
 }

@@ -8,7 +8,7 @@ import { Text, View } from 'react-native';
 import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
 import { Feedback } from '../../components/ui/Feedback';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import { money, errorMessage } from '../../domain/format';
 import type { Price } from '../../domain/models';
 import { useWorkspace } from '../../providers/AppProvider';
@@ -16,6 +16,7 @@ import { useAction } from '../../hooks/useAction';
 
 // Carga tarifas del puesto y permite crear, editar o cambiar disponibilidad.
 export function StationPrices({ stationId }: { stationId: string }) {
+  const { styles } = useTheme();
   const { repository } = useWorkspace();
   const action = useAction();
   const [prices, setPrices] = useState<Price[]>([]);

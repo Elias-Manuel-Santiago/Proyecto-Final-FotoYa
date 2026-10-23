@@ -37,6 +37,9 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+// Temporal: cambiar a true para volver a recuperar la cuenta guardada al iniciar.
+const RESTORE_PERSISTED_SESSION = false;
+
 // Comparte repositorio, sesión y datos; coordina restauración, refresco y cambios de identidad.
 export function AppProvider({ children }: { children: ReactNode }) {
   const [repository] = useState(() => {
@@ -49,8 +52,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const [data, setData] = useState<AppData | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [restoring, setRestoring] = useState(true);
+  const [loading, setLoading] = useState(RESTORE_PERSISTED_SESSION);
+  const [restoring, setRestoring] = useState(RESTORE_PERSISTED_SESSION);
   const [error, setError] = useState('');
   // La generación cambia al limpiar sesión e invalida cargas que todavía estén en vuelo.
   const generation = useRef(0);
@@ -104,6 +107,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Primero restaura la credencial y luego valida el acceso cargando el estado remoto.
   const restoreSession = useCallback(() => {
+    if (!RESTORE_PERSISTED_SESSION) {
+      return Promise.resolve();
+    }
     const current = generation.current;
     return repository
       .restoreSession()
@@ -242,6 +248,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         logout,
         refresh,
         restoreSession: async () => {
+          if (!RESTORE_PERSISTED_SESSION) return;
           setLoading(true);
           setError('');
           await restoreSession();

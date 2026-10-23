@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { ConfirmAction } from '../../components/ui/ConfirmAction';
 import { Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import { fullName } from '../../domain/format';
 import {
   assignableRoles,
@@ -24,6 +24,7 @@ import { EmployeeForm } from './components/EmployeeForm';
 
 // Resuelve el usuario de la ruta y presenta edición, disponibilidad y acceso a asistencia.
 export function EmployeeDetailScreen() {
+  const { styles } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, employee, repository, refresh } = useWorkspace();
   const [editing, setEditing] = useState(false);
@@ -54,9 +55,11 @@ export function EmployeeDetailScreen() {
     <Screen title={fullName(target)}>
       <View style={styles.card}>
         <Text style={styles.text}>Rol: {roleLabels[target.roleId]}</Text>
-        <Text style={styles.text}>
-          Puesto: {station?.name ?? 'Sin puesto asignado'}
-        </Text>
+        {!['owner', 'client'].includes(target.roleId) && (
+          <Text style={styles.text}>
+            Puesto: {station?.name ?? 'Sin puesto asignado'}
+          </Text>
+        )}
         <Text style={styles.text}>Email: {target.email}</Text>
         <Text style={styles.text}>DNI: {target.dni}</Text>
         <Text style={styles.text}>
@@ -66,7 +69,7 @@ export function EmployeeDetailScreen() {
       {target.roleId !== 'client' && can(employee, 'attendance.read') && (
         <Link
           href={{ pathname: '/attendance', params: { employeeId: target.id } }}
-          style={styles.card}
+          style={[styles.card, styles.text]}
         >
           Consultar horarios
         </Link>

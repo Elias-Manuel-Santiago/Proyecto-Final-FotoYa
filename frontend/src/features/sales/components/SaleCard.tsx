@@ -8,7 +8,7 @@ import { Text, View } from 'react-native';
 import type { AppData, Sale } from '../../../domain/models';
 import { displayDate } from '../../../domain/dates';
 import { money } from '../../../domain/format';
-import { styles } from '../../../components/ui/theme';
+import { useTheme } from '../../../components/ui/theme';
 import { Button } from '../../../components/ui/Button';
 import { Feedback } from '../../../components/ui/Feedback';
 import { useAction } from '../../../hooks/useAction';
@@ -17,6 +17,7 @@ import { PhotoPreview } from '../../photos/components/PhotoPreview';
 
 // Muestra la venta y carga a demanda su detalle y las fotos asociadas.
 export function SaleCard({ sale, data }: { sale: Sale; data: AppData }) {
+  const { styles } = useTheme();
   const { repository } = useWorkspace();
   const [detail, setDetail] =
     useState<Awaited<ReturnType<typeof repository.saleDetail>>>();

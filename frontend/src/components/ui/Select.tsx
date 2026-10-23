@@ -1,17 +1,18 @@
-/**
- * @file
- * Presenta selección de opciones con valor controlado. Cada formulario define etiquetas,
- * valores y disponibilidad.
- */
-import { Pressable, Text, View } from 'react-native';
-import { colors, styles } from './theme';
-
+import { useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useTheme } from './theme';
+import { Icon } from './Icon';
 export interface Option {
   value: string;
   label: string;
 }
-
-// Presenta opciones y entrega el valor elegido al componente que controla la selección.
 export function Select({
   label,
   value,
@@ -25,34 +26,128 @@ export function Select({
   onChange: (value: string) => void;
   disabled?: boolean;
 }) {
+  const { colors, styles } = useTheme();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const matches = options.filter((option) =>
+    option.label.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+  );
   return (
     <View style={{ gap: 6 }}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.row}>
-        {options.map((option) => (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${options.find((o) => o.value === value)?.label ?? 'Seleccionar'}`}
+        accessibilityState={{ expanded: open, disabled }}
+        disabled={disabled}
+        onPress={() => {
+          setQuery('');
+          setOpen(true);
+        }}
+        style={[
+          styles.input,
+          {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            opacity: disabled ? 0.5 : 1,
+          },
+        ]}
+      >
+        <Text style={[styles.text, { flexShrink: 1 }]}>
+          {options.find((o) => o.value === value)?.label ?? 'Seleccionar'}
+        </Text>
+        <Icon name="filtrar" size={20} />
+      </Pressable>
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: '#00000080',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+        >
           <Pressable
-            key={option.value}
-            accessibilityRole="radio"
-            accessibilityLabel={`${label}: ${option.label}`}
-            accessibilityState={{ checked: value === option.value, disabled }}
-            disabled={disabled}
-            onPress={() => onChange(option.value)}
-            style={{
-              padding: 12,
-              minHeight: 44,
-              borderRadius: 4,
-              borderWidth: value === option.value ? 2 : 1,
-              borderColor:
-                value === option.value ? colors.primary : colors.border,
-              backgroundColor:
-                value === option.value ? colors.accent : colors.surface,
-              opacity: disabled ? 0.5 : 1,
-            }}
+            accessibilityLabel="Cerrar selector"
+            onPress={() => setOpen(false)}
+            style={{ position: 'absolute', inset: 0 }}
+          />
+          <View
+            accessibilityViewIsModal
+            style={[
+              styles.card,
+              {
+                width: '100%',
+                maxWidth: 480,
+                maxHeight: '80%',
+                alignSelf: 'center',
+              },
+            ]}
           >
-            <Text style={styles.text}>{option.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+            <View style={[styles.row, { justifyContent: 'space-between' }]}>
+              <Text accessibilityRole="header" style={styles.heading}>
+                {label}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar selector"
+                onPress={() => setOpen(false)}
+                style={{ padding: 12, minHeight: 44 }}
+              >
+                <Text style={styles.text}>Cerrar</Text>
+              </Pressable>
+            </View>
+            <TextInput
+              accessibilityLabel={`Buscar ${label.toLowerCase()}`}
+              placeholder="Buscar opción…"
+              placeholderTextColor={colors.muted}
+              value={query}
+              onChangeText={setQuery}
+              style={styles.input}
+              autoFocus
+            />
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ gap: 4 }}
+            >
+              {matches.map((option) => (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ checked: value === option.value }}
+                  onPress={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  style={{
+                    padding: 14,
+                    minHeight: 48,
+                    borderRadius: 10,
+                    backgroundColor:
+                      value === option.value ? colors.lavender : colors.surface,
+                  }}
+                >
+                  <Text style={styles.text}>
+                    {value === option.value ? '✓  ' : ''}
+                    {option.label}
+                  </Text>
+                </Pressable>
+              ))}
+              {!matches.length && (
+                <Text style={styles.muted}>No hay coincidencias.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

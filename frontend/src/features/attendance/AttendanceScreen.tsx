@@ -1,10 +1,11 @@
+import { SortControl } from '../../components/filters/SortControl';
 /**
  * @file
  * Consulta asistencia administrativa por período y alcance. Delega presentación del horario a
  * AttendanceCard.
  */
 import { Text } from 'react-native';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
@@ -17,10 +18,12 @@ import { hasStationAccess } from '../../domain/permissions';
 import { usePeriodData } from '../../hooks/usePeriodData';
 import { usePeriod } from '../../hooks/usePeriod';
 import { useWorkspace } from '../../providers/AppProvider';
-import { AttendanceCard } from './components/AttendanceCard';
+import { AttendanceTable } from './components/AttendanceTable';
 
 // Combina filtros y datos del período para consultar asistencia de empleados visibles.
 export function AttendanceScreen() {
+  const [ascending, setAscending] = useState(false);
+  const { styles } = useTheme();
   const { employeeId: initialId } = useLocalSearchParams<{
     employeeId?: string;
   }>();
@@ -46,7 +49,9 @@ export function AttendanceScreen() {
             matchesPeriod(row, period) &&
             (!employeeId || row.employeeId === employeeId),
         )
-        .sort((a, b) => b.checkIn.localeCompare(a.checkIn));
+        .sort(
+          (a, b) => (ascending ? 1 : -1) * a.checkIn.localeCompare(b.checkIn),
+        );
   return (
     <Screen
       title="Horarios de empleados"
@@ -67,27 +72,13 @@ export function AttendanceScreen() {
           ...employees.map((row) => ({ value: row.id, label: fullName(row) })),
         ]}
       />
+      <SortControl ascending={ascending} onChange={setAscending} />
       <Feedback error={error || refreshError} />
       <Text style={styles.muted}>
-        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+        {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}
       </Text>
       {!error && !loading && !records.length && <EmptyState />}
-      {records.map((record) => {
-        const person = data.employees.find(
-          (row) => row.id === record.employeeId,
-        );
-        return (
-          <AttendanceCard
-            key={record.id}
-            record={record}
-            employeeName={person ? fullName(person) : 'Empleado no disponible'}
-            stationName={
-              data.stations.find((row) => row.id === record.stationId)?.name ??
-              ''
-            }
-          />
-        );
-      })}
+      {!error && !loading && <AttendanceTable records={records} data={data} />}
     </Screen>
   );
 }

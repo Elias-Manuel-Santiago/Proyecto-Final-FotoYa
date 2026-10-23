@@ -8,7 +8,7 @@ import { Text } from 'react-native';
 import { can, type Permission } from '../../domain/permissions';
 import { useWorkspace } from '../../providers/AppProvider';
 import { Screen } from '../ui/Screen';
-import { styles } from '../ui/theme';
+import { useTheme } from '../ui/theme';
 
 // Comprueba el permiso antes de montar el contenido de la ruta.
 export function Guard({
@@ -18,6 +18,7 @@ export function Guard({
   permission: Permission;
   children: ReactNode;
 }) {
+  const { styles } = useTheme();
   const { employee } = useWorkspace();
   return can(employee, permission) ? (
     children

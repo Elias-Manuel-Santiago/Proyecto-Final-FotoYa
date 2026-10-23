@@ -4,7 +4,7 @@
  * horario argentino.
  */
 import { Text, View } from 'react-native';
-import { styles } from '../../../components/ui/theme';
+import { useTheme } from '../../../components/ui/theme';
 import { displayDate, displayInstant, duration } from '../../../domain/dates';
 import type { Attendance } from '../../../domain/models';
 
@@ -18,6 +18,7 @@ export function AttendanceCard({
   employeeName?: string;
   stationName: string;
 }) {
+  const { styles } = useTheme();
   return (
     <View style={styles.card}>
       {employeeName && <Text style={styles.heading}>{employeeName}</Text>}

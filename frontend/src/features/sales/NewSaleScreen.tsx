@@ -8,7 +8,7 @@ import { Text, View } from 'react-native';
 import { Screen } from '../../components/ui/Screen';
 import { Button } from '../../components/ui/Button';
 import { Feedback } from '../../components/ui/Feedback';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import { errorMessage } from '../../domain/format';
 import { displayDate } from '../../domain/dates';
 import type { Price, SalePhoto } from '../../domain/models';
@@ -31,6 +31,7 @@ export function NewSaleScreen() {
 
 // Carga evento, tarifas y fotos del puesto y coordina selección y registro de venta.
 function DailySaleScreen({ today }: { today: string }) {
+  const { styles } = useTheme();
   const { photoId } = useLocalSearchParams<{ photoId?: string }>();
   const { repository, employee } = useWorkspace();
   const stationId = employee.stationId;
@@ -87,6 +88,7 @@ function DailySaleScreen({ today }: { today: string }) {
   const blocked = loading || !!error || action.busy;
   return (
     <Screen
+      compact
       title="Venta en evento"
       refreshing={loading}
       onRefresh={reload}

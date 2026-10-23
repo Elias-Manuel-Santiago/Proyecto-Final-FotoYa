@@ -10,7 +10,7 @@ import { EmployeeForm } from './components/EmployeeForm';
 // Monta el formulario de alta y define la navegación al terminar el guardado.
 export function NewEmployeeScreen() {
   return (
-    <Screen title="Alta de usuario">
+    <Screen compact title="Alta de usuario">
       <EmployeeForm onSaved={() => router.replace('/employees')} />
     </Screen>
   );

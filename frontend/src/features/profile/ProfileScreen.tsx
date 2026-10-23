@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
 import { Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import { fullName } from '../../domain/format';
 import { canWork, roleLabels } from '../../domain/permissions';
 import { useAction } from '../../hooks/useAction';
@@ -17,12 +17,14 @@ import { useWorkspace } from '../../providers/AppProvider';
 
 // Gestiona datos propios, sesiones, contraseña y actualización del estado de trabajo.
 export function ProfileScreen() {
+  const { styles } = useTheme();
   const { data, employee, logout, repository, refresh } = useWorkspace();
   const action = useAction();
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   return (
     <Screen
+      compact
       title="Mi usuario"
       refreshing={action.busy}
       onRefresh={() => {
@@ -42,14 +44,16 @@ export function ProfileScreen() {
         <Text style={styles.text}>{roleLabels[employee.roleId]}</Text>
         <Text style={styles.text}>Email: {employee.email}</Text>
         <Text style={styles.text}>DNI: {employee.dni}</Text>
-        <Text style={styles.text}>
-          Puesto asignado:{' '}
-          {data.stations.find((row) => row.id === employee.stationId)?.name ??
-            employee.stationName ??
-            (employee.stationId
-              ? `Puesto ${employee.stationId}`
-              : 'Sin puesto asignado')}
-        </Text>
+        {!['owner', 'client'].includes(employee.roleId) && (
+          <Text style={styles.text}>
+            Puesto asignado:{' '}
+            {data.stations.find((row) => row.id === employee.stationId)?.name ??
+              employee.stationName ??
+              (employee.stationId
+                ? `Puesto ${employee.stationId}`
+                : 'Sin puesto asignado')}
+          </Text>
+        )}
       </View>
       <Feedback error={action.error} success={action.success} />
       <Button

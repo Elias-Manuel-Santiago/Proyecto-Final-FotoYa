@@ -7,13 +7,14 @@ import { useState } from 'react';
 import { Text } from 'react-native';
 import { Screen } from '../../components/ui/Screen';
 import { Select } from '../../components/ui/Select';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import { visibleStations } from '../../domain/metrics';
 import { useWorkspace } from '../../providers/AppProvider';
 import { StationPrices } from './StationPrices';
 
 // Permite elegir un puesto visible para administrar sus tarifas.
 export function PricesScreen() {
+  const { styles } = useTheme();
   const { data, employee } = useWorkspace();
   const stations = visibleStations(data, employee).filter(
     (row) => row.active !== false,

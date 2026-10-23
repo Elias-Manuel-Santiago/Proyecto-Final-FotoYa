@@ -7,7 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Image, Modal, Pressable, Text, View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../../components/ui/Button';
-import { styles } from '../../../components/ui/theme';
+import { useTheme } from '../../../components/ui/theme';
 import { useWorkspace } from '../../../providers/AppProvider';
 import { errorMessage } from '../../../domain/format';
 
@@ -25,6 +25,7 @@ export function PhotoPreview({
   name: string;
   children?: ReactNode | ((close: () => void) => ReactNode);
 }) {
+  const { styles } = useTheme();
   const { repository } = useWorkspace();
   const [uri, setUri] = useState(localUri);
   const [busy, setBusy] = useState(false);

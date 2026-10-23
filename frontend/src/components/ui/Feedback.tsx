@@ -4,7 +4,7 @@
  * de negocio.
  */
 import { Text } from 'react-native';
-import { styles } from './theme';
+import { useTheme } from './theme';
 
 // Muestra mensajes de error o éxito con el estilo compartido.
 export function Feedback({
@@ -14,6 +14,7 @@ export function Feedback({
   error?: string;
   success?: string;
 }) {
+  const { styles } = useTheme();
   return (
     <>
       {!!error && (
@@ -40,5 +41,6 @@ export function EmptyState({
 }: {
   message?: string;
 }) {
+  const { styles } = useTheme();
   return <Text style={styles.muted}>{message}</Text>;
 }

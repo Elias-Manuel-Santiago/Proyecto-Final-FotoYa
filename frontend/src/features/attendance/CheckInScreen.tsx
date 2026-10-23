@@ -10,7 +10,7 @@ import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
 import { EmptyState, Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import type { CheckInEmployee } from '../../domain/models';
 import { errorMessage, fullName } from '../../domain/format';
 import { useAction } from '../../hooks/useAction';
@@ -18,6 +18,7 @@ import { useWorkspace } from '../../providers/AppProvider';
 
 // Selecciona empleado y confirma su entrada o salida con sus propias credenciales.
 export function CheckInScreen() {
+  const { styles } = useTheme();
   const { repository, exitCheckIn, employee } = useWorkspace();
   const [employees, setEmployees] = useState<CheckInEmployee[]>([]);
   const [loading, setLoading] = useState(true);

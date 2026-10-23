@@ -10,7 +10,7 @@ import { Button } from '../../../components/ui/Button';
 import { Field } from '../../../components/ui/Field';
 import { Select } from '../../../components/ui/Select';
 import { Feedback } from '../../../components/ui/Feedback';
-import { styles } from '../../../components/ui/theme';
+import { useTheme } from '../../../components/ui/theme';
 import { money } from '../../../domain/format';
 import type { EventSaleInput, Price } from '../../../domain/models';
 import { useAction } from '../../../hooks/useAction';
@@ -30,6 +30,7 @@ export function SaleForm({
   onSaved: () => void;
   onBusy: (busy: boolean) => void;
 }) {
+  const { styles } = useTheme();
   const { repository } = useWorkspace();
   const action = useAction();
   const [quantities, setQuantities] = useState<Record<string, string>>({});

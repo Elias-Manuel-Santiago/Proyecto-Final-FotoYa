@@ -9,7 +9,7 @@ import { Button } from '../../../components/ui/Button';
 import { Field } from '../../../components/ui/Field';
 import { Feedback } from '../../../components/ui/Feedback';
 import { Select } from '../../../components/ui/Select';
-import { styles } from '../../../components/ui/theme';
+import { useTheme } from '../../../components/ui/theme';
 import type { Employee, EmployeeInput, RoleId } from '../../../domain/models';
 import { visibleStations } from '../../../domain/metrics';
 import { assignableRoles, roleLabels } from '../../../domain/permissions';
@@ -24,6 +24,7 @@ export function EmployeeForm({
   existing?: Employee;
   onSaved?: () => void;
 }) {
+  const { styles } = useTheme();
   const { data, employee, repository, refresh, logout } = useWorkspace();
   const [input, setInput] = useState<EmployeeInput>(() => ({
     id: existing?.id,

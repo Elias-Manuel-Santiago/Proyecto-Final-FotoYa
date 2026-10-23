@@ -4,7 +4,7 @@
  * formularios y pantallas.
  */
 import { ActivityIndicator, Pressable, Text } from 'react-native';
-import { colors } from './theme';
+import { useTheme } from './theme';
 
 interface Props {
   title: string;
@@ -24,11 +24,12 @@ export function Button({
   secondary,
   danger,
 }: Props) {
+  const { colors } = useTheme();
   const foreground = danger
     ? colors.error
     : secondary
       ? colors.text
-      : '#ffffff';
+      : '#211c24';
   return (
     <Pressable
       accessibilityRole="button"
@@ -40,10 +41,10 @@ export function Button({
         minHeight: 46,
         paddingHorizontal: 16,
         paddingVertical: 12,
-        borderRadius: 4,
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: danger ? colors.error : colors.border,
-        backgroundColor: secondary || danger ? colors.surface : colors.primary,
+        backgroundColor: secondary || danger ? colors.surface : colors.brand,
         opacity: disabled || busy ? 0.5 : pressed ? 0.75 : 1,
         flexDirection: 'row',
         gap: 8,

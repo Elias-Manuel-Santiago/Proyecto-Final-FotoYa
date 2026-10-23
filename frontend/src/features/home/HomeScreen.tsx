@@ -5,10 +5,10 @@
  */
 import { Button } from '../../components/ui/Button';
 import { Link } from 'expo-router';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import { Metrics } from '../../components/metrics/Metrics';
 import { Screen } from '../../components/ui/Screen';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import { businessDate, displayDate } from '../../domain/dates';
 import { can, roleLabels } from '../../domain/permissions';
 import { reportRows, totalMetrics } from '../../domain/metrics';
@@ -19,6 +19,7 @@ import { useAction } from '../../hooks/useAction';
 
 // Reúne indicadores y accesos operativos, incluida la entrada al kiosco.
 export function HomeScreen() {
+  const { colors, styles } = useTheme();
   const { employee, enterCheckIn } = useWorkspace();
   const action = useAction();
   const today = businessDate();
@@ -47,7 +48,7 @@ export function HomeScreen() {
       <Text style={styles.heading}>{displayDate(today)}</Text>
       <Feedback error={error || refreshError} />
       <Text style={styles.muted}>
-        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+        {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}
       </Text>
       {!error && !loading && employee.permissions?.includes('counts.read') && (
         <>
@@ -68,31 +69,93 @@ export function HomeScreen() {
           )}
         </>
       )}
-      {can(employee, 'photos.read') && (
-        <Link href="/photos" style={styles.card}>
-          {employee.roleId === 'client' ? 'Ver mis fotos' : 'Consultar fotos'}
-        </Link>
-      )}
-      {can(employee, 'attendance.self') && (
-        <Link href="/my-attendance" style={styles.card}>
-          Consultar mi asistencia
-        </Link>
-      )}
-      {can(employee, 'sales.read') && (
-        <Link href="/sales" style={styles.card}>
-          Consultar ventas
-        </Link>
-      )}
-      {can(employee, 'employees.manage') && (
-        <Link href="/employees/new" style={styles.card}>
-          Alta de usuario
-        </Link>
-      )}
-      {can(employee, 'reports.read') && (
-        <Link href="/reports" style={styles.card}>
-          Consultar estadísticas e ingresos
-        </Link>
-      )}
+      <View style={[styles.row, { alignItems: 'stretch' }]}>
+        {can(employee, 'photos.read') && (
+          <Link
+            href="/photos"
+            style={[
+              styles.card,
+              {
+                color: colors.text,
+                flexGrow: 1,
+                flexBasis: 260,
+                maxWidth: 440,
+                minHeight: 88,
+              },
+            ]}
+          >
+            {employee.roleId === 'client' ? 'Ver mis fotos' : 'Consultar fotos'}
+          </Link>
+        )}
+        {can(employee, 'attendance.self') && (
+          <Link
+            href="/my-attendance"
+            style={[
+              styles.card,
+              {
+                color: colors.text,
+                flexGrow: 1,
+                flexBasis: 260,
+                maxWidth: 440,
+                minHeight: 88,
+              },
+            ]}
+          >
+            Consultar mi asistencia
+          </Link>
+        )}
+        {can(employee, 'sales.read') && (
+          <Link
+            href="/sales"
+            style={[
+              styles.card,
+              {
+                color: colors.text,
+                flexGrow: 1,
+                flexBasis: 260,
+                maxWidth: 440,
+                minHeight: 88,
+              },
+            ]}
+          >
+            Consultar ventas
+          </Link>
+        )}
+        {can(employee, 'employees.manage') && (
+          <Link
+            href="/employees/new"
+            style={[
+              styles.card,
+              {
+                color: colors.text,
+                flexGrow: 1,
+                flexBasis: 260,
+                maxWidth: 440,
+                minHeight: 88,
+              },
+            ]}
+          >
+            Alta de usuario
+          </Link>
+        )}
+        {can(employee, 'reports.read') && (
+          <Link
+            href="/reports"
+            style={[
+              styles.card,
+              {
+                color: colors.text,
+                flexGrow: 1,
+                flexBasis: 260,
+                maxWidth: 440,
+                minHeight: 88,
+              },
+            ]}
+          >
+            Consultar estadísticas e ingresos
+          </Link>
+        )}
+      </View>
     </Screen>
   );
 }

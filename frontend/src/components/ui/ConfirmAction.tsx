@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button } from './Button';
-import { styles } from './theme';
+import { useTheme } from './theme';
 
 // Solicita confirmación local antes de ejecutar la acción recibida.
 export function ConfirmAction({
@@ -20,6 +20,7 @@ export function ConfirmAction({
   onConfirm: () => Promise<void>;
   busy: boolean;
 }) {
+  const { styles } = useTheme();
   const [confirming, setConfirming] = useState(false);
   return confirming ? (
     <View style={styles.card}>

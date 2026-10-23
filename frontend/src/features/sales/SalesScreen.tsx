@@ -1,3 +1,6 @@
+import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
+import { useState } from 'react';
+import { SortControl } from '../../components/filters/SortControl';
 /**
  * @file
  * Consulta ventas por período y presenta tarjetas. Habilita acceso al registro en evento según
@@ -9,7 +12,7 @@ import { PeriodFilters } from '../../components/filters/PeriodFilters';
 import { Metrics } from '../../components/metrics/Metrics';
 import { EmptyState, Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import {
   matchesPeriod,
   reportRows,
@@ -24,6 +27,8 @@ import { SaleCard } from './components/SaleCard';
 
 // Filtra ventas históricas por período y muestra importes y detalles.
 export function SalesScreen() {
+  const [ascending, setAscending] = useState(false);
+  const { styles } = useTheme();
   const { employee } = useWorkspace();
   const { period, update, error: periodError } = usePeriod();
   const {
@@ -43,11 +48,14 @@ export function SalesScreen() {
             hasStationAccess(employee, sale.stationId) &&
             matchesPeriod(sale, period),
         )
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        .sort(
+          (a, b) =>
+            (ascending ? 1 : -1) * a.createdAt.localeCompare(b.createdAt),
+        );
   return (
     <Screen title="Ventas" refreshing={refreshing} onRefresh={reload}>
       {can(employee, 'sales.create') && (
-        <Link href="/sales/new" style={styles.card}>
+        <Link href="/sales/new" style={[styles.card, styles.text]}>
           Registrar venta en evento
         </Link>
       )}
@@ -56,9 +64,10 @@ export function SalesScreen() {
         stations={visibleStations(data, employee)}
         onChange={update}
       />
+      <SortControl ascending={ascending} onChange={setAscending} />
       <Feedback error={error || refreshError} />
       <Text style={styles.muted}>
-        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+        {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}
       </Text>
       {!error && !loading && (
         <>
@@ -69,9 +78,11 @@ export function SalesScreen() {
           />
           <Text style={styles.muted}>{sales.length} operaciones</Text>
           {!sales.length && <EmptyState />}
-          {sales.map((sale) => (
-            <SaleCard key={sale.id} sale={sale} data={data} />
-          ))}
+          <ResponsiveGrid>
+            {sales.map((sale) => (
+              <SaleCard key={sale.id} sale={sale} data={data} />
+            ))}
+          </ResponsiveGrid>
         </>
       )}
     </Screen>

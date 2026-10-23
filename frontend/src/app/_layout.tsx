@@ -1,8 +1,10 @@
+import { useTheme } from '../components/ui/theme';
 /**
  * @file
  * Monta proveedores y navegación tras restaurar sesión. Separa rutas habituales del check-in
  * mientras el kiosco está bloqueado.
  */
+import { ThemeProvider } from '../providers/ThemeProvider';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppProvider, useApp } from '../providers/AppProvider';
@@ -13,6 +15,7 @@ import { Feedback } from '../components/ui/Feedback';
 
 // Decide las rutas disponibles según restauración, sesión y bloqueo del kiosco.
 function AppNavigator() {
+  const { colors } = useTheme();
   const { employee, restoring, loading, error, restoreSession, logout } =
     useApp();
   if (restoring)
@@ -37,7 +40,12 @@ function AppNavigator() {
       </View>
     );
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <Stack.Protected guard={!employee?.kioskMode}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(workspace)" />
@@ -54,11 +62,13 @@ function AppNavigator() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <SocialProvider>
-        <AppProvider>
-          <AppNavigator />
-        </AppProvider>
-      </SocialProvider>
+      <ThemeProvider>
+        <SocialProvider>
+          <AppProvider>
+            <AppNavigator />
+          </AppProvider>
+        </SocialProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

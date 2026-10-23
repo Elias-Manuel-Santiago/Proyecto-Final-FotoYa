@@ -12,7 +12,7 @@ import {
   Text,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, styles } from './theme';
+import { useTheme } from './theme';
 
 // Organiza encabezado y contenido en el contenedor compartido de las pantallas.
 export function Screen({
@@ -21,13 +21,16 @@ export function Screen({
   refreshing = false,
   onRefresh,
   refreshEnabled = true,
+  compact = false,
 }: {
   title: string;
   children: ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;
   refreshEnabled?: boolean;
+  compact?: boolean;
 }) {
+  const { colors, styles } = useTheme();
   return (
     <SafeAreaView style={styles.page} edges={['left', 'right', 'bottom']}>
       <KeyboardAvoidingView
@@ -36,7 +39,11 @@ export function Screen({
       >
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.content, { flexGrow: 1 }]}
+          contentContainerStyle={[
+            styles.content,
+            { flexGrow: 1 },
+            compact && { maxWidth: 640, paddingTop: 76 },
+          ]}
           alwaysBounceVertical={!!onRefresh && refreshEnabled}
           refreshControl={
             onRefresh ? (

@@ -5,7 +5,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
-import { styles } from '../../../components/ui/theme';
+import { useTheme } from '../../../components/ui/theme';
 import { Button } from '../../../components/ui/Button';
 import { errorMessage } from '../../../domain/format';
 import { useWorkspace } from '../../../providers/AppProvider';
@@ -23,6 +23,7 @@ export function SalePhotoCard({
   onSelect: () => void;
   children?: ReactNode;
 }) {
+  const { styles } = useTheme();
   const { repository } = useWorkspace();
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');

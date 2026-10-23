@@ -90,8 +90,8 @@ export class ApiClient {
       if (error instanceof ApiError) throw error;
       throw new Error(
         controller.signal.aborted
-          ? 'El servidor tardó demasiado. Podés reintentar la operación.'
-          : 'No se pudo conectar con el servidor. Revisá tu conexión y la URL del backend.',
+          ? 'La operación tardó demasiado. Volvé a intentarlo.'
+          : 'No pudimos cargar la información. Revisá tu conexión y volvé a intentarlo.',
       );
     } finally {
       clearTimeout(timer);

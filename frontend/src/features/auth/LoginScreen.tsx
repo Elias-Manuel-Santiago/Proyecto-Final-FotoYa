@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 /**
  * @file
  * Coordina login, registro local/social y confirmación. Acepta sesiones mediante AppProvider y
@@ -15,7 +16,7 @@ import { Field } from '../../components/ui/Field';
 import { PasswordField } from '../../components/ui/PasswordField';
 import { Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 
 interface AuthResult {
   token?: string;
@@ -26,6 +27,7 @@ interface AuthResult {
 
 // Coordina acceso local, registro, confirmación de correo e identidad externa.
 export function LoginScreen() {
+  const { styles } = useTheme();
   const { employee, loading, login, repository, acceptSession } = useApp();
   const social = useSocial();
   const [mode, setMode] = useState<AuthMode>('login');
@@ -167,7 +169,19 @@ export function LoginScreen() {
   if (employee) return <Redirect href="/home" />;
   const creating = mode === 'register' || mode === 'social';
   return (
-    <Screen title="Foto Ya">
+    <Screen compact title="Foto Ya">
+      <Image
+        source={require('../../../assets/images/main-icon.jpg')}
+        accessibilityLabel="FotoYa!"
+        style={{
+          width: 112,
+          height: 112,
+          borderRadius: 24,
+          alignSelf: 'center',
+          marginBottom: 8,
+        }}
+      />
+
       <Text style={styles.heading}>
         {mode === 'verify'
           ? 'Confirmá tu correo'

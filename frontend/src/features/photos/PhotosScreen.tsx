@@ -1,3 +1,5 @@
+import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
+import { SortControl } from '../../components/filters/SortControl';
 /**
  * @file
  * Une galería por período, carga y asignación según permisos. Consulta metadatos y delega
@@ -9,7 +11,7 @@ import { PeriodFilters } from '../../components/filters/PeriodFilters';
 import { Metrics } from '../../components/metrics/Metrics';
 import { EmptyState, Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import { displayDate } from '../../domain/dates';
 import {
   matchesPeriod,
@@ -30,6 +32,8 @@ import { useState } from 'react';
 
 // Combina galería por período, carga y asignación según rol y permisos actuales.
 export function PhotosScreen() {
+  const [ascending, setAscending] = useState(false);
+  const { styles } = useTheme();
   const today = useBusinessDate();
   const { employee } = useWorkspace();
   const { period, update, error: periodError } = usePeriod();
@@ -41,7 +45,7 @@ export function PhotosScreen() {
     refreshError,
     error: queryError,
   } = usePeriodData(period);
-  const periodKey = JSON.stringify(period);
+  const periodKey = JSON.stringify({ period, ascending });
   const [page, setPage] = useState({ key: periodKey, offset: 0 });
   const error = periodError || queryError;
   const photos = error
@@ -53,7 +57,10 @@ export function PhotosScreen() {
               hasStationAccess(employee, photo.stationId)) &&
             matchesPeriod(photo, period),
         )
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        .sort(
+          (a, b) =>
+            (ascending ? 1 : -1) * a.createdAt.localeCompare(b.createdAt),
+        );
   const offset =
     page.key === periodKey
       ? Math.min(
@@ -69,9 +76,10 @@ export function PhotosScreen() {
         stations={visibleStations(data, employee)}
         onChange={update}
       />
+      <SortControl ascending={ascending} onChange={setAscending} />
       <Feedback error={error || refreshError} />
       <Text style={styles.muted}>
-        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+        {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}
       </Text>
       {!error && !loading && (
         <>
@@ -85,33 +93,35 @@ export function PhotosScreen() {
           )}
           <Text style={styles.heading}>Fotos cargadas</Text>
           {!photos.length && <EmptyState />}
-          {photos.slice(offset, offset + 12).map((photo) => (
-            <View key={photo.id} style={styles.card}>
-              <Text style={styles.text}>{photo.name}</Text>
-              <Text style={styles.muted}>{displayDate(photo.date)}</Text>
-              <PhotoPreview photoId={photo.id} name={photo.name}>
-                {(close) => (
-                  <>
-                    <PhotoAssignment photo={photo} />
-                    {can(employee, 'sales.create') &&
-                      photo.stationId === employee.stationId &&
-                      photo.date === today && (
-                        <Link
-                          href={{
-                            pathname: '/sales/new',
-                            params: { photoId: photo.id },
-                          }}
-                          style={styles.text}
-                          onPress={close}
-                        >
-                          Vender foto en el evento
-                        </Link>
-                      )}
-                  </>
-                )}
-              </PhotoPreview>
-            </View>
-          ))}
+          <ResponsiveGrid>
+            {photos.slice(offset, offset + 12).map((photo) => (
+              <View key={photo.id} style={styles.card}>
+                <Text style={styles.text}>{photo.name}</Text>
+                <Text style={styles.muted}>{displayDate(photo.date)}</Text>
+                <PhotoPreview photoId={photo.id} name={photo.name}>
+                  {(close) => (
+                    <>
+                      <PhotoAssignment photo={photo} />
+                      {can(employee, 'sales.create') &&
+                        photo.stationId === employee.stationId &&
+                        photo.date === today && (
+                          <Link
+                            href={{
+                              pathname: '/sales/new',
+                              params: { photoId: photo.id },
+                            }}
+                            style={styles.text}
+                            onPress={close}
+                          >
+                            Vender foto en el evento
+                          </Link>
+                        )}
+                    </>
+                  )}
+                </PhotoPreview>
+              </View>
+            ))}
+          </ResponsiveGrid>
           {photos.length > 12 && (
             <View style={styles.row}>
               <Button

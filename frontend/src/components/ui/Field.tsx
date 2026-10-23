@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from 'react';
 import { Text, TextInput, View, type TextInputProps } from 'react-native';
-import { colors, styles } from './theme';
+import { useTheme } from './theme';
 
 // Integra etiqueta y entrada de texto con el estilo compartido del formulario.
 export function Field({
@@ -18,6 +18,7 @@ export function Field({
   rightAccessory?: ReactNode;
   error?: string;
 }) {
+  const { colors, styles } = useTheme();
   return (
     <View style={{ gap: 6 }}>
       <Text style={styles.label}>{label}</Text>

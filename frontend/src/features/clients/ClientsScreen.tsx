@@ -1,3 +1,4 @@
+import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
 /**
  * @file
  * Busca clientes por correo/DNI en páginas de veinte. Confirma la baja con un modal e ignora
@@ -12,7 +13,7 @@ import { Screen } from '../../components/ui/Screen';
 import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
 import { Feedback, EmptyState } from '../../components/ui/Feedback';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 
 interface Client {
   id: string;
@@ -24,6 +25,7 @@ interface Client {
 }
 // Busca clientes por correo o DNI y administra su baja en una lista paginada.
 export function ClientsScreen() {
+  const { styles } = useTheme();
   const { repository, employee } = useWorkspace();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
@@ -111,31 +113,33 @@ export function ClientsScreen() {
       ) : (
         <>
           {!rows.length && !error && !current?.error && <EmptyState />}
-          {rows.map((client) => (
-            <View key={client.id} style={styles.card}>
-              <Text style={styles.heading}>
-                {client.firstName} {client.lastName}
-              </Text>
-              <Text style={styles.text}>{client.email}</Text>
-              <Text style={styles.text}>DNI: {client.dni}</Text>
-              {!client.verified && (
-                <Text style={styles.muted}>
-                  Correo pendiente de confirmación
+          <ResponsiveGrid>
+            {rows.map((client) => (
+              <View key={client.id} style={styles.card}>
+                <Text style={styles.heading}>
+                  {client.firstName} {client.lastName}
                 </Text>
-              )}
-              {can(employee, 'clients.manage') && (
-                <Button
-                  title="Dar de baja"
-                  danger
-                  disabled={busy}
-                  onPress={() => {
-                    setError('');
-                    setSelected(client);
-                  }}
-                />
-              )}
-            </View>
-          ))}
+                <Text style={styles.text}>{client.email}</Text>
+                <Text style={styles.text}>DNI: {client.dni}</Text>
+                {!client.verified && (
+                  <Text style={styles.muted}>
+                    Correo pendiente de confirmación
+                  </Text>
+                )}
+                {can(employee, 'clients.manage') && (
+                  <Button
+                    title="Dar de baja"
+                    danger
+                    disabled={busy}
+                    onPress={() => {
+                      setError('');
+                      setSelected(client);
+                    }}
+                  />
+                )}
+              </View>
+            ))}
+          </ResponsiveGrid>
         </>
       )}
       <View style={styles.row}>

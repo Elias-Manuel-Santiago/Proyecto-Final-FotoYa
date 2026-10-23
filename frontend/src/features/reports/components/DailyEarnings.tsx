@@ -9,8 +9,8 @@ import { displayDate } from '../../../domain/dates';
 import { money } from '../../../domain/format';
 import { matchesPeriod } from '../../../domain/metrics';
 import { sumAmounts } from '../../../domain/amounts';
-import { EmptyState } from '../../../components/ui/Feedback';
-import { styles } from '../../../components/ui/theme';
+import { DataTable } from '../../../components/ui/DataTable';
+import { useTheme } from '../../../components/ui/theme';
 
 // Agrupa ingresos por fecha para los puestos y el período seleccionados.
 export function DailyEarnings({
@@ -22,6 +22,7 @@ export function DailyEarnings({
   stationIds: string[];
   period: Period;
 }) {
+  const { styles } = useTheme();
   const sales = data.sales.filter(
     (sale) =>
       stationIds.includes(sale.stationId) && matchesPeriod(sale, period),
@@ -46,33 +47,38 @@ export function DailyEarnings({
         Importes históricos de ventas. Las ganancias netas requieren una
         definición de costos.
       </Text>
-      {!dates.length && <EmptyState />}
-      {dates.map((date) => (
-        <Text key={date} style={styles.text}>
-          {displayDate(date)}:{' '}
-          {money(
-            data.counts.some(
-              (row) =>
-                stationIds.includes(row.stationId) &&
-                row.date === date &&
-                row.revenue !== undefined,
-            )
-              ? sumAmounts(
-                  data.counts
-                    .filter(
-                      (row) =>
-                        stationIds.includes(row.stationId) && row.date === date,
-                    )
-                    .map((row) => row.revenue ?? 0),
-                )
-              : sumAmounts(
-                  sales
-                    .filter((sale) => sale.date === date)
-                    .map((sale) => sale.total),
-                ),
-          )}
-        </Text>
-      ))}
+      <DataTable
+        label="Ingresos diarios"
+        columns={['Fecha', 'Ingresos por ventas']}
+        rows={dates.map((date) => ({
+          key: date,
+          cells: [
+            displayDate(date),
+            money(
+              data.counts.some(
+                (row) =>
+                  stationIds.includes(row.stationId) &&
+                  row.date === date &&
+                  row.revenue !== undefined,
+              )
+                ? sumAmounts(
+                    data.counts
+                      .filter(
+                        (row) =>
+                          stationIds.includes(row.stationId) &&
+                          row.date === date,
+                      )
+                      .map((row) => row.revenue ?? 0),
+                  )
+                : sumAmounts(
+                    sales
+                      .filter((sale) => sale.date === date)
+                      .map((sale) => sale.total),
+                  ),
+            ),
+          ],
+        }))}
+      />
     </View>
   );
 }

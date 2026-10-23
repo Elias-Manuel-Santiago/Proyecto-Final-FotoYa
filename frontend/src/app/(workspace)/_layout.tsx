@@ -9,10 +9,12 @@ import { Feedback } from '../../components/ui/Feedback';
 import { Button } from '../../components/ui/Button';
 import { WorkspaceHeader } from '../../components/navigation/WorkspaceHeader';
 import { useApp } from '../../providers/AppProvider';
+import { useTheme } from '../../components/ui/theme';
 import { canWork } from '../../domain/permissions';
 
 // Resuelve sesión y jornada antes de montar pantallas privadas y encabezado.
 export default function WorkspaceLayout() {
+  const { colors } = useTheme();
   const { employee, loading, error, refresh } = useApp();
   const pathname = usePathname();
   if (loading) return <ActivityIndicator accessibilityLabel="Cargando" />;
@@ -20,8 +22,7 @@ export default function WorkspaceLayout() {
   if (!canWork(employee) && pathname !== '/profile')
     return <Redirect href="/profile" />;
   return (
-    <View style={{ flex: 1 }}>
-      <WorkspaceHeader />
+    <WorkspaceHeader>
       {!!error && (
         <View>
           <Feedback error={error} />
@@ -33,7 +34,12 @@ export default function WorkspaceLayout() {
           />
         </View>
       )}
-      <Stack screenOptions={{ headerShown: false }} />
-    </View>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      />
+    </WorkspaceHeader>
   );
 }

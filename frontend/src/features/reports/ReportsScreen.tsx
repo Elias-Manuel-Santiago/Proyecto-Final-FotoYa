@@ -1,14 +1,16 @@
+import { DataTable } from '../../components/ui/DataTable';
+import { money } from '../../domain/format';
 /**
  * @file
  * Presenta informes filtrados y resumen del servidor. Distingue días faltantes,
  * inconsistencias e ingresos disponibles.
  */
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
 import { Metrics } from '../../components/metrics/Metrics';
 import { EmptyState, Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
-import { styles } from '../../components/ui/theme';
+import { useTheme } from '../../components/ui/theme';
 import {
   reportRows,
   totalMetrics,
@@ -21,6 +23,7 @@ import { DailyEarnings } from './components/DailyEarnings';
 
 // Consulta informes por período y presenta resumen e ingresos de los puestos filtrados.
 export function ReportsScreen() {
+  const { styles } = useTheme();
   const { employee } = useWorkspace();
   const { period: filters, update, error: periodError } = usePeriod();
   const ownStationOnly = employee.roleId === 'manager';
@@ -61,7 +64,7 @@ export function ReportsScreen() {
       />
       <Feedback error={error || refreshError} />
       <Text style={styles.muted}>
-        {loading ? 'Consultando servidor…' : refreshing ? 'Actualizando…' : ' '}
+        {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}
       </Text>
       {!error && !loading && (
         <>
@@ -73,25 +76,40 @@ export function ReportsScreen() {
             </Text>
           )}
           {!rows.length && <EmptyState />}
-          {rows.map((row) => (
-            <View key={row.station.id} style={styles.card}>
-              <Text style={styles.heading}>{row.station.name}</Text>
-              <Text style={styles.muted}>
-                {row.station.city} · {row.station.event}
-              </Text>
-              <Text style={styles.muted}>{row.station.address}</Text>
-              <Text style={styles.muted}>
-                Días con conteo: {row.registeredDays} de {row.expectedDays}
-              </Text>
-              {row.invalidDays > 0 && (
-                <Text style={styles.error}>
-                  {row.invalidDays} días con ventas superiores al conteo. Revisá
-                  los registros.
-                </Text>
-              )}
-              <Metrics values={row} />
-            </View>
-          ))}
+          <DataTable
+            label="Estadísticas por puesto"
+            columns={[
+              'Puesto',
+              'Ciudad / evento',
+              'Días con conteo',
+              'Fotografiadas',
+              'Compraron',
+              'Descartes',
+              'Vendido',
+              'Ingresos',
+              'Observaciones',
+            ]}
+            rows={rows.map((row) => ({
+              key: row.station.id,
+              cells: [
+                row.station.name,
+                [row.station.city, row.station.event]
+                  .filter(Boolean)
+                  .join(' · '),
+                `${row.registeredDays} de ${row.expectedDays}`,
+                row.taken ?? 'Sin conteo',
+                row.sold,
+                row.discarded ?? 'No disponible',
+                row.percentage === null
+                  ? 'No aplica'
+                  : `${row.percentage.toFixed(1)} %`,
+                money(row.earnings),
+                row.invalidDays > 0
+                  ? `${row.invalidDays} días con ventas superiores al conteo. Revisá los registros.`
+                  : '—',
+              ],
+            }))}
+          />
           <DailyEarnings
             data={data}
             stationIds={rows.map((row) => row.station.id)}

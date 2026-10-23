@@ -3,9 +3,8 @@
  * Presenta indicadores comerciales compartidos. Distingue métricas no disponibles de valores
  * cero.
  */
-import { Text, View } from 'react-native';
+import { DataTable } from '../ui/DataTable';
 import { money } from '../../domain/format';
-import { styles } from '../ui/theme';
 
 export interface MetricValues {
   taken: number | null;
@@ -42,13 +41,10 @@ export function Metrics({
     ...(showMoney ? [['Ingresos por ventas', money(values.earnings)]] : []),
   ];
   return (
-    <View style={styles.row}>
-      {metrics.map(([label, value]) => (
-        <View key={label} style={[styles.card, { flexGrow: 1, minWidth: 130 }]}>
-          <Text style={styles.muted}>{label}</Text>
-          <Text style={styles.heading}>{value}</Text>
-        </View>
-      ))}
-    </View>
+    <DataTable
+      label="Resumen de estadísticas"
+      columns={metrics.map(([label]) => label)}
+      rows={[{ key: 'summary', cells: metrics.map(([, value]) => value) }]}
+    />
   );
 }

@@ -6,7 +6,7 @@
 import { Text, View } from 'react-native';
 import { Button } from '../../../components/ui/Button';
 import { Feedback } from '../../../components/ui/Feedback';
-import { styles } from '../../../components/ui/theme';
+import { useTheme } from '../../../components/ui/theme';
 import { usePhotoQueue } from '../hooks/usePhotoQueue';
 import { PhotoPreview } from './PhotoPreview';
 
@@ -18,6 +18,7 @@ const statusLabels = {
 
 // Presenta estados individuales y conecta selección, reintento y limpieza de archivos.
 export function UploadQueue() {
+  const { styles } = useTheme();
   const { queue, action, select, upload, remove, clearDone } = usePhotoQueue();
   const pending = queue.filter((row) => row.status !== 'done').length;
   return (
