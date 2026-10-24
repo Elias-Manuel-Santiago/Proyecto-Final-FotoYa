@@ -30,8 +30,8 @@ interface AppContextValue {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   restoreSession: () => Promise<void>;
-  enterCheckIn: () => Promise<void>;
-  exitCheckIn: (password: string) => Promise<void>;
+  logoutCheckIn: (password: string) => Promise<void>;
+  assignCheckIn: (stationId: string, password: string) => Promise<void>;
   repository: HttpFotoYaRepository;
 }
 
@@ -167,20 +167,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [employee, repository, refresh]);
 
-  // Actualiza el perfil local una vez confirmado el bloqueo remoto del kiosco.
-  const enterCheckIn = async () => {
-    await repository.enterCheckIn();
-    setEmployee((current) =>
-      current ? { ...current, kioskMode: true } : current,
-    );
-  };
-  // Libera el kiosco con contraseña y vuelve a cargar los datos de trabajo.
-  const exitCheckIn = async (password: string) => {
-    await repository.exitCheckIn(password);
-    setEmployee((current) =>
-      current ? { ...current, kioskMode: false } : current,
-    );
+  const assignCheckIn = async (stationId: string, password: string) => {
+    await repository.assignCheckIn(stationId, password);
     await refresh();
+  };
+  const logoutCheckIn = async (password: string) => {
+    await repository.logoutCheckIn(password);
+    clear();
   };
 
   // Evita accesos simultáneos y carga los datos antes de marcar la sesión como iniciada.
@@ -253,8 +246,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setError('');
           await restoreSession();
         },
-        enterCheckIn,
-        exitCheckIn,
+        assignCheckIn,
+        logoutCheckIn,
         repository,
       }}
     >

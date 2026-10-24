@@ -5,6 +5,7 @@
  */
 // Las pruebas no toman las credenciales del .env real.
 Object.assign(process.env, {
+  DATA_ENCRYPTION_KEY: 'ab'.repeat(32),
   NODE_ENV: 'test', CORS_ORIGINS: 'http://localhost:8081', DB_HOST: '127.0.0.1',
   DB_PORT: '3306', DB_NAME: 'foto_ya_test', DB_USER: 'root', DB_PASSWORD: '',
   DB_CONNECTION_LIMIT: '2', DB_IDLE_TIMEOUT_MS: '10000',

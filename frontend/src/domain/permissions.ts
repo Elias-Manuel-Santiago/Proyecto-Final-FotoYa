@@ -12,6 +12,7 @@ export const roleLabels: Record<RoleId, string> = {
   photographer: 'Camarógrafo',
   seller: 'Vendedor',
   client: 'Cliente',
+  checkin: 'Check-in',
 };
 
 export type Permission =
@@ -88,6 +89,7 @@ export const rolePermissions: Record<RoleId, readonly Permission[]> = {
     'catalog.read',
   ],
   client: ['photos.read'],
+  checkin: [],
 };
 
 const globalRoles: readonly RoleId[] = ['owner', 'secretary'];
@@ -135,6 +137,14 @@ export function requireStation(employee: Employee, stationId: string) {
 // Define los roles ofrecidos en el formulario según quién administra usuarios.
 export function assignableRoles(employee: Employee): RoleId[] {
   return employee.roleId === 'owner'
-    ? ['owner', 'manager', 'secretary', 'photographer', 'seller', 'client']
-    : ['manager', 'photographer', 'seller'];
+    ? [
+        'owner',
+        'manager',
+        'secretary',
+        'photographer',
+        'seller',
+        'client',
+        'checkin',
+      ]
+    : ['manager', 'photographer', 'seller', 'checkin'];
 }

@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.fotoya.app",
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/main-icon.jpg"
     },
     "android": {
       "package": "com.fotoya.app",
@@ -23,7 +23,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/main-icon.jpg"
     },
     "plugins": [
       "expo-router",

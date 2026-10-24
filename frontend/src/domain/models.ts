@@ -5,7 +5,13 @@
  */
 // Nombres de rol usados por la interfaz; el repositorio los traduce desde los nombres del servidor.
 export type RoleId =
-  'owner' | 'manager' | 'secretary' | 'photographer' | 'seller' | 'client';
+  | 'owner'
+  | 'manager'
+  | 'secretary'
+  | 'photographer'
+  | 'seller'
+  | 'client'
+  | 'checkin';
 
 // Perfil público y estado de acceso del usuario; permisos y jornada pueden actualizarse durante la sesión.
 export interface Employee {

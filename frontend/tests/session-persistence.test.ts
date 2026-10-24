@@ -49,10 +49,11 @@ for (const role of [
   'camarografo',
   'vendedor',
   'cliente',
+  'checkin',
 ]) {
   test(`recupera la sesión de ${role} y consulta su estado vigente al servidor`, async () => {
     const saved = storage();
-    const profile = actor(role, role === 'encargado');
+    const profile = actor(role, role === 'checkin');
     mock.method(
       globalThis,
       'fetch',

@@ -13,7 +13,7 @@ export const authRepository = {
   // Resuelve la sesión con permisos, puesto, asistencia y kiosco vigentes.
   async actor(token) {
     const [rows] = await db.execute(`SELECT u.id_usuario AS id, u.id_puesto AS stationId, r.nombre AS role,
-      s.id_sesiones_usuario AS sessionId, s.check_in_mode AS kioskMode,
+      s.id_sesiones_usuario AS sessionId, (r.nombre = 'checkin') AS kioskMode,
       EXISTS(SELECT 1 FROM horarios h JOIN dias d ON d.id_dias = h.id_dias
         WHERE h.id_usuario = u.id_usuario AND h.check_out IS NULL AND d.id_puesto = u.id_puesto) AS working
       FROM sesiones_usuario s

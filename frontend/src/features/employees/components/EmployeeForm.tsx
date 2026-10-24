@@ -55,18 +55,50 @@ export function EmployeeForm({
 
   return (
     <View style={styles.stack}>
-      <Field
-        label="Nombre"
-        value={input.firstName}
-        onChangeText={(firstName) => update({ firstName })}
-        editable={!action.busy}
+      <Select
+        label="Rol"
+        value={input.roleId}
+        options={(
+          data.roles
+            ?.map((row) => row.roleId)
+            .filter(
+              (role) =>
+                !existing ||
+                role !== 'checkin' ||
+                existing.roleId === 'checkin',
+            ) ??
+          assignableRoles(employee).filter(
+            (role) =>
+              !existing || role !== 'checkin' || existing.roleId === 'checkin',
+          )
+        ).map((value) => ({
+          value,
+          label: roleLabels[value],
+        }))}
+        onChange={(value) => update({ roleId: value as RoleId })}
+        disabled={
+          action.busy ||
+          existing?.id === employee.id ||
+          existing?.roleId === 'checkin'
+        }
       />
-      <Field
-        label="Apellido"
-        value={input.lastName}
-        onChangeText={(lastName) => update({ lastName })}
-        editable={!action.busy}
-      />
+
+      {input.roleId !== 'checkin' && (
+        <>
+          <Field
+            label="Nombre"
+            value={input.firstName}
+            onChangeText={(firstName) => update({ firstName })}
+            editable={!action.busy}
+          />
+          <Field
+            label="Apellido"
+            value={input.lastName}
+            onChangeText={(lastName) => update({ lastName })}
+            editable={!action.busy}
+          />
+        </>
+      )}
       <Field
         label="Email"
         value={input.email}
@@ -75,17 +107,23 @@ export function EmployeeForm({
         autoCapitalize="none"
         editable={!action.busy}
       />
-      <Field
-        label="DNI"
-        value={input.dni}
-        onChangeText={(dni) => update({ dni })}
-        keyboardType="number-pad"
-        maxLength={20}
-        editable={!action.busy}
-      />
-      {!existing && (
+      {input.roleId !== 'checkin' && (
         <Field
-          label="Contraseña inicial (12 a 128 caracteres)"
+          label="DNI"
+          value={input.dni}
+          onChangeText={(dni) => update({ dni })}
+          keyboardType="number-pad"
+          maxLength={20}
+          editable={!action.busy}
+        />
+      )}
+      {(!existing || input.roleId === 'checkin') && (
+        <Field
+          label={
+            existing
+              ? 'Nueva contraseña (opcional, 12 a 128 caracteres)'
+              : 'Contraseña inicial (12 a 128 caracteres)'
+          }
           value={input.password ?? ''}
           onChangeText={(password) => update({ password })}
           secureTextEntry
@@ -94,39 +132,30 @@ export function EmployeeForm({
           maxLength={128}
         />
       )}
-      <Select
-        label="Rol"
-        value={input.roleId}
-        options={(
-          data.roles?.map((row) => row.roleId) ?? assignableRoles(employee)
-        ).map((value) => ({
-          value,
-          label: roleLabels[value],
-        }))}
-        onChange={(value) => update({ roleId: value as RoleId })}
-        disabled={action.busy || existing?.id === employee.id}
-      />
-      <Select
-        label="Puesto asignado"
-        value={input.stationId}
-        options={[
-          ...(['owner', 'secretary', 'client'].includes(input.roleId) &&
-          employee.roleId === 'owner'
-            ? [{ value: '', label: 'Sin puesto asignado' }]
-            : []),
-          ...visibleStations(data, employee)
-            .filter(
-              (station) =>
-                station.active !== false || station.id === existing?.stationId,
-            )
-            .map((station) => ({
-              value: station.id,
-              label: station.name,
-            })),
-        ]}
-        onChange={(stationId) => update({ stationId })}
-        disabled={action.busy || existing?.id === employee.id}
-      />
+      {input.roleId !== 'checkin' && (
+        <Select
+          label="Puesto asignado"
+          value={input.stationId}
+          options={[
+            ...(['owner', 'secretary', 'client'].includes(input.roleId) &&
+            employee.roleId === 'owner'
+              ? [{ value: '', label: 'Sin puesto asignado' }]
+              : []),
+            ...visibleStations(data, employee)
+              .filter(
+                (station) =>
+                  station.active !== false ||
+                  station.id === existing?.stationId,
+              )
+              .map((station) => ({
+                value: station.id,
+                label: station.name,
+              })),
+          ]}
+          onChange={(stationId) => update({ stationId })}
+          disabled={action.busy || existing?.id === employee.id}
+        />
+      )}
       <Feedback error={action.error} success={action.success} />
       <Button title="Guardar usuario" onPress={save} busy={action.busy} />
     </View>

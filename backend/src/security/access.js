@@ -24,6 +24,6 @@ export function stationScope(actor, requested) {
 // Limita los roles y puestos que el actor puede asignar a otro usuario.
 export function assertAssignable(actor, role, stationId) {
   if (actor.role === 'dueno') return;
-  if (!['encargado', 'camarografo', 'vendedor'].includes(role) || stationId !== actor.stationId)
+  if (!['encargado', 'camarografo', 'vendedor', 'checkin'].includes(role) || stationId !== actor.stationId)
     throw new ApiError(403, 'No podés asignar ese rol o puesto.', 'FORBIDDEN');
 }

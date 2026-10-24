@@ -55,7 +55,9 @@ export function EmployeesScreen() {
       <ResponsiveGrid>
         {rows.map((row) => (
           <View style={styles.card} key={row.id}>
-            <Text style={styles.heading}>{fullName(row)}</Text>
+            <Text style={styles.heading}>
+              {row.roleId === 'checkin' ? row.email : fullName(row)}
+            </Text>
             <Text style={styles.text}>
               {roleLabels[row.roleId]} ·{' '}
               {
@@ -70,7 +72,8 @@ export function EmployeesScreen() {
               href={{ pathname: '/employees/[id]', params: { id: row.id } }}
               style={styles.text}
             >
-              Ver ficha de {fullName(row)}
+              Ver ficha de{' '}
+              {row.roleId === 'checkin' ? row.email : fullName(row)}
             </Link>
           </View>
         ))}

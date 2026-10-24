@@ -18,12 +18,14 @@ export function PhotoPreview({
   saleId,
   name,
   children,
+  showOpenButton = true,
 }: {
   uri?: string;
   photoId?: string;
   saleId?: string;
   name: string;
   children?: ReactNode | ((close: () => void) => ReactNode);
+  showOpenButton?: boolean;
 }) {
   const { styles } = useTheme();
   const { repository } = useWorkspace();
@@ -109,7 +111,9 @@ export function PhotoPreview({
           onPress={() => setRetry((value) => value + 1)}
         />
       )}
-      <Button title={`Ver ${name}`} secondary busy={busy} onPress={open} />
+      {showOpenButton && (
+        <Button title={`Ver ${name}`} secondary busy={busy} onPress={open} />
+      )}
       {!!error && <Text style={styles.error}>{error}</Text>}
       <Modal
         visible={visible}

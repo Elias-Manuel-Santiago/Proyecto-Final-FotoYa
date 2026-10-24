@@ -11,8 +11,8 @@ export async function protectUsers(connection, env) {
   for (const user of users) {
     const fields = ['nombre', 'apellido', 'email', 'dni'];
     const plain = Object.fromEntries(fields.map(field => [field,
-      user[field].startsWith('enc:v1:') ? decryptLegacy(user[field], field, env) : user[field]]));
-    plain.email = normalizeEmail(plain.email); plain.dni = normalizeDni(plain.dni);
+      user[field]?.startsWith('enc:v1:') ? decryptLegacy(user[field], field, env) : user[field]]));
+    plain.email = normalizeEmail(plain.email); plain.dni = plain.dni === null ? null : normalizeDni(plain.dni);
     const supportedPassword = /^scrypt\$[a-f\d]{32}\$[a-f\d]{128}$/.test(user.password);
     if (!supportedPassword && /^(\$|scrypt\$|[a-f\d]{64}$)/i.test(user.password))
       throw new Error('Existe un hash de contraseña de otro formato. Se requiere una migración específica de credenciales.');

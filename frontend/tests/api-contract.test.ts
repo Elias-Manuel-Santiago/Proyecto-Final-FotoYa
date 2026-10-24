@@ -56,6 +56,7 @@ const spanishRoles = {
   photographer: 'camarografo',
   seller: 'vendedor',
   client: 'cliente',
+  checkin: 'checkin',
 };
 const actor = (role: string, permissions = backendPermissions[role]) => ({
   id: '7',
@@ -218,7 +219,7 @@ function fixture(
   return { api, repo, requests };
 }
 
-test('la matriz de fallback coincide con los seis roles del backend', () => {
+test('la matriz de fallback coincide con los siete roles del backend', () => {
   for (const [role, spanish] of Object.entries(spanishRoles)) {
     assert.deepEqual(
       [...rolePermissions[role as keyof typeof rolePermissions]].sort(),
@@ -537,7 +538,7 @@ test('fechas MySQL se interpretan como UTC y los períodos respetan 367 días', 
 });
 
 test('check-in conserva la sesión y envía credenciales del empleado y estado esperado', async () => {
-  const { repo, requests } = fixture('encargado', {
+  const { repo, requests } = fixture('checkin', {
     'attendance/kiosk/employees': [
       {
         id: 8,
@@ -548,8 +549,7 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
       },
     ],
   });
-  await repo.login('encargado@example.com', 'clave');
-  await repo.enterCheckIn();
+  await repo.login('checkin@example.com', 'clave');
   const [employee] = await repo.checkInEmployees();
   assert.equal(employee.id, '8');
   await repo.markAttendance(
@@ -562,7 +562,16 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
     'empleado@example.com',
     'clave-empleado',
   );
-  await repo.exitCheckIn('clave-encargado');
+  await repo.assignCheckIn('2', 'clave-checkin');
+  await repo.logoutCheckIn('clave-checkin');
+  assert.deepEqual(
+    requests.find((row) => row.path === 'attendance/kiosk/assign')?.body,
+    { stationId: '2', password: 'clave-checkin' },
+  );
+  assert.deepEqual(
+    requests.find((row) => row.path === 'attendance/kiosk/exit')?.body,
+    { password: 'clave-checkin' },
+  );
   const marks = requests.filter((row) => row.path === 'attendance/kiosk/mark');
   assert.deepEqual(marks[0].body, {
     userId: '8',
@@ -584,12 +593,12 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
 });
 
 test('sin check-in o en modo check-in el snapshot solo consulta el perfil', async () => {
-  for (const role of ['camarografo', 'vendedor', 'secretario', 'encargado']) {
+  for (const role of ['camarografo', 'vendedor', 'secretario', 'checkin']) {
     const { repo, requests } = fixture(role, {
       'auth/me': {
         ...actor(role),
         working: false,
-        kioskMode: role === 'encargado',
+        kioskMode: role === 'checkin',
       },
     });
     const data = await repo.snapshot();
@@ -723,4 +732,48 @@ test('una imagen válida no se rechaza solo por su extensión o MIME declarado',
   ]);
   assert.equal(results[0].error, undefined);
   assert.equal(requests.length, 1);
+});
+
+test('alta Check-in solo envía correo y contraseña sin consultar catálogos', async () => {
+  const { repo, requests } = fixture();
+  await repo.saveEmployee({
+    firstName: '',
+    lastName: '',
+    dni: '',
+    stationId: '',
+    roleId: 'checkin',
+    email: 'kiosk@example.com',
+    password: 'Test-password-1234',
+  });
+  assert.deepEqual(
+    requests.map((row) => row.path),
+    ['users/check-in/create'],
+  );
+  assert.deepEqual(requests[0].body, {
+    email: 'kiosk@example.com',
+    password: 'Test-password-1234',
+  });
+  userSchemas.createCheckIn.parse(requests[0].body);
+});
+
+test('contraseña errónea al cerrar Check-in conserva la sesión', async () => {
+  const api = testApi('http://api.test/api', async (_url, init) => {
+    assert.equal(
+      (init?.headers as Record<string, string>).Authorization,
+      `Bearer ${'t'.repeat(43)}`,
+    );
+    return Response.json(
+      {
+        error: {
+          code: 'INVALID_CREDENTIALS',
+          message: 'Contraseña incorrecta',
+        },
+      },
+      { status: 401 },
+    );
+  });
+  const repo = new HttpFotoYaRepository(api);
+  await repo.acceptSession('t'.repeat(43));
+  await assert.rejects(repo.logoutCheckIn('incorrecta'));
+  await assert.rejects(repo.logoutCheckIn('incorrecta'));
 });

@@ -1,7 +1,7 @@
 /**
  * @file
  * Presenta empleados y pide credenciales para marcar en kiosco. Refresca asistencia y exige
- * contraseña del encargado para salir.
+ * contraseña de la cuenta para configurar puesto o cerrar sesión.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -15,20 +15,30 @@ import type { CheckInEmployee } from '../../domain/models';
 import { errorMessage, fullName } from '../../domain/format';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
+import { CheckInOptions } from './components/CheckInOptions';
 
 // Selecciona empleado y confirma su entrada o salida con sus propias credenciales.
 export function CheckInScreen() {
+  const { employee } = useWorkspace();
+  return <CheckInStationScreen key={employee.stationId} />;
+}
+
+function CheckInStationScreen() {
   const { styles } = useTheme();
-  const { repository, exitCheckIn, employee } = useWorkspace();
+  const { repository, employee } = useWorkspace();
   const [employees, setEmployees] = useState<CheckInEmployee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<CheckInEmployee | null>(null);
-  const [leaving, setLeaving] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const action = useAction();
   const reload = useCallback(async () => {
+    if (!employee.stationId) {
+      setEmployees([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       setEmployees(await repository.checkInEmployees());
@@ -38,7 +48,7 @@ export function CheckInScreen() {
     } finally {
       setLoading(false);
     }
-  }, [repository]);
+  }, [repository, employee.stationId]);
   useEffect(() => {
     const initial = setTimeout(() => {
       void reload();
@@ -54,7 +64,6 @@ export function CheckInScreen() {
   // Limpia selección y credenciales para comenzar una nueva marcación.
   const reset = () => {
     setSelected(null);
-    setLeaving(false);
     setEmail('');
     setPassword('');
     action.clear();
@@ -64,13 +73,15 @@ export function CheckInScreen() {
       <Screen
         title="Check-in del puesto"
         refreshing={loading}
-        refreshEnabled={!selected && !leaving && !action.busy}
+        refreshEnabled={!selected && !action.busy}
         onRefresh={() => {
           void reload();
         }}
       >
         <Text style={styles.muted}>
-          Seleccioná tu nombre para registrar tu entrada o salida.
+          {employee.stationId
+            ? `${employee.stationName ?? 'Puesto asignado'} · Seleccioná tu nombre para registrar tu entrada o salida.`
+            : 'Seleccioná un puesto desde el botón de opciones para comenzar.'}
         </Text>
         <Feedback error={error || action.error} success={action.success} />
         {selected ? (
@@ -135,43 +146,6 @@ export function CheckInScreen() {
               onPress={reset}
             />
           </View>
-        ) : leaving ? (
-          <View style={styles.card}>
-            <Text style={styles.heading}>Salir de la vista de check-in</Text>
-            <Text style={styles.text}>
-              Ingresá la contraseña de {fullName(employee)}.
-            </Text>
-            <Field
-              label="Contraseña del encargado"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={128}
-              editable={!action.busy}
-            />
-            <Button
-              title="Desbloquear"
-              busy={action.busy}
-              disabled={!password}
-              onPress={() => {
-                void action.run(async () => {
-                  try {
-                    await exitCheckIn(password);
-                  } finally {
-                    setPassword('');
-                  }
-                });
-              }}
-            />
-            <Button
-              title="Cancelar"
-              secondary
-              disabled={action.busy}
-              onPress={reset}
-            />
-          </View>
         ) : (
           <>
             {!loading && !error && !employees.length && (
@@ -193,17 +167,10 @@ export function CheckInScreen() {
                 />
               </View>
             ))}
-            <Button
-              title="Salir de la vista de check-in"
-              secondary
-              onPress={() => {
-                reset();
-                setLeaving(true);
-              }}
-            />
           </>
         )}
       </Screen>
+      <CheckInOptions disabled={action.busy} onOpen={reset} />
     </SafeAreaView>
   );
 }

@@ -16,8 +16,10 @@ import { Feedback } from '../components/ui/Feedback';
 // Decide las rutas disponibles según restauración, sesión y bloqueo del kiosco.
 function AppNavigator() {
   const { colors } = useTheme();
-  const { employee, restoring, loading, error, restoreSession, logout } =
+  const { employee, data, restoring, loading, error, restoreSession, logout } =
     useApp();
+  if (employee && !data)
+    return <ActivityIndicator accessibilityLabel="Cargando cuenta" />;
   if (restoring)
     return (
       <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 16 }}>
@@ -46,12 +48,12 @@ function AppNavigator() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Protected guard={!employee?.kioskMode}>
+      <Stack.Protected guard={employee?.roleId !== 'checkin'}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(workspace)" />
         <Stack.Screen name="+not-found" />
       </Stack.Protected>
-      <Stack.Protected guard={!!employee?.kioskMode}>
+      <Stack.Protected guard={employee?.roleId === 'checkin'}>
         <Stack.Screen name="check-in" />
       </Stack.Protected>
     </Stack>
@@ -62,13 +64,13 @@ function AppNavigator() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <SocialProvider>
-          <AppProvider>
+      <SocialProvider>
+        <AppProvider>
+          <ThemeProvider>
             <AppNavigator />
-          </AppProvider>
-        </SocialProvider>
-      </ThemeProvider>
+          </ThemeProvider>
+        </AppProvider>
+      </SocialProvider>
     </SafeAreaProvider>
   );
 }

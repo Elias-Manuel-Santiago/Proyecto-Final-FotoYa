@@ -326,6 +326,7 @@ export function LoginScreen() {
               ['Google', 'google-oauth2'],
               ['GitHub', 'github'],
               ['Apple', 'apple'],
+              ['Facebook', 'facebook'],
             ] as const
           ).map(([label, connection]) => (
             <Button

@@ -24,10 +24,16 @@ import { EmployeeForm } from './components/EmployeeForm';
 
 // Resuelve el usuario de la ruta y presenta edición, disponibilidad y acceso a asistencia.
 export function EmployeeDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  return <EmployeeDetails key={id} />;
+}
+
+function EmployeeDetails() {
   const { styles } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, employee, repository, refresh } = useWorkspace();
   const [editing, setEditing] = useState(false);
+  const [checkInPassword, setCheckInPassword] = useState('');
   const action = useAction();
   const target = data.employees.find(
     (row) => row.id === id && hasStationAccess(employee, row.stationId),
@@ -52,7 +58,9 @@ export function EmployeeDetailScreen() {
   }
 
   return (
-    <Screen title={fullName(target)}>
+    <Screen
+      title={target.roleId === 'checkin' ? target.email : fullName(target)}
+    >
       <View style={styles.card}>
         <Text style={styles.text}>Rol: {roleLabels[target.roleId]}</Text>
         {!['owner', 'client'].includes(target.roleId) && (
@@ -61,18 +69,49 @@ export function EmployeeDetailScreen() {
           </Text>
         )}
         <Text style={styles.text}>Email: {target.email}</Text>
-        <Text style={styles.text}>DNI: {target.dni}</Text>
+        {target.roleId !== 'checkin' && (
+          <Text style={styles.text}>DNI: {target.dni}</Text>
+        )}
         <Text style={styles.text}>
           Estado: {target.active ? 'Activo' : 'Inactivo'}
         </Text>
       </View>
-      {target.roleId !== 'client' && can(employee, 'attendance.read') && (
-        <Link
-          href={{ pathname: '/attendance', params: { employeeId: target.id } }}
-          style={[styles.card, styles.text]}
-        >
-          Consultar horarios
-        </Link>
+      {!['client', 'checkin'].includes(target.roleId) &&
+        can(employee, 'attendance.read') && (
+          <Link
+            href={{
+              pathname: '/attendance',
+              params: { employeeId: target.id },
+            }}
+            style={[styles.card, styles.text]}
+          >
+            Consultar horarios
+          </Link>
+        )}
+      {target.roleId === 'checkin' && manageable && (
+        <View style={styles.card}>
+          <Button
+            title={
+              checkInPassword
+                ? 'Ocultar contraseña'
+                : 'Ver contraseña de Check-in'
+            }
+            secondary
+            busy={action.busy}
+            onPress={() => {
+              if (checkInPassword) setCheckInPassword('');
+              else
+                void action.run(async () => {
+                  setCheckInPassword(
+                    (await repository.checkInPassword(target.id)).password,
+                  );
+                });
+            }}
+          />
+          {!!checkInPassword && (
+            <Text style={styles.text}>Contraseña: {checkInPassword}</Text>
+          )}
+        </View>
       )}
       <Feedback error={action.error} success={action.success} />
       {manageable && (
@@ -84,7 +123,13 @@ export function EmployeeDetailScreen() {
             onPress={() => setEditing((value) => !value)}
           />
           {editing && (
-            <EmployeeForm existing={target} onSaved={() => setEditing(false)} />
+            <EmployeeForm
+              existing={target}
+              onSaved={() => {
+                setEditing(false);
+                setCheckInPassword('');
+              }}
+            />
           )}
           {target.id !== employee.id && (
             <ConfirmAction

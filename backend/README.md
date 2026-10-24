@@ -11,7 +11,7 @@ npm ci
 Copy-Item .env.example .env
 ```
 
-Completar las credenciales de MySQL y `SUPABASE_SECRET_KEY`. No se necesitan claves de cifrado ni de búsqueda para instalaciones nuevas.
+Completar las credenciales de MySQL y `SUPABASE_SECRET_KEY`. Para habilitar cuentas Check-in, configurar `DATA_ENCRYPTION_KEY` con 32 bytes aleatorios en hexadecimal (64 caracteres). Conservar la clave en el servidor y sus respaldos: permite que el dueño y el encargado del puesto consulten la contraseña de esas cuentas, almacenada con AES-256-GCM además del hash de autenticación. Generar una clave con `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
 
 ### Error 403 al subir fotos en Render
 
@@ -36,7 +36,7 @@ El actualizador inspecciona columnas e índices existentes y aplica únicamente 
 
 Sólo las contraseñas se guardan hasheadas con scrypt. Nombre, apellido, email y DNI se guardan directamente; email se normaliza a minúsculas y DNI sin separadores, con índices únicos. La migración convierte contraseñas antiguas en texto a scrypt y rechaza hashes de formatos desconocidos.
 
-La actualización adapta instalaciones anteriores: descifra los datos personales con la `DATA_ENCRYPTION_KEY` anterior (necesaria sólo para esa conversión), elimina hashes de búsqueda y cambia `token_hash` por `token`. Las sesiones y tokens anteriores se invalidan porque sus valores originales no se pueden recuperar; será necesario iniciar sesión otra vez. La antigua tabla de reservas de carga se elimina; las fotos confirmadas se conservan. No borrar la clave anterior hasta completar la conversión. Al terminar elimina `backend_locks` y `backend_migrations`; no vuelve a crearlas. Los cambios de usuarios se coordinan bloqueando las filas del catálogo de roles dentro de la transacción. Las asignaciones de permisos existentes se conservan.
+La actualización adapta instalaciones anteriores: descifra los datos personales con la `DATA_ENCRYPTION_KEY` anterior (conservar también para las contraseñas de Check-in), elimina hashes de búsqueda y cambia `token_hash` por `token`. Las sesiones y tokens anteriores se invalidan porque sus valores originales no se pueden recuperar; será necesario iniciar sesión otra vez. La antigua tabla de reservas de carga se elimina; las fotos confirmadas se conservan. No borrar la clave anterior hasta completar la conversión. Al terminar elimina `backend_locks` y `backend_migrations`; no vuelve a crearlas. Los cambios de usuarios se coordinan bloqueando las filas del catálogo de roles dentro de la transacción. Las asignaciones de permisos existentes se conservan.
 
 Crear el primer dueño desde una terminal, dentro de `backend`:
 
@@ -144,10 +144,14 @@ Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`.
 | `/api/catalog/prices/availability` | `stationId`, `priceId`, `active`; baja y reactivación de tarifas |
 | `/api/attendance/query` | Período, paginación y `userId` opcional; usa el puesto histórico del día |
 | `/api/attendance/mine` | Período y paginación; registros propios |
-| `/api/attendance/kiosk/enter` | Sin campos; encargado con puesto activa el modo de check-in en su sesión |
 | `/api/attendance/kiosk/employees` | Paginación; empleados activos del puesto, nombre, apellido, `working` y `attendanceId` |
 | `/api/attendance/kiosk/mark` | `userId`, `email`, `password`, `action` (`check-in`/`check-out`) y `attendanceId` esperado (null para entrada) |
-| `/api/attendance/kiosk/exit` | `password` del encargado que activó la vista; desbloquea su sesión |
+| `/api/attendance/kiosk/exit` | `password` de la cuenta Check-in; revoca su sesión |
+| `/api/attendance/kiosk/stations` | Puestos activos disponibles para la cuenta Check-in |
+| `/api/attendance/kiosk/assign` | `stationId`, `password` de Check-in; cambia su puesto |
+| `/api/users/check-in/create` | `email`, `password`; dueño o encargado, sin datos personales |
+| `/api/users/check-in/update` | `userId`, `email`, `password` opcional; dueño o encargado del puesto |
+| `/api/users/check-in/password` | `userId`; devuelve la contraseña solo al dueño o encargado del puesto |
 | `/api/reports/query` | Período, paginación y filtros opcionales `cityId`, `eventId`; rendimiento por puesto |
 | `/api/reports/summary` | Mismos filtros; totales de todo el alcance, independientes de la paginación |
 | `/api/reports/days/query` | Período y paginación; conteos diarios y descartes calculados |
@@ -172,7 +176,7 @@ Conservar el mismo `operationId` y contenido al reintentar una venta: recupera s
 
 Contraseñas con scrypt (sal aleatoria, N=131072, r=8, p=1). Tokens de sesión aleatorios de 256 bits guardados sin hash. Los demás datos de la aplicación se almacenan sin hashes ni cifrado. La API sigue validando permisos, disponibilidad, vencimiento y revocación de sesiones; los listados de sesiones no exponen tokens.
 
-Los roles iniciales son `dueno`, `encargado`, `secretario`, `camarografo`, `vendedor` y `cliente`. Los permisos efectivos se consultan en `permisos_rol` en cada petición. Dueño y secretario tienen el alcance global definido para sus consultas; encargado y personal operativo quedan limitados a su puesto. El cliente sólo consulta sus fotos. Un puesto NULL nunca concede alcance global. El encargado no asigna roles globales ni administra usuarios fuera de su puesto. La API impide cambiar la propia asignación o desactivar la propia cuenta. Cambiar permisos en MySQL tiene efecto en la siguiente solicitud; el seed inicial no restablece asignaciones en cada migración.
+Los roles iniciales son `dueno`, `encargado`, `secretario`, `camarografo`, `vendedor`, `cliente` y `checkin`. Los permisos efectivos se consultan en `permisos_rol` en cada petición. Dueño y secretario tienen el alcance global definido para sus consultas; encargado y personal operativo quedan limitados a su puesto. El cliente sólo consulta sus fotos. Un puesto NULL nunca concede alcance global. El encargado no asigna roles globales ni administra usuarios fuera de su puesto. La API impide cambiar la propia asignación o desactivar la propia cuenta. Cambiar permisos en MySQL tiene efecto en la siguiente solicitud; el seed inicial no restablece asignaciones en cada migración.
 
 El `.env.example` usa el proyecto Supabase **Foto Ya**, con bucket privado existente **Fotos**. La clave secreta sólo pertenece al backend. La autorización se hace en MySQL antes de pedir la firma; no crear políticas de lectura pública ni hacer público el bucket. Las URLs firmadas son capacidades temporales: duran 60 segundos por defecto (máximo configurable 300) y una URL ya emitida no se revoca al cerrar la sesión. La firma y carga usan el cliente oficial de Supabase; el navegador carga la imagen mediante GET propio de Supabase. Los archivos nuevos se suben con caché de cero segundos. [Referencia de acceso a archivos privados](https://supabase.com/docs/guides/storage/serving/downloads).
 
@@ -206,7 +210,7 @@ Cada reenvío es una carga independiente: si se pierde la respuesta de una carga
 
 La asistencia se registra exclusivamente desde `/api/attendance/kiosk/*`. Las rutas anteriores `/api/attendance/check-in` y `/api/attendance/check-out` rechazan con `403 KIOSK_REQUIRED`.
 
-Ejecutar `npm run db:migrate` antes de desplegar esta versión: agrega `sesiones_usuario.check_in_mode` y un índice de horarios abiertos. En modo check-in la sesión del encargado sólo puede consultar su perfil y operar la vista; tampoco permite logout, cambios de contraseña ni revocación de sesiones hasta validar su contraseña. Cada marcación verifica el mail y contraseña del empleado seleccionado, activo y del mismo puesto, sin cambiar de sesión. La transacción serializa marcaciones y cambios de asignación; los reintentos con estado anterior se rechazan con `409 ATTENDANCE_CHANGED`.
+Ejecutar `npm run db:migrate` antes de desplegar esta versión: agrega `sesiones_usuario.check_in_mode` y un índice de horarios abiertos. La cuenta Check-in sólo puede consultar su perfil y operar la vista; cambiar su puesto y cerrar sesión exigen su contraseña, y las rutas generales de cuenta están bloqueadas. Cada marcación verifica el mail y contraseña del empleado seleccionado, activo y del mismo puesto, sin cambiar de sesión. La transacción serializa marcaciones y cambios de asignación; los reintentos con estado anterior se rechazan con `409 ATTENDANCE_CHANGED`.
 
 Las entradas usan el día de Argentina y horas UTC del servidor. Se permite volver a entrar después de una salida y un turno puede cruzar medianoche: su día y puesto siguen siendo los de entrada. Una jornada abierta en otro puesto debe cerrarse antes de abrir otra. Camarógrafos, vendedores y secretarios necesitan una jornada abierta en su puesto actual para acceder a operaciones; fuera de jornada conservan su perfil y administración de su cuenta. El dueño, encargado y cliente no requieren jornada para usar la aplicación. Un secretario sin puesto asignado necesita que el dueño se lo asigne para poder marcar. El estado se verifica en cada petición, incluyendo sesiones de otros dispositivos.
 
@@ -267,3 +271,5 @@ El código tiene seis dígitos, vence en diez minutos y admite cinco intentos. E
 Quedan pendientes ganancias netas, recuperación de contraseña, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API; las simulaciones sólo se usan en `frontend/tests/support`.
 
 La verificación de correo usa `tokens_autenticacion` con `tipo = 'email_verification'`: `token` contiene el digest del desafío, `code_hash` el digest del código vinculado al desafío, y `sent_at`/`attempts` controlan reenvíos e intentos. Se conserva una fila por usuario para este tipo; los demás tipos admiten varias. La confirmación marca `used_at` y el reenvío reemplaza el desafío. `db:migrate` copia las verificaciones de la antigua `client_verifications`, conserva códigos, fechas e intentos y elimina esa tabla después de confirmar la copia. Ejecutar con la API detenida y respaldo previo.
+
+Las cuentas Check-in acceden únicamente a asistencia y a su menú de opciones. El encargado ya no activa un modo kiosco. Al crearlas un encargado asigna automáticamente su puesto; si las crea el dueño, inician sin puesto y lo seleccionan con su contraseña desde Opciones. No se incluyen en la nómina de asistencia. La contraseña no se devuelve en listas, perfiles ni catálogos. Cambiar el tema no requiere contraseña.

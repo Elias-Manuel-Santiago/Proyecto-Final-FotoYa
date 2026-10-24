@@ -33,7 +33,7 @@ export function ProfileScreen() {
     >
       {!canWork(employee) && (
         <Text style={styles.muted}>
-          No estás trabajando. Registrá tu check-in en la pantalla del encargado
+          No estás trabajando. Registrá tu check-in en la pantalla de Check-in
           de tu puesto para habilitar tus tareas. Deslizá hacia abajo para
           actualizar esta pantalla después de marcar.
         </Text>

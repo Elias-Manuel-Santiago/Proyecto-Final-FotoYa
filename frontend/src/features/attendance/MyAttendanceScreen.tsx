@@ -36,8 +36,8 @@ export function MyAttendanceScreen() {
   return (
     <Screen title="Mi asistencia" refreshing={refreshing} onRefresh={reload}>
       <Text style={styles.muted}>
-        Registrá tu entrada y salida en la vista de check-in del encargado con
-        tu mail y contraseña. Iniciar o cerrar sesión no registra asistencia.
+        Registrá tu entrada y salida en la vista de la cuenta Check-in con tu
+        mail y contraseña. Iniciar o cerrar sesión no registra asistencia.
       </Text>
       <PeriodFilters period={period} stations={[]} onChange={update} />
       <SortControl ascending={ascending} onChange={setAscending} />

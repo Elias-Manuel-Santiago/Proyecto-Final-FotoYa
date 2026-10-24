@@ -1,9 +1,7 @@
 /**
  * @file
- * Presenta inicio con accesos y métricas permitidos. Coordina actualización de datos y entrada
- * del encargado al check-in.
+ * Presenta inicio con accesos y métricas permitidos. Coordina la actualización de datos.
  */
-import { Button } from '../../components/ui/Button';
 import { Link } from 'expo-router';
 import { Text, View } from 'react-native';
 import { Metrics } from '../../components/metrics/Metrics';
@@ -15,13 +13,11 @@ import { reportRows, totalMetrics } from '../../domain/metrics';
 import { useWorkspace } from '../../providers/AppProvider';
 import { usePeriodData } from '../../hooks/usePeriodData';
 import { Feedback } from '../../components/ui/Feedback';
-import { useAction } from '../../hooks/useAction';
 
-// Reúne indicadores y accesos operativos, incluida la entrada al kiosco.
+// Reúne indicadores y accesos operativos según permisos.
 export function HomeScreen() {
   const { colors, styles } = useTheme();
-  const { employee, enterCheckIn } = useWorkspace();
-  const action = useAction();
+  const { employee } = useWorkspace();
   const today = businessDate();
   const period = { from: today, to: today, stationId: '' };
   const { data, loading, refreshing, error, refreshError, reload } =
@@ -33,18 +29,6 @@ export function HomeScreen() {
       refreshing={refreshing}
       onRefresh={reload}
     >
-      {employee.roleId === 'manager' && (
-        <>
-          <Button
-            title="Activar vista de check-in"
-            busy={action.busy}
-            onPress={() => {
-              void action.run(enterCheckIn);
-            }}
-          />
-          <Feedback error={action.error} />
-        </>
-      )}
       <Text style={styles.heading}>{displayDate(today)}</Text>
       <Feedback error={error || refreshError} />
       <Text style={styles.muted}>

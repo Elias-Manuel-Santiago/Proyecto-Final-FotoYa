@@ -3,6 +3,7 @@ import { Platform, Pressable, View, useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext, themes } from '../components/ui/theme';
+import { useApp } from './AppProvider';
 import { Icon } from '../components/ui/Icon';
 import { useNavigationMode } from '../hooks/useNavigationMode';
 function savedTheme(): 'light' | 'dark' | null {
@@ -20,6 +21,7 @@ function subscribeTheme(listener: () => void) {
   return () => window.removeEventListener('storage', listener);
 }
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const { employee } = useApp();
   const system = useColorScheme();
   const [choice, setChoice] = useState<'light' | 'dark' | null>(null);
   const saved = useSyncExternalStore(subscribeTheme, savedTheme, () => null);
@@ -43,30 +45,32 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         {children}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Activar tema ${mode === 'light' ? 'oscuro' : 'claro'}`}
-          onPress={toggle}
-          style={({ pressed }) => ({
-            position: 'absolute',
-            ...(bottom
-              ? { top: insets.top + 10, left: insets.left + 12 }
-              : { bottom: insets.bottom + 24, right: insets.right + 24 }),
-            width: 48,
-            height: 48,
-            borderRadius: 24,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: theme.colors.lavender,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            elevation: 6,
-            boxShadow: '0 4px 16px #00000030',
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <Icon name={mode === 'light' ? 'tema-oscuro' : 'tema-claro'} />
-        </Pressable>
+        {employee?.roleId !== 'checkin' && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Activar tema ${mode === 'light' ? 'oscuro' : 'claro'}`}
+            onPress={toggle}
+            style={({ pressed }) => ({
+              position: 'absolute',
+              ...(bottom
+                ? { top: insets.top + 10, left: insets.left + 12 }
+                : { bottom: insets.bottom + 24, right: insets.right + 24 }),
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.colors.lavender,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              elevation: 6,
+              boxShadow: '0 4px 16px #00000030',
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Icon name={mode === 'light' ? 'tema-oscuro' : 'tema-claro'} />
+          </Pressable>
+        )}
       </View>
     </ThemeContext.Provider>
   );

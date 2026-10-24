@@ -73,6 +73,9 @@ export async function migrate(db, env, { init = false } = {}) {
     }
     if (!await hasIndex('venta', 'uq_venta_operation')) await connection.query('CREATE UNIQUE INDEX uq_venta_operation ON venta (operation_id)');
     if (!await hasColumn('usuarios', 'email_verified')) await connection.query('ALTER TABLE usuarios ADD email_verified BOOLEAN NOT NULL DEFAULT TRUE');
+    if (!await hasColumn('usuarios', 'checkin_password')) await connection.query('ALTER TABLE usuarios ADD checkin_password TEXT NULL');
+    if ((await columns('usuarios')).some(column => column.name === 'dni' && column.nullable === 'NO'))
+      await connection.query('ALTER TABLE usuarios MODIFY dni VARCHAR(20) NULL');
     if (!await hasColumn('usuarios', 'auth0_sub')) await connection.query('ALTER TABLE usuarios ADD auth0_sub VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL UNIQUE');
     await migrateVerifications(connection, { hasColumn, hasIndex });
     if (!await hasColumn('fotos', 'email_cliente')) await connection.query('ALTER TABLE fotos ADD email_cliente VARCHAR(254) NULL');
@@ -90,6 +93,9 @@ export async function migrate(db, env, { init = false } = {}) {
     if (!await hasIndex('fotos', 'ix_fotos_puesto_cliente')) await connection.query('CREATE INDEX ix_fotos_puesto_cliente ON fotos (id_puesto, id_cliente, id_fotos)');
     await connection.beginTransaction();
     await seedPermissions(connection);
+    await connection.execute("INSERT IGNORE INTO rol (nombre) VALUES ('checkin')");
+    // El modo anterior pertenecía al encargado. La cuenta dedicada lo reemplaza.
+    await connection.execute('UPDATE sesiones_usuario SET check_in_mode = FALSE WHERE check_in_mode = TRUE');
     for (const name of ['clients.read', 'clients.manage']) {
       const [inserted] = await connection.execute('INSERT IGNORE INTO permisos (tipo_de_permiso) VALUES (?)', [name]);
       if (inserted.affectedRows) await connection.execute(`INSERT IGNORE INTO permisos_rol (id_rol, id_permiso)
@@ -122,7 +128,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const { env: config } = await import('../src/config/env.js');
   const { db } = await import('../src/config/database.js');
   const env = { ...config, DATA_ENCRYPTION_KEY: process.env.DATA_ENCRYPTION_KEY };
-  try { await migrate(db, env, { init: process.argv.includes('--init') }); console.log('Esquema actualizado; sólo las contraseñas se guardan hasheadas.'); }
+  try { await migrate(db, env, { init: process.argv.includes('--init') }); console.log('Esquema actualizado; autenticación con hashes y cuentas Check-in habilitadas.'); }
   catch (error) { console.error({ code: error.code ?? 'MIGRATION_ERROR', message: error.code ? 'La migración falló. Revisá el esquema y sus restricciones.' : error.message }); process.exitCode = 1; }
   finally { await db.end(); }
 }
