@@ -142,7 +142,7 @@ export interface SalePhoto {
   clientEmail?: string | null;
 }
 
-// Turno de asistencia: checkOut null identifica una jornada todavía abierta.
+// Turno abierto: sin checkOut ni closedAt. closedAt registra el cierre sin salida.
 export interface Attendance {
   id: string;
   employeeId: string;
@@ -150,6 +150,7 @@ export interface Attendance {
   date: string;
   checkIn: string;
   checkOut: string | null;
+  closedAt: string | null;
 }
 
 // Empleado elegible del kiosco con el turno esperado para validar la siguiente marcación.

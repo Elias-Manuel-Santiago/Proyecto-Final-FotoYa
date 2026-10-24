@@ -34,8 +34,12 @@ export function AttendanceTable({
               `Puesto ${record.stationId}`,
             displayDate(record.date),
             displayInstant(record.checkIn),
-            record.checkOut ? displayInstant(record.checkOut) : 'Sin registrar',
-            duration(record.checkIn, record.checkOut),
+            record.checkOut
+              ? displayInstant(record.checkOut)
+              : record.closedAt
+                ? 'No hizo check-out'
+                : 'Sin registrar',
+            duration(record.checkIn, record.checkOut, record.closedAt),
           ],
         };
       })}

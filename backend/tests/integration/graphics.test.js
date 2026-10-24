@@ -83,3 +83,24 @@ integration('gráficos MySQL: alcance aplicado a días, horas, personal y rendim
   assert.equal(schema.safeParse({ ...period, day: '2026-10-23' }).success, false);
   assert.equal(schema.safeParse({ ...period, stationId: '1 OR 1=1' }).success, false);
 });
+
+integration('gráficos MySQL: un cierre sin check-out limita presencia y oportunidades sin inventar salida', async () => {
+  const [inserted] = await db.query(`INSERT INTO horarios(id_dias,id_usuario,check_in,closed_at)
+    VALUES(1,1,'2026-10-24 17:00:00','2026-10-24 18:00:00')`);
+  try {
+    const day = await repository.query(actor('encargado', { stationId: '1' }), period);
+    const missed = day.attendance.find(row => row.id === String(inserted.insertId));
+    assert.equal(missed.checkOut, null); assert.equal(missed.closedAt, '2026-10-24 18:00:00');
+    const next = await repository.query(actor('encargado', { stationId: '1' }), { from: '2026-10-25', to: '2026-10-25', day: '2026-10-25' });
+    assert(!next.attendance.some(row => row.id === missed.id));
+    await db.execute(`INSERT INTO fotos(id_archivo,id_dia,id_puesto,created_at) VALUES
+      ('during-missed.jpg',1,1,'2026-10-24 17:30:00'),('after-missed.jpg',1,1,'2026-10-24 18:30:00')`);
+    await db.query('UPDATE dias SET fotos=5 WHERE id_dias=1');
+    const report = await repository.query(actor('encargado', { stationId: '1' }), period);
+    assert.equal(Number(report.people.find(row => row.role === 'seller').opportunityTaken), 3);
+  } finally {
+    await db.execute('DELETE FROM horarios WHERE id_horario = ?', [String(inserted.insertId)]);
+    await db.query("DELETE FROM fotos WHERE id_archivo IN ('during-missed.jpg','after-missed.jpg')");
+    await db.query('UPDATE dias SET fotos=3 WHERE id_dias=1');
+  }
+});

@@ -114,6 +114,10 @@ test('fechas inválidas no se normalizan silenciosamente y la fecha usa la zona 
   assert.equal(validDate('2026-10-15'), true);
   assert.equal(businessDate('2026-10-16T02:00:00Z'), '2026-10-15');
   assert.equal(duration('2026-10-15T10:00:00Z', null), 'Turno abierto');
+  assert.equal(
+    duration('2026-10-15T10:00:00Z', null, '2026-10-15T22:00:00Z'),
+    'No calculable: sin check-out',
+  );
 });
 
 test('una lectura no permite modificar el repositorio ni genera asistencia', async () => {

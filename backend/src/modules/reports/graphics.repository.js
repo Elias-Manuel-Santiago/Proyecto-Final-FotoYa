@@ -9,7 +9,8 @@ const opportunities = employee => `(SELECT COUNT(*) FROM fotos f JOIN dias fd ON
   WHERE fd.id_puesto=d.id_puesto AND fd.fecha BETWEEN ? AND ? AND f.created_at IS NOT NULL
   AND EXISTS(SELECT 1 FROM horarios h JOIN dias hd ON hd.id_dias=h.id_dias
     WHERE h.id_usuario=${employee} AND hd.id_puesto=fd.id_puesto
-    AND h.check_in <= f.created_at AND (h.check_out IS NULL OR h.check_out > f.created_at)))`;
+    AND h.check_in <= f.created_at
+    AND (COALESCE(h.check_out,h.closed_at) IS NULL OR COALESCE(h.check_out,h.closed_at) > f.created_at)))`;
 const missingTimes = `(SELECT COALESCE(SUM(GREATEST(fd.fotos-(SELECT COUNT(*) FROM fotos f
   WHERE f.id_dia=fd.id_dias AND f.created_at IS NOT NULL),0)),0) FROM dias fd
   WHERE fd.id_puesto=d.id_puesto AND fd.fecha BETWEEN ? AND ?)`;
@@ -89,10 +90,10 @@ export const graphicsRepository = {
         ) events GROUP BY stationId,hour ORDER BY hour`, [...dayParams, ...dayParams, ...dayParams]);
       // Se consulta por solapamiento real, incluyendo turnos iniciados el día anterior.
       [attendance] = await connection.execute(`SELECT h.id_horario AS id,h.id_usuario AS employeeId,d.id_puesto AS stationId,
-        CONCAT(u.nombre,' ',u.apellido) AS name,r.nombre AS role,h.check_in AS checkIn,h.check_out AS checkOut
+        CONCAT(u.nombre,' ',u.apellido) AS name,r.nombre AS role,h.check_in AS checkIn,h.check_out AS checkOut,h.closed_at AS closedAt
         FROM horarios h JOIN dias d ON d.id_dias=h.id_dias JOIN usuarios u ON u.id_usuario=h.id_usuario
         JOIN rol r ON r.id_rol=u.id_rol WHERE h.check_in < DATE_ADD(CONCAT(?,' 03:00:00'),INTERVAL 1 DAY)
-        AND (h.check_out IS NULL OR h.check_out > CONCAT(?,' 03:00:00'))${scope}
+        AND (COALESCE(h.check_out,h.closed_at) IS NULL OR COALESCE(h.check_out,h.closed_at) > CONCAT(?,' 03:00:00'))${scope}
         ORDER BY d.id_puesto,h.check_in`, [input.day, input.day, ...(station ? [station] : [])]);
     }
     return { days, hours, people: [...sellers, ...photographers, ...unattributed], workers, attendance };

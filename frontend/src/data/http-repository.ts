@@ -167,6 +167,7 @@ export class HttpFotoYaRepository {
         employeeId: String(row.employeeId),
         checkIn: utcInstant(row.checkIn),
         checkOut: row.checkOut ? utcInstant(row.checkOut) : null,
+        closedAt: row.closedAt ? utcInstant(row.closedAt) : null,
       })),
     };
   }
@@ -231,16 +232,19 @@ export class HttpFotoYaRepository {
   }
 
   checkInSaleEvent() {
-    return this.api.post<{ open: boolean; date: string | null }>(
-      'attendance/kiosk/event',
-    );
+    return this.api.post<{
+      open: boolean;
+      attendanceOpen: boolean;
+      date: string | null;
+    }>('attendance/kiosk/event');
   }
 
   setCheckInSaleEvent(open: boolean) {
-    return this.api.post<{ open: boolean; date: string | null }>(
-      'attendance/kiosk/event/set',
-      { open },
-    );
+    return this.api.post<{
+      open: boolean;
+      attendanceOpen: boolean;
+      date: string | null;
+    }>('attendance/kiosk/event/set', { open });
   }
 
   async logoutCheckIn(password: string) {
@@ -440,6 +444,7 @@ export class HttpFotoYaRepository {
         employeeId: String(row.userId),
         checkIn: utcInstant(row.checkIn),
         checkOut: row.checkOut ? utcInstant(row.checkOut) : null,
+        closedAt: row.closedAt ? utcInstant(row.closedAt) : null,
       })),
       reports: reports?.filter(inScope).map((row) => ({
         ...metrics(row),

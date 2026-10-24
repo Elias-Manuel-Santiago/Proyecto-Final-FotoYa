@@ -11,6 +11,8 @@ import { businessDate, currentEvent } from '../sales/sales.rules.js';
 import { eventCache } from '../sales/sales.events.js';
 
 const dummyHash = await hashPassword(newToken());
+// Las marcaciones dependen del cierre manual, no del cambio de día de ventas.
+const eventStatus = row => ({ open: currentEvent(row), attendanceOpen: Boolean(row?.open), date: row?.date ?? null });
 // El modo pertenece a la sesión, nunca a la cuenta completa.
 export function requireCheckIn(actor) {
   if (actor.role !== 'encargado' || !actor.kioskMode)
@@ -65,7 +67,7 @@ export const kioskService = {
   async event(actor) {
     requireKiosk(actor);
     const row = eventCache.get(actor.stationId);
-    return { open: currentEvent(row), date: row?.date ?? null };
+    return eventStatus(row);
   },
   // Comparte la cola del puesto con ventas y marcaciones para ordenar el cierre.
   setEvent(actor, input) {
@@ -76,6 +78,11 @@ export const kioskService = {
         const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto = ? FOR UPDATE', [stationId]);
         if (!station || (input.open && !station.active)) throw new ApiError(409, 'El puesto no está disponible.');
         const current = eventCache.get(stationId);
+        if (!input.open) {
+          await connection.execute(`UPDATE horarios h JOIN dias d ON d.id_dias = h.id_dias
+            SET h.closed_at = UTC_TIMESTAMP(6)
+            WHERE d.id_puesto = ? AND h.check_out IS NULL AND h.closed_at IS NULL`, [stationId]);
+        }
         if (input.open && !currentEvent(current)) {
           const date = businessDate();
           await connection.execute('INSERT INTO dias (fecha,id_puesto) VALUES (?,?) ON DUPLICATE KEY UPDATE id_dias=id_dias', [date, stationId]);
@@ -86,7 +93,7 @@ export const kioskService = {
       });
       // Un rollback nunca publica una apertura o cierre que no se confirmó.
       if (row) eventCache.set(stationId, row);
-      return { open: currentEvent(row), date: row?.date ?? null };
+      return eventStatus(row);
     });
   },
   // Lista empleados activos del puesto con su turno abierto para elegir entrada o salida.
@@ -94,7 +101,7 @@ export const kioskService = {
     requireKiosk(actor);
     const [rows] = await db.execute(`SELECT u.id_usuario AS id, u.nombre AS firstName, u.apellido AS lastName,
       (SELECT h.id_horario FROM horarios h JOIN dias d ON d.id_dias = h.id_dias
-        WHERE h.id_usuario = u.id_usuario AND h.check_out IS NULL AND d.id_puesto = u.id_puesto
+        WHERE h.id_usuario = u.id_usuario AND h.check_out IS NULL AND h.closed_at IS NULL AND d.id_puesto = u.id_puesto
         ORDER BY h.id_horario DESC LIMIT 1) AS attendanceId
       FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
       WHERE u.disponible = 1 AND u.id_puesto = ? AND r.nombre NOT IN ('cliente', 'dueno', 'checkin')
@@ -105,11 +112,11 @@ export const kioskService = {
   async mark(actor, input) {
     requireKiosk(actor);
     return eventCache.run(actor.stationId, () => managed(actor, async (connection) => {
-      const assertSalesOpen = () => {
-        if (!currentEvent(eventCache.get(actor.stationId)))
+      const assertAttendanceOpen = () => {
+        if (!eventCache.get(actor.stationId)?.open)
           throw new ApiError(409, 'Abrí las ventas desde Check-in para registrar entradas o salidas.', 'EVENT_CLOSED');
       };
-      assertSalesOpen();
+      assertAttendanceOpen();
       const [[employee]] = await connection.execute(`SELECT u.id_usuario AS id, u.email, u.password, u.disponible,
         u.id_puesto AS stationId, r.nombre AS role FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
         WHERE u.id_usuario = ? FOR UPDATE`, [input.userId]);
@@ -119,15 +126,13 @@ export const kioskService = {
         throw new ApiError(401, 'Ingresá el mail y la contraseña del empleado seleccionado.', 'INVALID_CREDENTIALS');
       const [open] = await connection.execute(`SELECT h.id_horario AS id, d.id_puesto AS stationId
         FROM horarios h JOIN dias d ON d.id_dias = h.id_dias
-        WHERE h.id_usuario = ? AND h.check_out IS NULL FOR UPDATE`, [input.userId]);
+        WHERE h.id_usuario = ? AND h.check_out IS NULL AND h.closed_at IS NULL FOR UPDATE`, [input.userId]);
       const current = open.find(row => row.stationId === actor.stationId);
       // El turno recibido funciona como control de concurrencia: una lista vieja no marca dos veces.
       if ((current?.id ?? null) !== input.attendanceId || (input.action === 'check-in' ? open.length > 0 : !current))
         throw new ApiError(409, 'La asistencia cambió o hay una jornada abierta en otro puesto. Actualizá la lista.', 'ATTENDANCE_CHANGED');
-      // La fecha puede haber cambiado mientras se verificaban las credenciales.
-      assertSalesOpen();
       if (input.action === 'check-out') {
-        await connection.execute('UPDATE horarios SET check_out = UTC_TIMESTAMP(6) WHERE id_usuario = ? AND check_out IS NULL AND id_dias IN (SELECT id_dias FROM dias WHERE id_puesto = ?)', [input.userId, actor.stationId]);
+        await connection.execute('UPDATE horarios SET check_out = UTC_TIMESTAMP(6) WHERE id_horario = ? AND check_out IS NULL AND closed_at IS NULL', [current.id]);
         return { working: false };
       }
       const date = businessDate();

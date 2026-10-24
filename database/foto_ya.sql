@@ -185,8 +185,10 @@ CREATE TABLE horarios (
   id_usuario BIGINT UNSIGNED NOT NULL,
   check_in DATETIME(6) NOT NULL,
   check_out DATETIME(6) NULL,
+  closed_at DATETIME(6) NULL,
   CONSTRAINT fk_horarios_dia FOREIGN KEY (id_dias) REFERENCES dias (id_dias),
   CONSTRAINT fk_horarios_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios (id_usuario),
-  CONSTRAINT ck_horarios_orden CHECK (check_out IS NULL OR check_out >= check_in)
+  CONSTRAINT ck_horarios_orden CHECK (check_out IS NULL OR check_out >= check_in),
+  CONSTRAINT ck_horarios_cierre CHECK (closed_at IS NULL OR (check_out IS NULL AND closed_at >= check_in))
 ) ENGINE = InnoDB;
 

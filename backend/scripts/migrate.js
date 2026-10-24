@@ -58,6 +58,9 @@ export async function migrate(db, env, { init = false } = {}) {
     }
     if (!await hasColumn('puesto', 'disponible')) await connection.query('ALTER TABLE puesto ADD disponible BOOLEAN NOT NULL DEFAULT TRUE');
     if (!await hasColumn('sesiones_usuario', 'check_in_mode')) await connection.query('ALTER TABLE sesiones_usuario ADD check_in_mode BOOLEAN NOT NULL DEFAULT FALSE');
+    // Cierre administrativo por falta de check-out; nunca inventa una hora de salida.
+    if (!await hasColumn('horarios', 'closed_at')) await connection.query(`ALTER TABLE horarios ADD closed_at DATETIME(6) NULL,
+      ADD CONSTRAINT ck_horarios_cierre CHECK (closed_at IS NULL OR (check_out IS NULL AND closed_at >= check_in))`);
     if (!await hasIndex('horarios', 'ix_horarios_usuario_abierto')) await connection.query('CREATE INDEX ix_horarios_usuario_abierto ON horarios (id_usuario, check_out)');
     // Las tarifas antiguas quedan sin asignar: nunca se convierten en tarifas globales.
     if (!await hasColumn('precios', 'id_puesto')) await connection.query('ALTER TABLE precios ADD id_puesto BIGINT UNSIGNED NULL, ADD CONSTRAINT fk_precios_puesto FOREIGN KEY (id_puesto) REFERENCES puesto (id_puesto)');

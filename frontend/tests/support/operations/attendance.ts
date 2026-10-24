@@ -15,7 +15,9 @@ export function checkIn(data: AppData, actor: Employee, id: string, now: Date) {
     return;
   }
   if (
-    data.attendance.some((row) => row.employeeId === actor.id && !row.checkOut)
+    data.attendance.some(
+      (row) => row.employeeId === actor.id && !row.checkOut && !row.closedAt,
+    )
   )
     throw new Error('Ya tenés un turno abierto.');
   data.attendance.push({
@@ -25,6 +27,7 @@ export function checkIn(data: AppData, actor: Employee, id: string, now: Date) {
     date: businessDate(now),
     checkIn: now.toISOString(),
     checkOut: null,
+    closedAt: null,
   });
 }
 
@@ -40,6 +43,7 @@ export function checkOut(
   );
   if (!record) throw new Error('El turno no existe.');
   if (record.checkOut) return;
+  if (record.closedAt) throw new Error('El turno se cerró sin check-out.');
   if (now.getTime() < Date.parse(record.checkIn))
     throw new Error('La salida no puede ser anterior a la entrada.');
   record.checkOut = now.toISOString();

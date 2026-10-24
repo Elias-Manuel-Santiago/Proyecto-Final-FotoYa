@@ -132,6 +132,7 @@ export function createSeed(): AppData {
         date: today,
         checkIn: `${today}T11:00:00.000Z`,
         checkOut: null,
+        closedAt: null,
       },
     ],
   };

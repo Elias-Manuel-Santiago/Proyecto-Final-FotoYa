@@ -188,6 +188,8 @@ integration('check-in: una sesión de trabajo y una de kiosco, activación concu
   normal = request((await call('auth/login', managerCredentials)).data.data.token);
   await migrate(db, env);
   assert.equal((await kiosk('auth/me')).data.data.kioskMode, true);
+  const [pendingBefore] = await db.query('SELECT id_horario FROM horarios WHERE closed_at IS NULL AND check_out IS NULL');
+  const [otherShift] = await db.execute('INSERT INTO horarios(id_dias,id_usuario,check_in) VALUES(2,?,UTC_TIMESTAMP(6))', [ids[1]]);
   try {
     for (const path of ['users/query', 'sales/query', 'auth/logout', 'auth/sessions/query', 'auth/sessions/revoke', 'auth/password/change',
       'attendance/kiosk/enter', 'attendance/kiosk/assign', 'attendance/kiosk/stations'])
@@ -215,17 +217,36 @@ integration('check-in: una sesión de trabajo y una de kiosco, activación concu
     const current = (await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee);
     assert.equal((await kiosk('attendance/kiosk/event/set', { open: false })).status, 200);
     assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).data.error.code, 'EVENT_CLOSED');
-    assert.equal((await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee).working, true);
+    assert.equal((await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee).working, false);
+    assert.equal((await device('auth/me')).data.data.working, false);
+    const [[missed]] = await db.execute('SELECT check_in, check_out, closed_at FROM horarios WHERE id_horario = ?', [current.attendanceId]);
+    assert(missed.check_in); assert.equal(missed.check_out, null); assert(missed.closed_at);
+    const [[other]] = await db.execute('SELECT check_out, closed_at FROM horarios WHERE id_horario = ?', [String(otherShift.insertId)]);
+    assert.equal(other.check_out, null); assert.equal(other.closed_at, null, 'el cierre respeta los turnos de otro puesto');
+    const historyPeriod = { from: businessDate(), to: businessDate() };
+    const missedHistory = (await call('attendance/query', { ...historyPeriod, userId: employee })).data.data.find(row => row.id === current.attendanceId);
+    assert.equal(missedHistory.checkOut, null); assert.equal(missedHistory.closedAt, missed.closed_at);
+    assert.equal(missedHistory.durationSeconds, null);
+    // Cerrar de nuevo conserva la primera marca de cierre y no inventa una salida.
+    assert.equal((await kiosk('attendance/kiosk/event/set', { open: false })).status, 200);
+    const [[repeated]] = await db.execute('SELECT check_out, closed_at FROM horarios WHERE id_horario = ?', [current.attendanceId]);
+    assert.equal(repeated.closed_at, missed.closed_at); assert.equal(repeated.check_out, null);
     assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, userId: ids[2], email: 'kioskinactive@example.com' })).data.error.code, 'EVENT_CLOSED');
-    // Una apertura del día anterior no habilita ni entrada ni salida.
+    // Reabrir permite una jornada nueva; el cambio de día no bloquea las marcaciones.
+    assert.equal((await kiosk('attendance/kiosk/event/set', { open: true })).status, 200);
     const event = eventCache.get('1');
     eventCache.set('1', { ...event, open: true, date: '2000-01-01' });
-    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).data.error.code, 'EVENT_CLOSED');
-    assert.equal((await kiosk('attendance/kiosk/event/set', { open: true })).status, 200);
-    await db.execute('UPDATE horarios SET id_dias = 1, check_in = TIMESTAMPADD(HOUR,-26,UTC_TIMESTAMP(6)) WHERE id_horario = ?', [current.attendanceId]);
-    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).status, 200);
+    const overnightEvent = (await kiosk('attendance/kiosk/event')).data.data;
+    assert.equal(overnightEvent.open, false); assert.equal(overnightEvent.attendanceOpen, true);
+    assert.equal((await kiosk('attendance/kiosk/mark', mark)).status, 200);
+    const next = (await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee);
+    assert.notEqual(next.attendanceId, current.attendanceId);
+    await db.execute('UPDATE horarios SET id_dias = 1, check_in = TIMESTAMPADD(HOUR,-26,UTC_TIMESTAMP(6)) WHERE id_horario = ?', [next.attendanceId]);
+    // Una selección anterior al cierre tampoco puede completar la jornada archivada.
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).data.error.code, 'ATTENDANCE_CHANGED');
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: next.attendanceId })).status, 200);
     assert.equal((await device('sales/query', period)).status, 403);
-    const [[closed]] = await db.execute('SELECT id_dias, check_out FROM horarios WHERE id_horario = ?', [current.attendanceId]);
+    const [[closed]] = await db.execute('SELECT id_dias, check_out FROM horarios WHERE id_horario = ?', [next.attendanceId]);
     assert.equal(closed.id_dias, '1'); assert(closed.check_out);
     assert.equal((await kiosk('attendance/kiosk/exit', { password: credentials.password })).status, 401);
     assert.equal((await kiosk('auth/me')).status, 200);
@@ -246,6 +267,8 @@ integration('check-in: una sesión de trabajo y una de kiosco, activación concu
     const event = eventCache.get('1');
     if (event) eventCache.set('1', { ...event, open: false });
     await db.execute('DELETE FROM horarios WHERE id_usuario = ?', [employee]);
+    await db.execute('DELETE FROM horarios WHERE id_horario = ?', [String(otherShift.insertId)]);
+    for (const row of pendingBefore) await db.execute('UPDATE horarios SET closed_at = NULL WHERE id_horario = ?', [row.id_horario]);
   }
 });
 
@@ -596,9 +619,10 @@ integration('ventas del evento: tarifas por puesto, copias, familias, reintentos
   assert.equal((await call('sales/create', { ...form, paymentMethod: 'tarjeta' }, 'vendedor')).status, 409);
   const extra = await call('sales/create', { ...form, operationId: randomUUID(), paymentMethod: 'transferencia' }, 'vendedor');
   assert.equal(extra.status, 200); assert.equal(extra.data.data.counted, false);
-  const independent = await Promise.all(['vendedor', 'encargado'].map(role => call('sales/create', {
+  const independentInputs = ['vendedor', 'encargado'].map(role => ({ role, input: {
     ...form, photoId: secondPhoto, operationId: randomUUID(), paymentMethod: 'tarjeta',
-  }, role)));
+  } }));
+  const independent = await Promise.all(independentInputs.map(({ role, input }) => call('sales/create', input, role)));
   assert(independent.every(response => response.status === 200));
   assert.equal(independent.filter(response => response.data.data.counted).length, 1);
   const days = (await call('reports/days/query', { from: date, to: date, stationId: '1' }, 'vendedor')).data.data;
@@ -610,13 +634,20 @@ integration('ventas del evento: tarifas por puesto, copias, familias, reintentos
   assert.equal((await call('sales/photos/access', { photoId: firstPhoto }, 'cliente')).status, 403);
   assert.equal((await call('sales/create', { ...form, operationId: randomUUID(), photoId: '1' }, 'vendedor')).status, 422);
   assert.equal((await kioskCall('1', false)).status, 200);
-  assert.equal((await call('sales/create', { ...form, operationId: randomUUID() }, 'vendedor')).data.error.code, 'EVENT_CLOSED');
-  // Una confirmación perdida puede recuperarse incluso después del cierre.
-  assert.equal((await call('sales/create', form, 'vendedor')).status, 200);
-  assert.deepEqual((await call('sales/photos', { stationId: '1' }, 'vendedor')).data.data, []);
+  assert.equal((await call('sales/create', { ...form, operationId: randomUUID() }, 'vendedor')).data.error.code, 'CHECK_IN_REQUIRED');
+  assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'CHECK_IN_REQUIRED');
+  // Un actor autorizado todavía recupera su confirmación perdida después del cierre.
+  assert.equal((await call('sales/create', independentInputs[1].input, 'encargado')).status, 200);
+  assert.deepEqual((await call('sales/photos', { stationId: '1' }, 'encargado')).data.data, []);
 });
 
 integration('encargado administra precios de su puesto y conserva tarifas históricas', async () => {
+  // Una nueva apertura y entrada habilitan al vendedor después del cierre anterior.
+  await kioskCall('1', true);
+  assert.equal((await http.post('/api/attendance/kiosk/mark', {
+    userId: users.vendedor, email: 'vendedor@example.com', password: 'Test-password-1234',
+    action: 'check-in', attendanceId: null,
+  }, { headers: { Authorization: `Bearer ${kioskTokens['1']}` } })).status, 200);
   // Simula una instalación que todavía no tenía el permiso.
   await db.query("DELETE pr FROM permisos_rol pr JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE p.tipo_de_permiso='prices.manage'");
   await db.query("DELETE FROM permisos WHERE tipo_de_permiso='prices.manage'");
@@ -678,9 +709,16 @@ integration('cambio de contraseña revoca sesiones y logout no altera asistencia
   const [[after]] = await db.query('SELECT COUNT(*) AS count FROM horarios'); assert.equal(after.count, before.count);
 });
 integration('migraciones repetibles preservan permisos y datos originales', async () => {
+  const [previous] = await db.query('SELECT id_horario,check_in,check_out FROM horarios ORDER BY id_horario');
   await db.query('ALTER TABLE sesiones_usuario DROP COLUMN check_in_mode');
   await db.query('ALTER TABLE horarios DROP INDEX ix_horarios_usuario_abierto');
+  await db.query('ALTER TABLE horarios DROP CHECK ck_horarios_cierre, DROP COLUMN closed_at');
   await migrate(db, env);
+  await migrate(db, env);
+  const [preserved] = await db.query('SELECT id_horario,check_in,check_out FROM horarios ORDER BY id_horario');
+  assert.deepEqual(preserved, previous);
+  const [[pending]] = await db.query('SELECT COUNT(*) AS count FROM horarios WHERE closed_at IS NOT NULL');
+  assert.equal(Number(pending.count), 0, 'la migración no inventa cierres históricos');
   for (const token of Object.values(kioskTokens)) await db.execute('UPDATE sesiones_usuario SET check_in_mode = TRUE WHERE token = ?', [token]);
   const response = await call('auth/me'); assert.equal(response.status, 200); assert.equal(response.data.data.email, 'dueno@example.com');
   assert.equal(response.data.data.kioskMode, false);

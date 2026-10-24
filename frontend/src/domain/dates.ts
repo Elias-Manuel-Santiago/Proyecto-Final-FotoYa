@@ -84,7 +84,12 @@ export function periodError(from: string, to: string) {
 }
 
 // Muestra la duración entre entrada y salida o indica que el turno sigue abierto.
-export function duration(checkIn: string, checkOut: string | null) {
+export function duration(
+  checkIn: string,
+  checkOut: string | null,
+  closedAt: string | null = null,
+) {
+  if (!checkOut && closedAt) return 'No calculable: sin check-out';
   if (!checkOut) return 'Turno abierto';
   const minutes = Math.floor(
     (Date.parse(checkOut) - Date.parse(checkIn)) / 60000,

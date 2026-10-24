@@ -41,6 +41,7 @@ export interface GraphicAttendance {
   role: string;
   checkIn: string;
   checkOut: string | null;
+  closedAt: string | null;
 }
 export interface GraphicsData {
   days: GraphicDay[];
@@ -225,10 +226,12 @@ export function workersAtHour(
     `${day}T${String(hour).padStart(2, '0')}:00:00-03:00`,
   );
   const end = start + 3600000;
-  return rows.filter(
-    (r) =>
+  return rows.filter((r) => {
+    const attendanceEnd = r.checkOut ?? r.closedAt;
+    return (
       stationIds.includes(r.stationId) &&
       Date.parse(r.checkIn) < end &&
-      (!r.checkOut || Date.parse(r.checkOut) > start),
-  );
+      (!attendanceEnd || Date.parse(attendanceEnd) > start)
+    );
+  });
 }

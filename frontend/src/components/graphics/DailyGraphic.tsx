@@ -147,7 +147,9 @@ export function DailyGraphic({
                             {displayInstant(shift.checkIn)} —{' '}
                             {shift.checkOut
                               ? displayInstant(shift.checkOut)
-                              : 'Turno abierto'}
+                              : shift.closedAt
+                                ? 'No hizo check-out'
+                                : 'Turno abierto'}
                           </Text>
                         </View>
                       ))}

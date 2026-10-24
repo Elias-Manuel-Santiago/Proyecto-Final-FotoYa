@@ -169,6 +169,7 @@ function fixture(
         date: '2026-10-15',
         checkIn: '2026-10-15 23:00:00',
         checkOut: null,
+        closedAt: '2026-10-16 02:00:00',
       },
     ],
     'reports/query': [report],
@@ -524,6 +525,8 @@ test('filtros de ciudad/evento usan IDs del catálogo y asistencia propia usa pu
   assert(requests.some((row) => row.path === 'attendance/mine'));
   assert(!requests.some((row) => row.path === 'attendance/query'));
   assert.equal(data.attendance[0].stationId, '2');
+  assert.equal(data.attendance[0].checkOut, null);
+  assert.equal(data.attendance[0].closedAt, '2026-10-16T02:00:00Z');
 });
 
 test('fechas MySQL se interpretan como UTC y los períodos respetan 367 días', () => {
@@ -538,6 +541,11 @@ test('fechas MySQL se interpretan como UTC y los períodos respetan 367 días', 
 
 test('check-in conserva la sesión y envía credenciales del empleado y estado esperado', async () => {
   const { repo, requests } = fixture('encargado', {
+    'attendance/kiosk/event': {
+      open: false,
+      attendanceOpen: true,
+      date: '2026-10-14',
+    },
     'attendance/kiosk/employees': [
       {
         id: 8,
@@ -550,7 +558,11 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
   });
   await repo.login('encargado@example.com', 'clave');
   await repo.enterCheckIn();
-  await repo.checkInSaleEvent();
+  assert.deepEqual(await repo.checkInSaleEvent(), {
+    open: false,
+    attendanceOpen: true,
+    date: '2026-10-14',
+  });
   await repo.setCheckInSaleEvent(true);
   const [employee] = await repo.checkInEmployees();
   assert.equal(employee.id, '8');
@@ -836,6 +848,7 @@ test('gráficos normaliza agregados, horas y turnos sin inventar autores; el enc
           role: 'vendedor',
           checkIn: '2026-10-15 15:00:00',
           checkOut: null,
+          closedAt: '2026-10-15 22:00:00',
         },
       ],
     },
@@ -856,6 +869,7 @@ test('gráficos normaliza agregados, horas y turnos sin inventar autores; el enc
   assert.equal(data.workers[0].opportunityTaken, 4);
   assert.equal(data.attendance[0].checkIn, '2026-10-15T15:00:00Z');
   assert.equal(data.attendance[0].checkOut, null);
+  assert.equal(data.attendance[0].closedAt, '2026-10-15T22:00:00Z');
 });
 
 test('snapshot del encargado descarta catálogos ajenos y fija su puesto aunque el filtro venga de una URL', async () => {

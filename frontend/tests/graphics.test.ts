@@ -114,10 +114,15 @@ test('la hora incluye turnos cruzando medianoche, excluye bordes exactos y otros
     role: 'vendedor',
     checkIn: '2026-10-24T23:00:00Z',
     checkOut: '2026-10-25T04:00:00Z',
+    closedAt: null,
   };
   assert.equal(workersAtHour([shift], ['1'], '2026-10-25', 0).length, 1);
   assert.equal(workersAtHour([shift], ['1'], '2026-10-25', 1).length, 0);
   assert.equal(workersAtHour([shift], ['2'], '2026-10-25', 0).length, 0);
+  const missed = { ...shift, checkOut: null, closedAt: shift.checkOut };
+  assert.equal(workersAtHour([missed], ['1'], '2026-10-25', 0).length, 1);
+  assert.equal(workersAtHour([missed], ['1'], '2026-10-25', 1).length, 0);
+  assert.equal(workersAtHour([missed], ['1'], '2026-10-26', 0).length, 0);
   assert.equal(
     workersAtHour(
       [{ ...shift, checkIn: '2026-10-25T04:00:00Z' }],

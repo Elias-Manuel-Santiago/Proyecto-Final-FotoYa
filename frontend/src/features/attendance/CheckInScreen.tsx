@@ -16,13 +16,11 @@ import { errorMessage, fullName } from '../../domain/format';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
 import { CheckInOptions } from './components/CheckInOptions';
-import { useBusinessDate } from '../../hooks/useBusinessDate';
 
 // Selecciona empleado y confirma su entrada o salida con sus propias credenciales.
 export function CheckInScreen() {
   const { employee } = useWorkspace();
-  const today = useBusinessDate();
-  return <CheckInStationScreen key={`${employee.stationId}:${today}`} />;
+  return <CheckInStationScreen key={employee.stationId} />;
 }
 
 function CheckInStationScreen() {
@@ -36,6 +34,7 @@ function CheckInStationScreen() {
   const [password, setPassword] = useState('');
   const [saleEvent, setSaleEvent] = useState<{
     open: boolean;
+    attendanceOpen: boolean;
     date: string | null;
   } | null>(null);
   const [closingSales, setClosingSales] = useState(false);
@@ -121,18 +120,25 @@ function CheckInStationScreen() {
               ? `Ventas ${saleEvent.open ? 'abiertas' : 'cerradas'}`
               : 'Consultando estado de ventas'}
           </Text>
-          {!saleEvent?.open && (
+          {!saleEvent?.attendanceOpen && (
             <Text style={styles.text}>
               Abrí las ventas para habilitar las entradas y salidas del
               personal.
             </Text>
           )}
+          {saleEvent?.attendanceOpen && !saleEvent.open && (
+            <Text style={styles.text}>
+              Cambió el día de ventas. Las entradas y salidas siguen habilitadas
+              hasta el cierre manual.
+            </Text>
+          )}
           {closingSales ? (
             <>
               <Text style={styles.text}>
-                Con ventas cerradas nadie puede registrar entrada ni salida.
-                Registrá las salidas antes de cerrar; si falta alguna, tendrás
-                que reabrir las ventas. Las jornadas abiertas se conservan.
+                Al confirmar se bloquearán las entradas y salidas. Las jornadas
+                sin salida quedarán registradas como «No hizo check-out»,
+                conservando la entrada. Al reabrir se podrá registrar una nueva
+                jornada.
               </Text>
               <Button
                 title="Confirmar cierre de ventas"
@@ -149,15 +155,28 @@ function CheckInStationScreen() {
               />
             </>
           ) : (
-            <Button
-              title={saleEvent?.open ? 'Cerrar ventas' : 'Abrir ventas'}
-              busy={action.busy}
-              disabled={loading || !!error || !saleEvent || !!selected}
-              onPress={() => {
-                if (saleEvent?.open) setClosingSales(true);
-                else setSalesOpen(true);
-              }}
-            />
+            <>
+              {saleEvent?.attendanceOpen && !saleEvent.open && (
+                <Button
+                  title="Abrir ventas del nuevo día"
+                  secondary
+                  busy={action.busy}
+                  disabled={loading || !!error || !!selected}
+                  onPress={() => setSalesOpen(true)}
+                />
+              )}
+              <Button
+                title={
+                  saleEvent?.attendanceOpen ? 'Cerrar ventas' : 'Abrir ventas'
+                }
+                busy={action.busy}
+                disabled={loading || !!error || !saleEvent || !!selected}
+                onPress={() => {
+                  if (saleEvent?.attendanceOpen) setClosingSales(true);
+                  else setSalesOpen(true);
+                }}
+              />
+            </>
           )}
         </View>
         {selected ? (
@@ -195,7 +214,7 @@ function CheckInStationScreen() {
               disabled={
                 !email.trim() ||
                 !password ||
-                !saleEvent?.open ||
+                !saleEvent?.attendanceOpen ||
                 loading ||
                 !!error
               }
@@ -244,7 +263,7 @@ function CheckInStationScreen() {
                   disabled={
                     !!error ||
                     loading ||
-                    !saleEvent?.open ||
+                    !saleEvent?.attendanceOpen ||
                     closingSales ||
                     action.busy
                   }

@@ -28,10 +28,14 @@ export function AttendanceCard({
       <Text style={styles.text}>Entrada: {displayInstant(record.checkIn)}</Text>
       <Text style={styles.text}>
         Salida:{' '}
-        {record.checkOut ? displayInstant(record.checkOut) : 'Sin registrar'}
+        {record.checkOut
+          ? displayInstant(record.checkOut)
+          : record.closedAt
+            ? 'No hizo check-out'
+            : 'Sin registrar'}
       </Text>
       <Text style={styles.muted}>
-        {duration(record.checkIn, record.checkOut)}
+        {duration(record.checkIn, record.checkOut, record.closedAt)}
       </Text>
     </View>
   );
