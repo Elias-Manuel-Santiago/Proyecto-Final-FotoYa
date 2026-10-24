@@ -83,6 +83,8 @@ CREATE TABLE fotos (
   id_dia BIGINT UNSIGNED NOT NULL,
   id_cliente BIGINT UNSIGNED NULL,
   email_cliente VARCHAR(254) NULL,
+  id_camarografo BIGINT UNSIGNED NULL,
+  created_at DATETIME(6) NULL,
   id_puesto BIGINT UNSIGNED NOT NULL,
   CONSTRAINT uq_fotos_archivo UNIQUE (id_archivo),
   CONSTRAINT fk_fotos_dia_puesto FOREIGN KEY (id_dia, id_puesto) REFERENCES dias (id_dias, id_puesto),

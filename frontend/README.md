@@ -1,6 +1,6 @@
 # Foto Ya · Frontend
 
-Aplicación Expo SDK 57 con TypeScript y Expo Router, conectada a la API Express existente. El backend conserva sus contratos y reglas.
+Aplicación Expo SDK 58 con TypeScript y Expo Router, conectada a la API Express existente.
 
 ## Ejecutar
 
@@ -52,6 +52,18 @@ Actualizar primero el backend con `npm run db:migrate` desde `backend`. El dueñ
 Desde **Ventas → Registrar venta en evento**, el encargado abre o cierra las ventas del puesto manualmente. El vendedor ve únicamente fotos del día actual de Argentina con previsualización y páginas de 12 fotos. La pantalla se actualiza al cruzar medianoche y al reactivar la aplicación; las ventas de un día anterior deben abrirse nuevamente para el día actual. Al tocar una foto aparece **Vender**: se ingresan copias por cada tarifa elegida, se selecciona efectivo, transferencia o tarjeta y se confirma. Sin tarifas disponibles el botón queda bloqueado; la API también lo valida. Una foto representa una familia: comprar varias copias o comprar más copias después suma ingresos sin volver a contar la familia en el porcentaje. Se conservan UUID de reintento para el mismo contenido dentro del formulario. Las ventas fuera del evento tendrán otra interfaz y no se registran en este flujo.
 
 ## Organización y validación
+
+### Gráficos interactivos
+
+Antes de iniciar la API actualizada, ejecutar `npm run db:migrate` desde `backend`. Agrega autor y hora UTC a las nuevas cargas de fotos sin reconstruir datos históricos. La hora corresponde a la carga confirmada, no a una hora de captura inferida del archivo. Reiniciar Expo después de instalar dependencias.
+
+`src/components/graphics/` contiene todos los gráficos de `react-native-gifted-charts`: evolución del período, distribución horaria y rendimiento por vendedor/camarógrafo. Comparten paleta clara/oscura, ancho adaptable, desplazamiento horizontal y listado accesible con acciones para valores cero o desconocidos. Los filtros de fechas admiten hasta 367 días. Las casillas de total, ciudades, eventos y puestos agregan series independientes; no se suman entre sí. El rendimiento del equipo usa la unión de los puestos seleccionados, sin duplicarlos por selecciones superpuestas.
+
+Tocar un día abre `/reports/day` conservando indicador y series. Tocar una hora abre el personal por puesto cuyos turnos se superpusieron con esa hora, incluso turnos iniciados el día anterior. Los horarios se presentan en Argentina. El encargado recibe únicamente su puesto, sin selectores de ciudades, eventos o puestos en gráficos, consultas de períodos o asignación de empleados. El backend vuelve a validar su alcance.
+
+Los agregados de `/reports/graphics/query` se calculan en MySQL sobre todos los registros del período, sin depender de páginas del listado de ventas. Ventas cuenta operaciones; familias compradoras respeta `familia_contada`; el precio promedio divide ingresos entre operaciones. Porcentajes y promedios globales se calculan sobre sumas, no promediando porcentajes. Los días sin conteo, bases cero o inconsistentes y horas históricas desconocidas conservan indicadores no disponibles.
+
+En vendedores no se muestra producción fotográfica propia. Su porcentaje usa como base las familias cargadas en su puesto durante sus turnos (una foto se cuenta una sola vez por persona, aunque tenga turnos superpuestos). Si faltan horarios de fotos, no se estima el porcentaje. La misma base puede corresponder a varios vendedores presentes y los porcentajes individuales no se suman. En camarógrafos se atribuyen las cargas al usuario que las confirmó; ventas e ingresos provienen de sus fotos, distribuyendo proporcionalmente el importe si una venta histórica vincula varias fotos. Registros sin autor u hora permanecen en grupos separados.
 
 `src/data/api-client.ts` implementa POST, Bearer, errores, timeouts y paginación. `http-repository.ts` adapta los contratos. `photo-form.ts` arma multipart para web y móvil. `AppProvider` gestiona la sesión y `usePeriodData` las consultas por período. `tests/support` contiene `MockFotoYaRepository`, `seed` y sus operaciones; ninguna pantalla los utiliza. `src101026` es un backup excluido de los checks.
 

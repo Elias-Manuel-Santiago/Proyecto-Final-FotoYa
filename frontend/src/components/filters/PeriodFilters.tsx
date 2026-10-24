@@ -8,12 +8,13 @@ import { useTheme } from '../ui/theme';
 import { displayDate, periodError } from '../../domain/dates';
 import { useBusinessDate } from '../../hooks/useBusinessDate';
 import type { Period, Station } from '../../domain/models';
+import { useWorkspace } from '../../providers/AppProvider';
 export function PeriodFilters({
   period,
   stations,
   onChange,
   extended = false,
-  allowScopeChange = true,
+  allowScopeChange: requestedScopeChange = true,
 }: {
   period: Period;
   stations: Station[];
@@ -21,6 +22,9 @@ export function PeriodFilters({
   extended?: boolean;
   allowScopeChange?: boolean;
 }) {
+  const { employee } = useWorkspace();
+  const allowScopeChange =
+    requestedScopeChange && employee.roleId !== 'manager';
   const { colors, styles } = useTheme();
   const today = useBusinessDate();
   const [open, setOpen] = useState(false);

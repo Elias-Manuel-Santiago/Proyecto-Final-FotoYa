@@ -41,8 +41,8 @@ export const photoUploads = {
         // Cada foto suma una familia; los descartes se derivan de las familias compradoras del día.
         const taken = Number(day.fotos) + 1, discarded = taken - Number(sales.sold);
         if (discarded < 0 || taken > 4294967295) throw new ApiError(409, 'Los conteos del día requieren revisión.', 'INVALID_COUNTS');
-        const [photo] = await connection.execute('INSERT INTO fotos (id_archivo,id_dia,id_cliente,id_puesto) VALUES (?,?,?,?)',
-          [path, day.id_dias, input.clientId, input.stationId]);
+        const [photo] = await connection.execute('INSERT INTO fotos (id_archivo,id_dia,id_cliente,id_puesto,id_camarografo,created_at) VALUES (?,?,?,?,?,UTC_TIMESTAMP(6))',
+          [path, day.id_dias, input.clientId, input.stationId, actor.id]);
         await connection.execute('UPDATE dias SET fotos = ?, descartes = ? WHERE id_dias = ?', [taken, discarded, day.id_dias]);
         const { file: storedFile, ...metadata } = await photoRepository.find(String(photo.insertId), connection);
         return metadata;

@@ -39,7 +39,10 @@ export function AttendanceScreen() {
   } = usePeriodData(period);
   const error = periodError || queryError;
   const [employeeId, setEmployeeId] = useState(initialId ?? '');
-  const employees = data.employees.filter((row) => row.roleId !== 'client');
+  const employees = data.employees.filter(
+    (row) =>
+      row.roleId !== 'client' && hasStationAccess(employee, row.stationId),
+  );
   const records = error
     ? []
     : data.attendance

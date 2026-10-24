@@ -4,7 +4,7 @@
  * pantalla controladora.
  */
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Button } from '../../../components/ui/Button';
 import { Field } from '../../../components/ui/Field';
 import { Feedback } from '../../../components/ui/Feedback';
@@ -132,7 +132,15 @@ export function EmployeeForm({
           maxLength={128}
         />
       )}
-      {input.roleId !== 'checkin' && (
+      {input.roleId !== 'checkin' && employee.roleId === 'manager' && (
+        <Text style={styles.muted}>
+          Puesto asignado:{' '}
+          {employee.stationName ||
+            data.stations.find((s) => s.id === employee.stationId)?.name ||
+            'Tu puesto'}
+        </Text>
+      )}
+      {input.roleId !== 'checkin' && employee.roleId !== 'manager' && (
         <Select
           label="Puesto asignado"
           value={input.stationId}

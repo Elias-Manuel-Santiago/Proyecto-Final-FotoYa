@@ -79,6 +79,10 @@ export async function migrate(db, env, { init = false } = {}) {
     if (!await hasColumn('usuarios', 'auth0_sub')) await connection.query('ALTER TABLE usuarios ADD auth0_sub VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL UNIQUE');
     await migrateVerifications(connection, { hasColumn, hasIndex });
     if (!await hasColumn('fotos', 'email_cliente')) await connection.query('ALTER TABLE fotos ADD email_cliente VARCHAR(254) NULL');
+    // No se reconstruyen autor ni hora de fotos históricas: permanecen desconocidos.
+    if (!await hasColumn('fotos', 'id_camarografo')) await connection.query('ALTER TABLE fotos ADD id_camarografo BIGINT UNSIGNED NULL');
+    if (!await hasColumn('fotos', 'created_at')) await connection.query('ALTER TABLE fotos ADD created_at DATETIME(6) NULL');
+    if (!await hasIndex('fotos', 'ix_fotos_dia_autor_hora')) await connection.query('CREATE INDEX ix_fotos_dia_autor_hora ON fotos (id_dia, id_camarografo, created_at)');
     const photoColumns = await columns('fotos');
     if (photoColumns.some(column => column.name === 'id_cliente' && column.nullable === 'NO')) {
       const [keys] = await connection.query("SELECT CONSTRAINT_NAME AS name FROM information_schema.key_column_usage WHERE table_schema = DATABASE() AND table_name = 'fotos' AND column_name = 'id_cliente' AND referenced_table_name = 'usuarios'");

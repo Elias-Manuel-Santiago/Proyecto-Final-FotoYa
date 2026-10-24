@@ -280,12 +280,16 @@ integration('login real guarda el token de sesión sin hash y rechaza contraseñ
   assert.equal((await call('auth/login', { email: 'nobody@example.com', password: 'wrong' })).status, 401);
 });
 integration('permisos frescos, secretario sin escritura y encargado sin acceso a otro puesto', async () => {
+  assert.equal((await call('reports/graphics/query', period, 'secretario')).status, 200);
+  assert.equal((await call('reports/graphics/query', period, 'vendedor')).status, 403);
+  assert.equal((await call('reports/graphics/query', period, 'anon')).status, 401);
   assert.equal((await call('reports/query', period, 'secretario')).status, 200);
   assert.equal((await call('users/availability', { userId: users.vendedor, active: false }, 'secretario')).status, 403);
   assert.equal((await call('reports/query', { ...period, stationId: '2' }, 'encargado')).status, 403);
   assert.equal((await call('users/detail', { userId: users.otroEncargado }, 'encargado')).status, 404);
   await db.query("DELETE pr FROM permisos_rol pr JOIN rol r ON r.id_rol=pr.id_rol JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE r.nombre='secretario' AND p.tipo_de_permiso='reports.read'");
   assert.equal((await call('reports/query', period, 'secretario')).status, 403);
+  assert.equal((await call('reports/graphics/query', period, 'secretario')).status, 403);
   await db.query("INSERT INTO permisos_rol (id_rol,id_permiso) SELECT r.id_rol,p.id_permisos FROM rol r CROSS JOIN permisos p WHERE r.nombre='secretario' AND p.tipo_de_permiso='reports.read'");
 });
 integration('cliente aislado por propietario, incluso en acceso directo', async () => {
@@ -301,6 +305,10 @@ integration('cliente aislado por propietario, incluso en acceso directo', async 
 });
 
 integration('encargado consulta y gestiona únicamente usuarios, horarios y datos de su puesto', async () => {
+  const graphics = await call('reports/graphics/query', { ...period, day: period.from }, 'encargado');
+  assert.equal(graphics.status, 200);
+  for (const rows of Object.values(graphics.data.data)) assert(rows.every(row => row.stationId === '1'));
+  assert.equal((await call('reports/graphics/query', { ...period, stationId: '2' }, 'encargado')).status, 403);
   for (const path of ['users/query', 'attendance/query', 'reports/query', 'reports/days/query', 'sales/query', 'photos/query']) {
     const filters = path === 'users/query' ? {} : period;
     const response = await call(path, filters, 'encargado');

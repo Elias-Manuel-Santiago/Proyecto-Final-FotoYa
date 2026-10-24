@@ -1,18 +1,18 @@
 import type { AppData } from '../domain/models';
 
-export interface PeriodResult {
+export interface PeriodResult<T = AppData> {
   key: string;
   scope: string;
   base: AppData;
-  data?: AppData;
+  data?: T;
   error?: string;
 }
 
 // Un fallo de actualización conserva únicamente datos del mismo filtro y autorización.
-export function failedPeriodResult(
-  previous: PeriodResult | undefined,
-  request: Omit<PeriodResult, 'data'>,
-): PeriodResult {
+export function failedPeriodResult<T>(
+  previous: PeriodResult<T> | undefined,
+  request: Omit<PeriodResult<T>, 'data'>,
+): PeriodResult<T> {
   return {
     ...request,
     data: previous?.scope === request.scope ? previous.data : undefined,
@@ -20,8 +20,8 @@ export function failedPeriodResult(
 }
 
 // Cambiar revisión o datos base refresca sin vaciar; cambiar alcance sí descarta lo anterior.
-export function periodDataState(
-  result: PeriodResult | undefined,
+export function periodDataState<T>(
+  result: PeriodResult<T> | undefined,
   key: string,
   scope: string,
   base: AppData,

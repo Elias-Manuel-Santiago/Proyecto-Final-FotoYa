@@ -27,6 +27,7 @@ import { errorMessage } from '../domain/format';
 import { ApiClient } from './api-client';
 import { photoForm } from './photo-form';
 import type { SessionStorage } from './session-persistence';
+import type { GraphicsData, GraphicValues } from '../domain/graphics';
 
 // Los nombres del backend se traducen a roles de interfaz; los IDs de base se resuelven por catálogo.
 const roles: Record<string, RoleId> = {
@@ -108,6 +109,68 @@ export class HttpFotoYaRepository {
     public api: ApiClient,
     private sessionStorage?: SessionStorage,
   ) {}
+
+  async graphics(period: Period, day?: string): Promise<GraphicsData> {
+    const invalid = periodError(period.from, period.to);
+    if (invalid) throw new Error(invalid);
+    const actor = await this.profile();
+    const stationId =
+      actor.roleId === 'manager' ? actor.stationId : period.stationId;
+    const raw = await this.api.post<GraphicsData>('reports/graphics/query', {
+      from: period.from,
+      to: period.to,
+      ...(stationId ? { stationId } : {}),
+      ...(day ? { day } : {}),
+    });
+    const values = (row: GraphicValues): GraphicValues => ({
+      earnings: Number(row.earnings),
+      sales: Number(row.sales),
+      sold: Number(row.sold),
+      taken: row.taken === null ? null : Number(row.taken),
+    });
+    return {
+      days: raw.days.map((row) => ({
+        ...row,
+        ...values(row),
+        stationId: String(row.stationId),
+      })),
+      hours: raw.hours.map((row) => ({
+        ...row,
+        ...values(row),
+        stationId: String(row.stationId),
+        hour: row.hour === null ? null : Number(row.hour),
+      })),
+      people: raw.people.map((row) => ({
+        ...row,
+        ...values(row),
+        stationId: String(row.stationId),
+        employeeId: row.employeeId === null ? null : String(row.employeeId),
+        opportunityTaken:
+          row.opportunityTaken === undefined
+            ? undefined
+            : Number(row.opportunityTaken),
+        missingTimes: Number(row.missingTimes ?? 0),
+      })),
+      workers: raw.workers.map((row) => ({
+        ...row,
+        stationId: String(row.stationId),
+        employeeId: row.employeeId === null ? null : String(row.employeeId),
+        opportunityTaken:
+          row.opportunityTaken === undefined
+            ? undefined
+            : Number(row.opportunityTaken),
+        missingTimes: Number(row.missingTimes ?? 0),
+      })),
+      attendance: raw.attendance.map((row) => ({
+        ...row,
+        id: String(row.id),
+        stationId: String(row.stationId),
+        employeeId: String(row.employeeId),
+        checkIn: utcInstant(row.checkIn),
+        checkOut: row.checkOut ? utcInstant(row.checkOut) : null,
+      })),
+    };
+  }
 
   // Restaura una credencial local solo si una operación más reciente no cambió la sesión.
   async restoreSession() {
@@ -235,32 +298,41 @@ export class HttpFotoYaRepository {
       };
     // Consulta los permisos efectivos del perfil recién recibido.
     const has = (permission: string) => actor.permissions?.includes(permission);
+    const inScope = (row: { stationId: string | number | null }) =>
+      actor.roleId !== 'manager' || String(row.stationId) === actor.stationId;
+    const stationId =
+      actor.roleId === 'manager' ? actor.stationId : period.stationId;
     const body = {
       from: period.from,
       to: period.to,
-      ...(period.stationId ? { stationId: period.stationId } : {}),
+      ...(stationId ? { stationId } : {}),
     };
     const stations = has('catalog.read')
       ? await this.api.all<Station>('catalog/query', { resource: 'stations' })
       : [];
-    const normalizedStations = stations.map((row) => ({
-      ...row,
-      id: String(row.id),
-      cityId: String(row.cityId),
-      active: Boolean(row.active),
-      eventId: row.eventId == null ? undefined : String(row.eventId),
-      event: row.event ?? '',
-    }));
+    const normalizedStations = stations
+      .filter(
+        (row) =>
+          actor.roleId !== 'manager' || String(row.id) === actor.stationId,
+      )
+      .map((row) => ({
+        ...row,
+        id: String(row.id),
+        cityId: String(row.cityId),
+        active: Boolean(row.active),
+        eventId: row.eventId == null ? undefined : String(row.eventId),
+        event: row.event ?? '',
+      }));
     const reportBody = {
       ...body,
-      ...(period.city
+      ...(actor.roleId !== 'manager' && period.city
         ? {
             cityId: normalizedStations.find(
               (row) => row.cityId === period.city || row.city === period.city,
             )?.cityId,
           }
         : {}),
-      ...(period.event
+      ...(actor.roleId !== 'manager' && period.event
         ? {
             eventId: normalizedStations.find(
               (row) =>
@@ -321,7 +393,9 @@ export class HttpFotoYaRepository {
     ]);
     return {
       employees: [
-        ...employees.filter((row) => String(row.id) !== actor.id).map(user),
+        ...employees
+          .filter((row) => inScope(row) && String(row.id) !== actor.id)
+          .map(user),
         actor,
       ],
       stations: normalizedStations,
@@ -329,7 +403,7 @@ export class HttpFotoYaRepository {
         id: String(row.id),
         roleId: roles[row.name],
       })),
-      counts: counts.map((row) => ({
+      counts: counts.filter(inScope).map((row) => ({
         ...row,
         stationId: String(row.stationId),
         taken: Number(row.taken),
@@ -337,7 +411,7 @@ export class HttpFotoYaRepository {
         revenue: Number(row.revenue),
         discarded: nullableNumber(row.discarded),
       })),
-      photos: photos.map((row): Photo => ({
+      photos: photos.filter(inScope).map((row): Photo => ({
         ...row,
         id: String(row.id),
         stationId: String(row.stationId),
@@ -349,7 +423,7 @@ export class HttpFotoYaRepository {
         operationId: '',
         createdAt: '',
       })),
-      sales: sales.map((row): Sale => ({
+      sales: sales.filter(inScope).map((row): Sale => ({
         ...row,
         id: String(row.id),
         stationId: String(row.stationId),
@@ -360,7 +434,7 @@ export class HttpFotoYaRepository {
         employeeId: '',
         createdAt: row.createdAt ? utcInstant(row.createdAt) : '',
       })),
-      attendance: attendance.map((row) => ({
+      attendance: attendance.filter(inScope).map((row) => ({
         ...row,
         id: String(row.id),
         stationId: String(row.stationId),
@@ -368,7 +442,7 @@ export class HttpFotoYaRepository {
         checkIn: utcInstant(row.checkIn),
         checkOut: row.checkOut ? utcInstant(row.checkOut) : null,
       })),
-      reports: reports?.map((row) => ({
+      reports: reports?.filter(inScope).map((row) => ({
         ...metrics(row),
         station: normalizedStations.find(
           (station) => station.id === String(row.stationId),

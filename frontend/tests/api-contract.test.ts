@@ -512,7 +512,7 @@ test('informes conservan NULL y días inconsistentes aunque el saldo agregado se
 });
 
 test('filtros de ciudad/evento usan IDs del catálogo y asistencia propia usa puesto histórico', async () => {
-  const { repo, requests } = fixture();
+  const { repo, requests } = fixture('secretario');
   const data = await repo.snapshot(
     { ...period, city: 'Ciudad', event: 'Evento' },
     true,
@@ -776,4 +776,118 @@ test('contraseña errónea al cerrar Check-in conserva la sesión', async () => 
   await repo.acceptSession('t'.repeat(43));
   await assert.rejects(repo.logoutCheckIn('incorrecta'));
   await assert.rejects(repo.logoutCheckIn('incorrecta'));
+});
+
+test('gráficos normaliza agregados, horas y turnos sin inventar autores; el encargado envía solo su puesto', async () => {
+  const { repo, requests } = fixture('encargado', {
+    'reports/graphics/query': {
+      days: [
+        {
+          stationId: 1,
+          date: period.from,
+          taken: '10',
+          sold: '2',
+          sales: '3',
+          earnings: '1500.20',
+        },
+      ],
+      hours: [
+        {
+          stationId: 1,
+          hour: '12',
+          taken: '4',
+          sold: '2',
+          sales: '3',
+          earnings: '1500.20',
+        },
+        {
+          stationId: 1,
+          hour: null,
+          taken: '6',
+          sold: '0',
+          sales: '0',
+          earnings: '0',
+        },
+      ],
+      people: [
+        {
+          stationId: 1,
+          employeeId: null,
+          name: 'Sin autor',
+          role: 'photographer',
+          taken: '10',
+          sold: '2',
+          sales: '3',
+          earnings: '1500.20',
+        },
+      ],
+      workers: [
+        {
+          stationId: 1,
+          employeeId: 7,
+          name: 'Persona',
+          role: 'seller',
+          opportunityTaken: '4',
+          missingTimes: '6',
+        },
+      ],
+      attendance: [
+        {
+          id: 1,
+          employeeId: 7,
+          stationId: 1,
+          name: 'Persona',
+          role: 'vendedor',
+          checkIn: '2026-10-15 15:00:00',
+          checkOut: null,
+        },
+      ],
+    },
+  });
+  const data = await repo.graphics(
+    { ...period, stationId: '999', city: 'another-city' },
+    period.from,
+  );
+  assert.deepEqual(
+    requests.find((r) => r.path === 'reports/graphics/query')?.body,
+    { from: period.from, to: period.to, stationId: '1', day: period.from },
+  );
+  assert.equal(data.days[0].earnings, 1500.2);
+  assert.equal(data.days[0].sales, 3);
+  assert.equal(data.hours[0].hour, 12);
+  assert.equal(data.hours[1].hour, null);
+  assert.equal(data.people[0].employeeId, null);
+  assert.equal(data.workers[0].opportunityTaken, 4);
+  assert.equal(data.attendance[0].checkIn, '2026-10-15T15:00:00Z');
+  assert.equal(data.attendance[0].checkOut, null);
+});
+
+test('snapshot del encargado descarta catálogos ajenos y fija su puesto aunque el filtro venga de una URL', async () => {
+  const { repo, requests } = fixture('encargado', {
+    'catalog/stations': [station, { ...station, id: 999, name: 'Otro puesto' }],
+  });
+  const data = await repo.snapshot({
+    ...period,
+    stationId: '999',
+    city: 'otra',
+    event: 'otro',
+  });
+  assert.deepEqual(
+    data.stations.map((s) => s.id),
+    ['1'],
+  );
+  for (const request of requests.filter((r) =>
+    [
+      'reports/query',
+      'reports/summary',
+      'reports/days/query',
+      'sales/query',
+      'photos/query',
+      'attendance/query',
+    ].includes(r.path),
+  )) {
+    assert.equal(request.body.stationId, '1');
+    assert.equal(request.body.cityId, undefined);
+    assert.equal(request.body.eventId, undefined);
+  }
 });

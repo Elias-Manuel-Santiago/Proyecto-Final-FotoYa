@@ -236,6 +236,14 @@ La integración crea una base `foto_ya_test_<aleatorio>` y la elimina al termina
 
 ## Cómo seguir el código
 
+### Estadísticas interactivas
+
+Ejecutar `npm run db:migrate` antes de iniciar esta versión. Se agregan `fotos.id_camarografo`, `fotos.created_at` y un índice por día/autor/hora. Las cargas nuevas guardan el usuario que confirmó la foto y su instante UTC; el historial conserva `NULL` cuando no hay autor u hora. No se infiere la hora de captura del archivo.
+
+`POST /api/reports/graphics/query` requiere `reports.read` y acepta `{ from, to, stationId?, day? }`, con el mismo máximo de 367 días y `day` dentro del período. Devuelve `days`, `hours`, `people`, `workers` y `attendance`. Los agregados no se paginan y se leen en una única transacción para mantener el mismo snapshot. El alcance se aplica por puesto en todas las consultas: un encargado siempre queda limitado al propio, aun si omite el filtro o modifica el cuerpo.
+
+Se distinguen operaciones de venta, familias compradoras únicas contadas por el flujo de ventas e ingresos históricos. Las fotos sin autor, los conteos sin fotos respaldatorias y las ventas sin fotos vinculadas permanecen sin atribuir. Las horas desconocidas se conservan separadas. La base de conversión de vendedores cuenta fotos registradas durante sus turnos con `EXISTS`, evitando duplicarlas cuando sus propios turnos se superponen. La consulta horaria devuelve turnos por solapamiento real, incluyendo los iniciados el día anterior. No se devuelven rutas de Storage, archivos ni URLs privadas.
+
 `server.js` inicia el servidor y `app.js` conecta las rutas. Cada archivo de rutas importa el servicio que usa; los servicios importan sus repositorios. No hay que crear servicios ni pasar `db`, `storage` o `env` entre capas.
 
 `src/config/env.js` valida y exporta la configuración una sola vez. `src/config/database.js` exporta el pool compartido `db`. `src/integrations/storage.js` exporta `uploadFile`, `removeFile` y `signedUrl`, siguiendo las operaciones del [cliente de Supabase](https://supabase.com/docs/reference/javascript/storage-from-upload).
