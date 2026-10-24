@@ -409,6 +409,23 @@ test('desde ventas guarda el mail por la ruta del evento y consulta una foto ele
   ]);
 });
 
+test('fotos de venta distinguen cero de uno aunque el indicador llegue como texto', async () => {
+  const states = ['0', '1', 0, 1, false, true];
+  const { repo } = fixture('vendedor', {
+    'sales/photos': states.map((sold, index) => ({
+      id: index + 1,
+      date: '2026-10-15',
+      clientId: null,
+      sold,
+    })),
+  });
+  const photos = await repo.salePhotos('1');
+  assert.deepEqual(
+    photos.map((photo) => photo.sold),
+    [false, true, false, true, false, true],
+  );
+});
+
 test('paginación recorre todos los bloques y conserva filtros sin truncar totales', async () => {
   const bodies: Record<string, unknown>[] = [];
   const api = testApi('http://api.test/api', async (_input, init) => {

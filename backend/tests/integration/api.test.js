@@ -594,6 +594,9 @@ integration('ventas del evento: tarifas por puesto, copias, familias, reintentos
   // Fotos creadas por este test, fuera de los datos históricos de informes.
   const firstPhoto = (await upload()).data.data.id;
   const secondPhoto = (await upload()).data.data.id;
+  const beforeSale = await call('sales/photos', { stationId: '1', photoId: firstPhoto }, 'vendedor');
+  assert.equal(beforeSale.status, 200);
+  assert.equal(beforeSale.data.data.find(photo => photo.id === firstPhoto)?.sold, false);
   form.photoId = firstPhoto;
   await db.query('UPDATE precios SET disponible=0 WHERE id_puesto=1');
   assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'NO_PRICES');
@@ -629,7 +632,7 @@ integration('ventas del evento: tarifas por puesto, copias, familias, reintentos
   assert.equal(Number(days[0].sold), 2);
   assert.equal(days[0].revenue, '283.20');
   const photos = await call('sales/photos', { stationId: '1' }, 'vendedor');
-  assert.equal(photos.status, 200); assert(photos.data.data.some(photo => photo.id === firstPhoto && photo.sold));
+  assert.equal(photos.status, 200); assert.equal(photos.data.data.find(photo => photo.id === firstPhoto)?.sold, true);
   assert.equal((await call('sales/photos/access', { photoId: firstPhoto }, 'vendedor')).status, 200);
   assert.equal((await call('sales/photos/access', { photoId: firstPhoto }, 'cliente')).status, 403);
   assert.equal((await call('sales/create', { ...form, operationId: randomUUID(), photoId: '1' }, 'vendedor')).status, 422);

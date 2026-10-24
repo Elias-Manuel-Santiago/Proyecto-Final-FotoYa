@@ -41,7 +41,8 @@ export const salesService = {
       EXISTS(SELECT 1 FROM fotos_venta fv WHERE fv.id_foto=f.id_fotos) AS sold
       FROM fotos f JOIN dias d ON d.id_dias=f.id_dia WHERE f.id_puesto=? AND f.id_dia=? ${input.photoId ? 'AND f.id_fotos=?' : ''}
       ORDER BY f.id_fotos DESC LIMIT ? OFFSET ?`, [input.stationId, current.dayId, ...(input.photoId ? [input.photoId] : []), String(input.limit), String(input.offset)]);
-    return rows;
+    // EXISTS puede llegar como "0"/"1" con bigNumberStrings; exponer un booleano real.
+    return rows.map(row => ({ ...row, sold: Number(row.sold) === 1 }));
   },
   // Exige foto autorizada del día y evento abierto antes de emitir acceso temporal.
   async accessPhoto(actor, photoId) {

@@ -50,6 +50,9 @@ interface PhotoRow {
   clientId: string | null;
   clientEmail?: string | null;
 }
+interface SalePhotoRow extends Omit<SalePhoto, 'sold'> {
+  sold: boolean | number | string;
+}
 interface DayRow {
   stationId: string;
   date: string;
@@ -560,7 +563,7 @@ export class HttpFotoYaRepository {
   }
   // Recupera una página de doce fotos vendibles con filtro opcional por foto.
   async salePhotos(stationId: string, offset = 0, photoId?: string) {
-    const rows = await this.api.post<SalePhoto[]>('sales/photos', {
+    const rows = await this.api.post<SalePhotoRow[]>('sales/photos', {
       stationId,
       limit: 12,
       offset,
@@ -569,7 +572,7 @@ export class HttpFotoYaRepository {
     return rows.map((row) => ({
       ...row,
       id: String(row.id),
-      sold: Boolean(row.sold),
+      sold: Number(row.sold) === 1,
     }));
   }
   // Solicita una URL temporal por la ruta autorizada para el evento activo.
