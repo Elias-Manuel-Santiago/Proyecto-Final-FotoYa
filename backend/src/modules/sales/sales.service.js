@@ -6,7 +6,7 @@
 import { db } from '../../config/database.js';
 import { transaction } from '../../shared/transaction.js';
 import { ApiError } from '../../shared/errors.js';
-import { stationScope, assertPermission } from '../../security/access.js';
+import { stationScope } from '../../security/access.js';
 import { requirePhotoOperator } from '../photos/photos.authorization.js';
 import { photoService } from '../photos/photos.service.js';
 import { saleAmounts } from './sales.schemas.js';
@@ -30,30 +30,6 @@ export const salesService = {
     stationScope(actor, input.stationId);
     const row = eventCache.get(input.stationId);
     return { open: currentEvent(row), date: row?.date ?? null };
-  },
-  // Permite al encargado abrir o cerrar ventas y vincula la apertura al día argentino.
-  setEvent(actor, input) {
-    assertPermission(actor, 'sales.create');
-    if (actor.role !== 'encargado') throw new ApiError(403, 'Solo el encargado puede abrir o cerrar las ventas del evento.');
-    return eventCache.run(input.stationId, async () => {
-      const row = await transaction(async connection => {
-        const authorized = await operator(connection, actor, input.stationId);
-        if (authorized.role !== 'encargado') throw new ApiError(403, 'Solo el encargado puede abrir o cerrar ventas.');
-        const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto = ? FOR UPDATE', [input.stationId]);
-        if (!station || (input.open && !station.active)) throw new ApiError(409, 'El puesto no está disponible.');
-        const current = eventCache.get(input.stationId);
-        if (input.open && !currentEvent(current)) {
-          const date = businessDate();
-          await connection.execute('INSERT INTO dias (fecha,id_puesto) VALUES (?,?) ON DUPLICATE KEY UPDATE id_dias=id_dias', [date, input.stationId]);
-          const [[day]] = await connection.execute('SELECT id_dias AS id FROM dias WHERE fecha=? AND id_puesto=? FOR UPDATE', [date, input.stationId]);
-          return { open: true, date, dayId: day.id };
-        }
-        return current ? { ...current, open: input.open } : undefined;
-      });
-      // Publicar la apertura sólo después de confirmar el día en MySQL.
-      if (row) eventCache.set(input.stationId, row);
-      return { open: currentEvent(row), date: row?.date ?? null };
-    });
   },
   // Lista fotos del evento vigente con destinatario e indicador de ventas anteriores.
   async photos(actor, input) {

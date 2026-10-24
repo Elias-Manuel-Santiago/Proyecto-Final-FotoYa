@@ -550,6 +550,8 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
   });
   await repo.login('encargado@example.com', 'clave');
   await repo.enterCheckIn();
+  await repo.checkInSaleEvent();
+  await repo.setCheckInSaleEvent(true);
   const [employee] = await repo.checkInEmployees();
   assert.equal(employee.id, '8');
   await repo.markAttendance(
@@ -562,7 +564,14 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
     'empleado@example.com',
     'clave-empleado',
   );
+  await repo.setCheckInSaleEvent(false);
   await repo.logoutCheckIn('clave-encargado');
+  assert.deepEqual(
+    requests
+      .filter((row) => row.path === 'attendance/kiosk/event/set')
+      .map((row) => row.body),
+    [{ open: true }, { open: false }],
+  );
   assert.deepEqual(
     requests.find((row) => row.path === 'attendance/kiosk/enter')?.body,
     {},

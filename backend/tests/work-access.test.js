@@ -31,7 +31,7 @@ test('la sesión Check-in del encargado impide volver al sistema o cerrar sin co
   for (const path of ['/users/query', '/sales/create', '/reports/query', '/attendance/kiosk/enter', '/attendance/kiosk/assign', '/attendance/kiosk/stations'])
     assert.throws(() => check('encargado', path, kiosk), { code: 'KIOSK_LOCKED' });
   assert.equal(check('encargado', '/me', kiosk, true), true);
-  for (const path of ['/attendance/kiosk/exit', '/attendance/kiosk/employees', '/attendance/kiosk/mark'])
+  for (const path of ['/attendance/kiosk/exit', '/attendance/kiosk/employees', '/attendance/kiosk/mark', '/attendance/kiosk/event', '/attendance/kiosk/event/set'])
     assert.equal(check('encargado', path, kiosk), true);
   assert.equal(check('encargado', '/users/query', { kioskMode: false }), true);
 });

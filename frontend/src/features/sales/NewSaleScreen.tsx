@@ -3,7 +3,7 @@
  * Coordina evento del día, tarifas y páginas de doce fotos. Reinicia al cambiar día/puesto y
  * bloquea refresco durante confirmación.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Screen } from '../../components/ui/Screen';
 import { Button } from '../../components/ui/Button';
@@ -50,11 +50,11 @@ function DailySaleScreen({ today }: { today: string }) {
     error?: string;
   }>();
   // Limpia la foto seleccionada y solicita consultar nuevamente el evento.
-  const reload = () => {
+  const reload = useCallback(() => {
     setSelected('');
     setSelling(false);
     setRevision((value) => value + 1);
-  };
+  }, []);
   useEffect(() => {
     let active = true;
     void Promise.all([
@@ -86,6 +86,33 @@ function DailySaleScreen({ today }: { today: string }) {
     prices = current?.prices ?? [],
     photos = (current?.photos ?? []).filter((photo) => photo.date === today);
   const blocked = loading || !!error || action.busy;
+  // Refleja aperturas/cierres desde Check-in sin interrumpir un formulario de venta.
+  useEffect(() => {
+    if (!event || selling) return;
+    let active = true;
+    let running = false;
+    const timer = setInterval(() => {
+      if (running) return;
+      running = true;
+      void repository
+        .saleEvent(stationId)
+        .then((latest) => {
+          if (
+            active &&
+            (latest.open !== event.open || latest.date !== event.date)
+          )
+            reload();
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          running = false;
+        });
+    }, 5000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [repository, stationId, event, selling, reload]);
   return (
     <Screen
       compact
@@ -110,27 +137,10 @@ function DailySaleScreen({ today }: { today: string }) {
               Evento del {displayDate(event.date)}
             </Text>
           )}
-          {employee.roleId === 'manager' && (
-            <Button
-              title={
-                event?.open
-                  ? 'Cerrar ventas del evento'
-                  : 'Abrir ventas del evento'
-              }
-              disabled={blocked || selling}
-              busy={action.busy}
-              onPress={() => {
-                void action.run(async () => {
-                  await repository.setSaleEvent(stationId, !event?.open);
-                  reload();
-                });
-              }}
-            />
-          )}
           {!event?.open && (
             <Text style={styles.text}>
-              El encargado debe abrir las ventas del puesto para registrar
-              ventas del evento.
+              Abrí las ventas del puesto desde la pantalla de Check-in para
+              registrar ventas del evento.
             </Text>
           )}
           {!prices.length && (

@@ -13,8 +13,8 @@ export const requiresAttendance = role => ['secretario', 'camarografo', 'vendedo
 export function workAccess(req, res, next) {
   const auth = req.baseUrl === '/api/auth';
   if (req.actor.kioskMode) {
-    if ((auth && req.path === '/me') || (!auth && ['/attendance/kiosk/employees', '/attendance/kiosk/mark', '/attendance/kiosk/exit'].includes(req.path))) return next();
-    throw new ApiError(403, 'Esta sesión solo permite registrar asistencia o cerrar sesión con la contraseña del encargado.', 'KIOSK_LOCKED');
+    if ((auth && req.path === '/me') || (!auth && ['/attendance/kiosk/employees', '/attendance/kiosk/mark', '/attendance/kiosk/exit', '/attendance/kiosk/event', '/attendance/kiosk/event/set'].includes(req.path))) return next();
+    throw new ApiError(403, 'Esta sesión solo permite asistencia, apertura/cierre de ventas y cierre de sesión con contraseña.', 'KIOSK_LOCKED');
   }
   if (!auth && requiresAttendance(req.actor.role) && !req.actor.working)
     throw new ApiError(403, 'Registrá tu check-in en el puesto para poder trabajar.', 'CHECK_IN_REQUIRED');

@@ -230,6 +230,19 @@ export class HttpFotoYaRepository {
     this.profileRevision += 1;
   }
 
+  checkInSaleEvent() {
+    return this.api.post<{ open: boolean; date: string | null }>(
+      'attendance/kiosk/event',
+    );
+  }
+
+  setCheckInSaleEvent(open: boolean) {
+    return this.api.post<{ open: boolean; date: string | null }>(
+      'attendance/kiosk/event/set',
+      { open },
+    );
+  }
+
   async logoutCheckIn(password: string) {
     // Una contraseña incorrecta conserva la sesión local y remota.
     await this.api.post('attendance/kiosk/exit', { password });
@@ -539,10 +552,6 @@ export class HttpFotoYaRepository {
       'sales/event',
       { stationId },
     );
-  }
-  // Solicita abrir o cerrar las ventas del puesto.
-  setSaleEvent(stationId: string, open: boolean) {
-    return this.api.post('sales/event/set', { stationId, open });
   }
   // Recupera una página de doce fotos vendibles con filtro opcional por foto.
   async salePhotos(stationId: string, offset = 0, photoId?: string) {

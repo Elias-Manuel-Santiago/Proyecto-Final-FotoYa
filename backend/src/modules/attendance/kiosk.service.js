@@ -7,7 +7,8 @@ import { db } from '../../config/database.js';
 import { transaction } from '../../shared/transaction.js';
 import { ApiError } from '../../shared/errors.js';
 import { hashPassword, verifyPassword, normalizeEmail, newToken } from '../../security/crypto.js';
-import { businessDate } from '../sales/sales.rules.js';
+import { businessDate, currentEvent } from '../sales/sales.rules.js';
+import { eventCache } from '../sales/sales.events.js';
 
 const dummyHash = await hashPassword(newToken());
 // El modo pertenece a la sesión, nunca a la cuenta completa.
@@ -60,6 +61,34 @@ export const kioskService = {
       return { revoked: true };
     });
   },
+  // El puesto siempre se obtiene de la sesión autenticada.
+  async event(actor) {
+    requireKiosk(actor);
+    const row = eventCache.get(actor.stationId);
+    return { open: currentEvent(row), date: row?.date ?? null };
+  },
+  // Comparte la cola del puesto con ventas y marcaciones para ordenar el cierre.
+  setEvent(actor, input) {
+    requireKiosk(actor);
+    const stationId = actor.stationId;
+    return eventCache.run(stationId, async () => {
+      const row = await managed(actor, async connection => {
+        const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto = ? FOR UPDATE', [stationId]);
+        if (!station || (input.open && !station.active)) throw new ApiError(409, 'El puesto no está disponible.');
+        const current = eventCache.get(stationId);
+        if (input.open && !currentEvent(current)) {
+          const date = businessDate();
+          await connection.execute('INSERT INTO dias (fecha,id_puesto) VALUES (?,?) ON DUPLICATE KEY UPDATE id_dias=id_dias', [date, stationId]);
+          const [[day]] = await connection.execute('SELECT id_dias AS id FROM dias WHERE fecha=? AND id_puesto=? FOR UPDATE', [date, stationId]);
+          return { open: true, date, dayId: day.id };
+        }
+        return current ? { ...current, open: input.open } : undefined;
+      });
+      // Un rollback nunca publica una apertura o cierre que no se confirmó.
+      if (row) eventCache.set(stationId, row);
+      return { open: currentEvent(row), date: row?.date ?? null };
+    });
+  },
   // Lista empleados activos del puesto con su turno abierto para elegir entrada o salida.
   async employees(actor, input) {
     requireKiosk(actor);
@@ -75,7 +104,12 @@ export const kioskService = {
   // Verifica credenciales y turno esperado antes de registrar la entrada o salida del empleado.
   async mark(actor, input) {
     requireKiosk(actor);
-    return managed(actor, async (connection) => {
+    return eventCache.run(actor.stationId, () => managed(actor, async (connection) => {
+      const assertSalesOpen = () => {
+        if (!currentEvent(eventCache.get(actor.stationId)))
+          throw new ApiError(409, 'Abrí las ventas desde Check-in para registrar entradas o salidas.', 'EVENT_CLOSED');
+      };
+      assertSalesOpen();
       const [[employee]] = await connection.execute(`SELECT u.id_usuario AS id, u.email, u.password, u.disponible,
         u.id_puesto AS stationId, r.nombre AS role FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
         WHERE u.id_usuario = ? FOR UPDATE`, [input.userId]);
@@ -90,6 +124,8 @@ export const kioskService = {
       // El turno recibido funciona como control de concurrencia: una lista vieja no marca dos veces.
       if ((current?.id ?? null) !== input.attendanceId || (input.action === 'check-in' ? open.length > 0 : !current))
         throw new ApiError(409, 'La asistencia cambió o hay una jornada abierta en otro puesto. Actualizá la lista.', 'ATTENDANCE_CHANGED');
+      // La fecha puede haber cambiado mientras se verificaban las credenciales.
+      assertSalesOpen();
       if (input.action === 'check-out') {
         await connection.execute('UPDATE horarios SET check_out = UTC_TIMESTAMP(6) WHERE id_usuario = ? AND check_out IS NULL AND id_dias IN (SELECT id_dias FROM dias WHERE id_puesto = ?)', [input.userId, actor.stationId]);
         return { working: false };
@@ -99,6 +135,6 @@ export const kioskService = {
       await connection.execute(`INSERT INTO horarios (id_usuario, id_dias, check_in)
         SELECT ?, id_dias, UTC_TIMESTAMP(6) FROM dias WHERE id_puesto = ? AND fecha = ?`, [input.userId, actor.stationId, date]);
       return { working: true };
-    });
+    }));
   },
 };

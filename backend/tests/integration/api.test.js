@@ -21,6 +21,10 @@ const env = { ...fixture, DB_NAME: database, DB_PORT: Number(enabled ?? 33307), 
   DB_USER: process.env.TEST_DB_USER ?? 'root', DB_PASSWORD: process.env.TEST_DB_PASSWORD ?? '' };
 let admin, db, server, http, passwordHash, authRepository, photoUploads, businessDate;
 const users = {}, tokens = {};
+const kioskTokens = {};
+const kioskCall = (stationId, open) => http.post('/api/attendance/kiosk/event/set', { open }, {
+  headers: { Authorization: `Bearer ${kioskTokens[stationId]}` },
+});
 const objects = new Map(), storageCalls = { uploads: 0 };
 let failureMode = null;
 let removalFailure = false;
@@ -83,6 +87,10 @@ before(async () => {
       VALUES (?, ?, ?, ?, ?, ?, ?)`, [key, 'Apellido', email, dni, passwordHash, r.id_rol, station]);
     users[key] = String(result.insertId); tokens[key] = newToken();
     await db.execute('INSERT INTO sesiones_usuario (id_usuario, token, expires_at) VALUES (?, ?, TIMESTAMPADD(HOUR, 2, UTC_TIMESTAMP(6)))', [users[key], tokens[key]]);
+  }
+  for (const [station, account] of [['1', 'encargado'], ['2', 'otroEncargado']]) {
+    kioskTokens[station] = newToken();
+    await db.execute('INSERT INTO sesiones_usuario(id_usuario,token,check_in_mode,expires_at) VALUES (?,?,TRUE,TIMESTAMPADD(HOUR,2,UTC_TIMESTAMP(6)))', [users[account], kioskTokens[station]]);
   }
   await db.query("INSERT INTO dias (fecha, fotos, descartes, id_puesto) VALUES ('2026-10-14',100,30,1),('2026-10-14',10,0,2)");
   await db.execute("INSERT INTO fotos (id_archivo, id_dia, id_cliente, id_puesto) VALUES ('1/photo.jpg',1,?,1),('1/other.jpg',1,?,1)", [users.cliente, users.otroCliente]);
@@ -169,7 +177,7 @@ integration('check-in: una sesión de trabajo y una de kiosco, activación concu
   assert.equal((await kiosk('auth/me')).data.data.kioskMode, true);
   assert.equal((await previousNormal('auth/me')).data.data.kioskMode, false);
   assert.equal((await previousNormal('auth/me')).data.data.checkInActive, true);
-  assert.equal((await call('auth/me', {}, 'otroEncargado')).data.data.checkInActive, false);
+  assert.equal((await call('auth/me', {}, 'otroEncargado')).data.data.kioskMode, false);
 
   let normal = request((await call('auth/login', managerCredentials)).data.data.token);
   assert.equal((await previousNormal('auth/me')).status, 401);
@@ -188,6 +196,14 @@ integration('check-in: una sesión de trabajo y una de kiosco, activación concu
     assert(roster.some(row => row.id === employee)); assert(!roster.some(row => ids.slice(1).includes(row.id)));
     assert(roster.every(row => row.email === undefined && row.password === undefined));
     const mark = { ...credentials, userId: employee, action: 'check-in', attendanceId: null };
+    assert.equal((await kiosk('attendance/kiosk/event')).data.data.open, false);
+    assert.equal((await normal('attendance/kiosk/event/set', { open: true })).status, 403);
+    assert.equal((await normal('sales/event/set', { stationId: '1', open: true })).status, 404);
+    assert.equal((await kiosk('attendance/kiosk/event/set', { stationId: '2', open: true })).status, 422);
+    assert.equal((await kiosk('attendance/kiosk/mark', mark)).data.error.code, 'EVENT_CLOSED');
+    assert.equal((await kiosk('attendance/kiosk/event/set', { open: true })).status, 200);
+    assert.equal((await call('sales/event', { stationId: '1' }, 'encargado')).data.data.open, true);
+    assert.equal((await call('sales/event', { stationId: '2' }, 'otroEncargado')).data.data.open, false);
     assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, password: 'incorrecta' })).status, 401);
     assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, email: 'vendedor@example.com' })).status, 401);
     assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, userId: ids[1], email: 'kioskother@example.com' })).status, 401);
@@ -197,6 +213,15 @@ integration('check-in: una sesión de trabajo y una de kiosco, activación concu
     assert.equal((await kiosk('auth/me')).data.data.id, managerId);
     assert.equal((await normal('users/query')).status, 200);
     const current = (await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee);
+    assert.equal((await kiosk('attendance/kiosk/event/set', { open: false })).status, 200);
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).data.error.code, 'EVENT_CLOSED');
+    assert.equal((await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee).working, true);
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, userId: ids[2], email: 'kioskinactive@example.com' })).data.error.code, 'EVENT_CLOSED');
+    // Una apertura del día anterior no habilita ni entrada ni salida.
+    const event = eventCache.get('1');
+    eventCache.set('1', { ...event, open: true, date: '2000-01-01' });
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).data.error.code, 'EVENT_CLOSED');
+    assert.equal((await kiosk('attendance/kiosk/event/set', { open: true })).status, 200);
     await db.execute('UPDATE horarios SET id_dias = 1, check_in = TIMESTAMPADD(HOUR,-26,UTC_TIMESTAMP(6)) WHERE id_horario = ?', [current.attendanceId]);
     assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).status, 200);
     assert.equal((await device('sales/query', period)).status, 403);
@@ -218,6 +243,8 @@ integration('check-in: una sesión de trabajo y una de kiosco, activación concu
     assert.equal((await normal('auth/me')).status, 401);
     assert.equal((await call('auth/login', { ...managerCredentials, password: newPassword })).status, 200);
   } finally {
+    const event = eventCache.get('1');
+    if (event) eventCache.set('1', { ...event, open: false });
     await db.execute('DELETE FROM horarios WHERE id_usuario = ?', [employee]);
   }
 });
@@ -536,9 +563,9 @@ integration('ventas del evento: tarifas por puesto, copias, familias, reintentos
   tokens.vendedor = (await call('auth/login', { email: 'vendedor@example.com', password: 'Test-password-1234' })).data.data.token;
   const form = { operationId: randomUUID(), stationId: '1', photoId: '1', paymentMethod: 'efectivo', prices: [{ priceId: '1', copies: 3 }] };
   assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'EVENT_CLOSED');
-  assert.equal((await call('sales/event/set', { stationId: '1', open: true }, 'vendedor')).status, 403);
-  assert.equal((await call('sales/event/set', { stationId: '2', open: true }, 'encargado')).status, 403);
-  const opened = await call('sales/event/set', { stationId: '1', open: true }, 'encargado');
+  assert.equal((await call('attendance/kiosk/event/set', { open: true }, 'vendedor')).status, 403);
+  assert.equal((await call('attendance/kiosk/event/set', { open: true }, 'encargado')).status, 403);
+  const opened = await kioskCall('1', true);
   assert.equal(opened.status, 200);
   const date = opened.data.data.date;
   // Fotos creadas por este test, fuera de los datos históricos de informes.
@@ -582,7 +609,7 @@ integration('ventas del evento: tarifas por puesto, copias, familias, reintentos
   assert.equal((await call('sales/photos/access', { photoId: firstPhoto }, 'vendedor')).status, 200);
   assert.equal((await call('sales/photos/access', { photoId: firstPhoto }, 'cliente')).status, 403);
   assert.equal((await call('sales/create', { ...form, operationId: randomUUID(), photoId: '1' }, 'vendedor')).status, 422);
-  assert.equal((await call('sales/event/set', { stationId: '1', open: false }, 'encargado')).status, 200);
+  assert.equal((await kioskCall('1', false)).status, 200);
   assert.equal((await call('sales/create', { ...form, operationId: randomUUID() }, 'vendedor')).data.error.code, 'EVENT_CLOSED');
   // Una confirmación perdida puede recuperarse incluso después del cierre.
   assert.equal((await call('sales/create', form, 'vendedor')).status, 200);
@@ -633,14 +660,14 @@ integration('ventas solo lista, previsualiza y vende fotos del día actual de Ar
   const [[price]] = await db.query('SELECT id_precios AS id FROM precios WHERE id_puesto=1 AND disponible=1 LIMIT 1');
   const input = { stationId: '1', photoId: '1', operationId: randomUUID(), paymentMethod: 'efectivo', prices: [{ priceId: price.id, copies: 1 }] };
   assert.equal((await call('sales/create', input, 'vendedor')).data.error.code, 'EVENT_CLOSED');
-  const open = await call('sales/event/set', { stationId: '1', open: true }, 'encargado');
+  const open = await kioskCall('1', true);
   assert.equal(open.status, 200); assert.equal(open.data.data.date, businessDate(new Date()));
   const rows = (await call('sales/photos', { stationId: '1' }, 'vendedor')).data.data;
   assert(rows.length > 0); assert(rows.every(row => row.date === businessDate(new Date())));
   assert(!rows.some(row => row.id === '1'));
   assert.equal((await call('sales/photos/access', { photoId: '1' }, 'vendedor')).status, 404);
   assert.equal((await call('sales/create', input, 'vendedor')).status, 422);
-  await call('sales/event/set', { stationId: '1', open: false }, 'encargado');
+  await kioskCall('1', false);
 });
 
 integration('cambio de contraseña revoca sesiones y logout no altera asistencia', async () => {
@@ -654,6 +681,7 @@ integration('migraciones repetibles preservan permisos y datos originales', asyn
   await db.query('ALTER TABLE sesiones_usuario DROP COLUMN check_in_mode');
   await db.query('ALTER TABLE horarios DROP INDEX ix_horarios_usuario_abierto');
   await migrate(db, env);
+  for (const token of Object.values(kioskTokens)) await db.execute('UPDATE sesiones_usuario SET check_in_mode = TRUE WHERE token = ?', [token]);
   const response = await call('auth/me'); assert.equal(response.status, 200); assert.equal(response.data.data.email, 'dueno@example.com');
   assert.equal(response.data.data.kioskMode, false);
   const [indexes] = await db.query("SHOW INDEX FROM horarios WHERE Key_name='ix_horarios_usuario_abierto'");

@@ -3,7 +3,7 @@
  * Presenta empleados y pide credenciales para marcar en kiosco. Refresca asistencia y exige
  * contraseña del encargado para cerrar únicamente esta sesión.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/Button';
@@ -16,11 +16,13 @@ import { errorMessage, fullName } from '../../domain/format';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
 import { CheckInOptions } from './components/CheckInOptions';
+import { useBusinessDate } from '../../hooks/useBusinessDate';
 
 // Selecciona empleado y confirma su entrada o salida con sus propias credenciales.
 export function CheckInScreen() {
   const { employee } = useWorkspace();
-  return <CheckInStationScreen key={employee.stationId} />;
+  const today = useBusinessDate();
+  return <CheckInStationScreen key={`${employee.stationId}:${today}`} />;
 }
 
 function CheckInStationScreen() {
@@ -32,8 +34,15 @@ function CheckInStationScreen() {
   const [selected, setSelected] = useState<CheckInEmployee | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [saleEvent, setSaleEvent] = useState<{
+    open: boolean;
+    date: string | null;
+  } | null>(null);
+  const [closingSales, setClosingSales] = useState(false);
+  const loadRevision = useRef(0);
   const action = useAction();
   const reload = useCallback(async () => {
+    const revision = ++loadRevision.current;
     if (!employee.stationId) {
       setEmployees([]);
       setLoading(false);
@@ -41,12 +50,20 @@ function CheckInStationScreen() {
     }
     setLoading(true);
     try {
-      setEmployees(await repository.checkInEmployees());
+      const [rows, event] = await Promise.all([
+        repository.checkInEmployees(),
+        repository.checkInSaleEvent(),
+      ]);
+      if (revision !== loadRevision.current) return;
+      setEmployees(rows);
+      setSaleEvent(event);
       setError('');
     } catch (cause) {
+      if (revision !== loadRevision.current) return;
+      setSaleEvent(null);
       setError(errorMessage(cause));
     } finally {
-      setLoading(false);
+      if (revision === loadRevision.current) setLoading(false);
     }
   }, [repository, employee.stationId]);
   useEffect(() => {
@@ -68,6 +85,20 @@ function CheckInStationScreen() {
     setPassword('');
     action.clear();
   };
+  const setSalesOpen = (open: boolean) => {
+    loadRevision.current += 1;
+    void action.run(
+      async () => {
+        try {
+          setSaleEvent(await repository.setCheckInSaleEvent(open));
+          setClosingSales(false);
+        } finally {
+          await reload();
+        }
+      },
+      open ? 'Ventas abiertas.' : 'Ventas cerradas.',
+    );
+  };
   return (
     <SafeAreaView style={{ flex: 1 }} edges={['top']}>
       <Screen
@@ -84,6 +115,51 @@ function CheckInStationScreen() {
             : 'El encargado necesita un puesto asignado.'}
         </Text>
         <Feedback error={error || action.error} success={action.success} />
+        <View style={styles.card}>
+          <Text style={styles.heading}>
+            {saleEvent
+              ? `Ventas ${saleEvent.open ? 'abiertas' : 'cerradas'}`
+              : 'Consultando estado de ventas'}
+          </Text>
+          {!saleEvent?.open && (
+            <Text style={styles.text}>
+              Abrí las ventas para habilitar las entradas y salidas del
+              personal.
+            </Text>
+          )}
+          {closingSales ? (
+            <>
+              <Text style={styles.text}>
+                Con ventas cerradas nadie puede registrar entrada ni salida.
+                Registrá las salidas antes de cerrar; si falta alguna, tendrás
+                que reabrir las ventas. Las jornadas abiertas se conservan.
+              </Text>
+              <Button
+                title="Confirmar cierre de ventas"
+                danger
+                busy={action.busy}
+                disabled={loading || !!error}
+                onPress={() => setSalesOpen(false)}
+              />
+              <Button
+                title="Cancelar cierre"
+                secondary
+                disabled={action.busy}
+                onPress={() => setClosingSales(false)}
+              />
+            </>
+          ) : (
+            <Button
+              title={saleEvent?.open ? 'Cerrar ventas' : 'Abrir ventas'}
+              busy={action.busy}
+              disabled={loading || !!error || !saleEvent || !!selected}
+              onPress={() => {
+                if (saleEvent?.open) setClosingSales(true);
+                else setSalesOpen(true);
+              }}
+            />
+          )}
+        </View>
         {selected ? (
           <View style={styles.card}>
             <Text style={styles.heading}>{fullName(selected)}</Text>
@@ -116,7 +192,13 @@ function CheckInStationScreen() {
                 selected.working ? 'Confirmar check-out' : 'Confirmar check-in'
               }
               busy={action.busy}
-              disabled={!email.trim() || !password}
+              disabled={
+                !email.trim() ||
+                !password ||
+                !saleEvent?.open ||
+                loading ||
+                !!error
+              }
               onPress={() => {
                 void action.run(
                   async () => {
@@ -159,7 +241,13 @@ function CheckInStationScreen() {
                 </Text>
                 <Button
                   title={`${row.working ? 'Check-out' : 'Check-in'} · ${fullName(row)}`}
-                  disabled={!!error || loading}
+                  disabled={
+                    !!error ||
+                    loading ||
+                    !saleEvent?.open ||
+                    closingSales ||
+                    action.busy
+                  }
                   onPress={() => {
                     reset();
                     setSelected(row);
@@ -170,7 +258,7 @@ function CheckInStationScreen() {
           </>
         )}
       </Screen>
-      <CheckInOptions disabled={action.busy} onOpen={reset} />
+      <CheckInOptions disabled={action.busy || closingSales} onOpen={reset} />
     </SafeAreaView>
   );
 }

@@ -18,6 +18,8 @@ export function attendanceRoutes() {
     standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: { code: 'RATE_LIMIT', message: 'Demasiados intentos. Probá más tarde.' } } });
   router.post('/kiosk/enter', validate(kiosk.empty), endpoint(req => kioskService.enter(req.actor)));
+  router.post('/kiosk/event', validate(kiosk.empty), endpoint(req => kioskService.event(req.actor)));
+  router.post('/kiosk/event/set', validate(kiosk.setEvent), endpoint(req => kioskService.setEvent(req.actor, req.input)));
   router.post('/kiosk/employees', validate(paged), endpoint(req => kioskService.employees(req.actor, req.input)));
   router.post('/kiosk/mark', sensitive, validate(kiosk.mark), endpoint(req => kioskService.mark(req.actor, req.input)));
   router.post('/kiosk/exit', sensitive, validate(kiosk.exit), endpoint(req => kioskService.exit(req.actor, req.input)));

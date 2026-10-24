@@ -12,3 +12,4 @@ export const mark = login.extend({ userId: id, action: z.enum(['check-in', 'chec
 export const exit = z.object({ password: z.string().min(1).max(128) }).strict();
 
 export const empty = z.object({}).strict();
+export const setEvent = z.object({ open: z.boolean() }).strict();

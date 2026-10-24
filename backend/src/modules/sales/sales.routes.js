@@ -19,7 +19,6 @@ export function salesRoutes() {
   const station = z.object({ stationId: id }).strict();
   router.post('/create', permit('sales.create'), validate(saleInput), endpoint(req => salesService.create(req.actor, req.input)));
   router.post('/event', permit('sales.create'), validate(station), endpoint(req => salesService.event(req.actor, req.input)));
-  router.post('/event/set', permit('sales.create'), validate(z.object({ stationId: id, open: z.boolean() }).strict()), endpoint(req => salesService.setEvent(req.actor, req.input)));
   router.post('/photos', permit('sales.create'), validate(salePhotosInput), endpoint(req => salesService.photos(req.actor, req.input)));
   router.post('/photos/access', permit('sales.create'), validate(z.object({ photoId: id }).strict()), endpoint(req => salesService.accessPhoto(req.actor, req.input.photoId)));
   router.post('/photos/assign', permit('sales.create'), validate(assign), endpoint(req => photoAssignments.assign(req.actor, req.input, 'sales.create')));
