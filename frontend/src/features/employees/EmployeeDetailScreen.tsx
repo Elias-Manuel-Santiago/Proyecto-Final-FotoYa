@@ -33,7 +33,6 @@ function EmployeeDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, employee, repository, refresh } = useWorkspace();
   const [editing, setEditing] = useState(false);
-  const [checkInPassword, setCheckInPassword] = useState('');
   const action = useAction();
   const target = data.employees.find(
     (row) => row.id === id && hasStationAccess(employee, row.stationId),
@@ -58,9 +57,7 @@ function EmployeeDetails() {
   }
 
   return (
-    <Screen
-      title={target.roleId === 'checkin' ? target.email : fullName(target)}
-    >
+    <Screen title={fullName(target)}>
       <View style={styles.card}>
         <Text style={styles.text}>Rol: {roleLabels[target.roleId]}</Text>
         {!['owner', 'client'].includes(target.roleId) && (
@@ -69,49 +66,21 @@ function EmployeeDetails() {
           </Text>
         )}
         <Text style={styles.text}>Email: {target.email}</Text>
-        {target.roleId !== 'checkin' && (
-          <Text style={styles.text}>DNI: {target.dni}</Text>
-        )}
+        <Text style={styles.text}>DNI: {target.dni}</Text>
         <Text style={styles.text}>
           Estado: {target.active ? 'Activo' : 'Inactivo'}
         </Text>
       </View>
-      {!['client', 'checkin'].includes(target.roleId) &&
-        can(employee, 'attendance.read') && (
-          <Link
-            href={{
-              pathname: '/attendance',
-              params: { employeeId: target.id },
-            }}
-            style={[styles.card, styles.text]}
-          >
-            Consultar horarios
-          </Link>
-        )}
-      {target.roleId === 'checkin' && manageable && (
-        <View style={styles.card}>
-          <Button
-            title={
-              checkInPassword
-                ? 'Ocultar contraseña'
-                : 'Ver contraseña de Check-in'
-            }
-            secondary
-            busy={action.busy}
-            onPress={() => {
-              if (checkInPassword) setCheckInPassword('');
-              else
-                void action.run(async () => {
-                  setCheckInPassword(
-                    (await repository.checkInPassword(target.id)).password,
-                  );
-                });
-            }}
-          />
-          {!!checkInPassword && (
-            <Text style={styles.text}>Contraseña: {checkInPassword}</Text>
-          )}
-        </View>
+      {target.roleId !== 'client' && can(employee, 'attendance.read') && (
+        <Link
+          href={{
+            pathname: '/attendance',
+            params: { employeeId: target.id },
+          }}
+          style={[styles.card, styles.text]}
+        >
+          Consultar horarios
+        </Link>
       )}
       <Feedback error={action.error} success={action.success} />
       {manageable && (
@@ -127,7 +96,6 @@ function EmployeeDetails() {
               existing={target}
               onSaved={() => {
                 setEditing(false);
-                setCheckInPassword('');
               }}
             />
           )}

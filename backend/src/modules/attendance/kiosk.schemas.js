@@ -11,4 +11,4 @@ import { login } from '../auth/auth.schemas.js';
 export const mark = login.extend({ userId: id, action: z.enum(['check-in', 'check-out']), attendanceId: id.nullable() }).strict();
 export const exit = z.object({ password: z.string().min(1).max(128) }).strict();
 
-export const assign = exit.extend({ stationId: id }).strict();
+export const empty = z.object({}).strict();

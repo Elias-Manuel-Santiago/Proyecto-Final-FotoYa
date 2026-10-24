@@ -42,11 +42,10 @@ test('validación rechaza fechas falsas, períodos invertidos e identificadores 
     { ...base, stationId: '1 OR 1=1' }, { ...base, limit: 101 }, { ...base, to: '2028-01-01' }])
     assert.equal(period.safeParse(input).success, false);
 });
-test('configuración permite omitir cifrado y valida la clave opcional de Check-in', () => {
+test('la configuración de ejecución ya no utiliza claves de cifrado de contraseñas', () => {
   const { DATA_ENCRYPTION_KEY, LOOKUP_HASH_KEY, ...config } = { ...env, CORS_ORIGINS: env.CORS_ORIGINS.join(',') };
   assert.equal(loadEnv(config).SESSION_HOURS, 8);
-  assert.equal(loadEnv({ ...config, DATA_ENCRYPTION_KEY: 'ab'.repeat(32) }).DATA_ENCRYPTION_KEY, 'ab'.repeat(32));
-  assert.throws(() => loadEnv({ ...config, DATA_ENCRYPTION_KEY: 'unused' }));
+  assert.equal(loadEnv({ ...config, DATA_ENCRYPTION_KEY: 'unused' }).DATA_ENCRYPTION_KEY, undefined);
 });
 
 test('Storage exige URL del proyecto y clave API de servidor, sin claves S3 ni publishable', () => {

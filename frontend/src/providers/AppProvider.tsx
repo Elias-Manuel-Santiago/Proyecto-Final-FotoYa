@@ -1,7 +1,7 @@
 /**
  * @file
  * Coordina sesión, perfil y datos sobre el repositorio HTTP. Restaura token, refresca al
- * reactivar y consulta jornada/kiosco cada quince segundos.
+ * reactivar y consulta disponibilidad de Check-in cada cinco segundos para el encargado.
  */
 import {
   createContext,
@@ -31,14 +31,13 @@ interface AppContextValue {
   refresh: () => Promise<void>;
   restoreSession: () => Promise<void>;
   logoutCheckIn: (password: string) => Promise<void>;
-  assignCheckIn: (stationId: string, password: string) => Promise<void>;
+  enterCheckIn: () => Promise<void>;
   repository: HttpFotoYaRepository;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-// Temporal: cambiar a true para volver a recuperar la cuenta guardada al iniciar.
-const RESTORE_PERSISTED_SESSION = false;
+const RESTORE_PERSISTED_SESSION = true;
 
 // Comparte repositorio, sesión y datos; coordina restauración, refresco y cambios de identidad.
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -146,30 +145,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!employee) return;
     let running = false;
-    // Consulta cambios de jornada o kiosco cada minuto sin superponer verificaciones.
-    const timer = setInterval(() => {
-      if (running || !signedIn.current) return;
-      running = true;
-      void repository
-        .profile()
-        .then(async (current) => {
-          if (
-            current.working !== employee.working ||
-            current.kioskMode !== employee.kioskMode
-          )
-            await refresh();
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          running = false;
-        });
-    }, 60000);
+    // El encargado detecta el otro dispositivo en cinco segundos; los demás consultan cada minuto.
+    const timer = setInterval(
+      () => {
+        if (running || !signedIn.current) return;
+        running = true;
+        void repository
+          .profile()
+          .then(async (current) => {
+            if (
+              current.working !== employee.working ||
+              current.kioskMode !== employee.kioskMode
+            )
+              await refresh();
+          })
+          .catch(() => undefined)
+          .finally(() => {
+            running = false;
+          });
+      },
+      employee.roleId === 'manager' && !employee.kioskMode ? 5000 : 60000,
+    );
     return () => clearInterval(timer);
   }, [employee, repository, refresh]);
 
-  const assignCheckIn = async (stationId: string, password: string) => {
-    await repository.assignCheckIn(stationId, password);
-    await refresh();
+  const enterCheckIn = async () => {
+    try {
+      await repository.enterCheckIn();
+    } finally {
+      await refresh();
+    }
   };
   const logoutCheckIn = async (password: string) => {
     await repository.logoutCheckIn(password);
@@ -246,7 +251,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setError('');
           await restoreSession();
         },
-        assignCheckIn,
+        enterCheckIn,
         logoutCheckIn,
         repository,
       }}

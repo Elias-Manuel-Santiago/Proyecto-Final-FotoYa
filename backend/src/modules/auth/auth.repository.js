@@ -13,19 +13,22 @@ export const authRepository = {
   // Resuelve la sesión con permisos, puesto, asistencia y kiosco vigentes.
   async actor(token) {
     const [rows] = await db.execute(`SELECT u.id_usuario AS id, u.id_puesto AS stationId, r.nombre AS role,
-      s.id_sesiones_usuario AS sessionId, (r.nombre = 'checkin') AS kioskMode,
+      s.id_sesiones_usuario AS sessionId, s.check_in_mode AS kioskMode,
+      EXISTS(SELECT 1 FROM sesiones_usuario k WHERE k.id_usuario = u.id_usuario AND k.check_in_mode = TRUE
+        AND k.revoked_at IS NULL AND k.expires_at > UTC_TIMESTAMP(6)) AS checkInActive,
       EXISTS(SELECT 1 FROM horarios h JOIN dias d ON d.id_dias = h.id_dias
         WHERE h.id_usuario = u.id_usuario AND h.check_out IS NULL AND d.id_puesto = u.id_puesto) AS working
       FROM sesiones_usuario s
       JOIN usuarios u ON u.id_usuario = s.id_usuario JOIN rol r ON r.id_rol = u.id_rol
-      WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6) AND u.disponible = 1 AND u.email_verified = 1`, [token]);
+      WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6) AND u.disponible = 1 AND u.email_verified = 1
+        AND r.nombre <> 'checkin' AND (s.check_in_mode = FALSE OR r.nombre = 'encargado')`, [token]);
     if (!rows[0]) return null;
     // Los permisos se consultan por el rol persistido para reflejar cambios entre solicitudes.
     const [permissions] = await db.execute(`SELECT p.tipo_de_permiso AS name FROM permisos p
       JOIN permisos_rol pr ON pr.id_permiso = p.id_permisos JOIN usuarios u ON u.id_rol = pr.id_rol
       WHERE u.id_usuario = ?`, [rows[0].id]);
     await db.execute('UPDATE sesiones_usuario SET last_seen_at = UTC_TIMESTAMP(6) WHERE id_sesiones_usuario = ?', [rows[0].sessionId]);
-    return { ...rows[0], kioskMode: Boolean(Number(rows[0].kioskMode)), working: Boolean(Number(rows[0].working)), permissions: permissions.map(p => p.name) };
+    return { ...rows[0], kioskMode: Boolean(Number(rows[0].kioskMode)), checkInActive: Boolean(Number(rows[0].checkInActive)), working: Boolean(Number(rows[0].working)), permissions: permissions.map(p => p.name) };
   },
   // Pagina las sesiones del propio actor con sus fechas y estado de revocación.
   async sessions(actor, { limit, offset }) {

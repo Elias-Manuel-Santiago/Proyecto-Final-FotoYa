@@ -56,7 +56,6 @@ const spanishRoles = {
   photographer: 'camarografo',
   seller: 'vendedor',
   client: 'cliente',
-  checkin: 'checkin',
 };
 const actor = (role: string, permissions = backendPermissions[role]) => ({
   id: '7',
@@ -219,7 +218,7 @@ function fixture(
   return { api, repo, requests };
 }
 
-test('la matriz de fallback coincide con los siete roles del backend', () => {
+test('la matriz de fallback coincide con los seis roles del backend', () => {
   for (const [role, spanish] of Object.entries(spanishRoles)) {
     assert.deepEqual(
       [...rolePermissions[role as keyof typeof rolePermissions]].sort(),
@@ -538,7 +537,7 @@ test('fechas MySQL se interpretan como UTC y los períodos respetan 367 días', 
 });
 
 test('check-in conserva la sesión y envía credenciales del empleado y estado esperado', async () => {
-  const { repo, requests } = fixture('checkin', {
+  const { repo, requests } = fixture('encargado', {
     'attendance/kiosk/employees': [
       {
         id: 8,
@@ -549,7 +548,8 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
       },
     ],
   });
-  await repo.login('checkin@example.com', 'clave');
+  await repo.login('encargado@example.com', 'clave');
+  await repo.enterCheckIn();
   const [employee] = await repo.checkInEmployees();
   assert.equal(employee.id, '8');
   await repo.markAttendance(
@@ -562,15 +562,14 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
     'empleado@example.com',
     'clave-empleado',
   );
-  await repo.assignCheckIn('2', 'clave-checkin');
-  await repo.logoutCheckIn('clave-checkin');
+  await repo.logoutCheckIn('clave-encargado');
   assert.deepEqual(
-    requests.find((row) => row.path === 'attendance/kiosk/assign')?.body,
-    { stationId: '2', password: 'clave-checkin' },
+    requests.find((row) => row.path === 'attendance/kiosk/enter')?.body,
+    {},
   );
   assert.deepEqual(
     requests.find((row) => row.path === 'attendance/kiosk/exit')?.body,
-    { password: 'clave-checkin' },
+    { password: 'clave-encargado' },
   );
   const marks = requests.filter((row) => row.path === 'attendance/kiosk/mark');
   assert.deepEqual(marks[0].body, {
@@ -593,12 +592,12 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
 });
 
 test('sin check-in o en modo check-in el snapshot solo consulta el perfil', async () => {
-  for (const role of ['camarografo', 'vendedor', 'secretario', 'checkin']) {
+  for (const role of ['camarografo', 'vendedor', 'secretario', 'encargado']) {
     const { repo, requests } = fixture(role, {
       'auth/me': {
         ...actor(role),
         working: false,
-        kioskMode: role === 'checkin',
+        kioskMode: role === 'encargado',
       },
     });
     const data = await repo.snapshot();
@@ -734,26 +733,14 @@ test('una imagen válida no se rechaza solo por su extensión o MIME declarado',
   assert.equal(requests.length, 1);
 });
 
-test('alta Check-in solo envía correo y contraseña sin consultar catálogos', async () => {
-  const { repo, requests } = fixture();
-  await repo.saveEmployee({
-    firstName: '',
-    lastName: '',
-    dni: '',
-    stationId: '',
-    roleId: 'checkin',
-    email: 'kiosk@example.com',
-    password: 'Test-password-1234',
+test('el perfil del encargado refleja Check-in en otro dispositivo sin bloquear su trabajo', async () => {
+  const { repo } = fixture('encargado', {
+    'auth/me': { ...actor('encargado'), checkInActive: true },
   });
-  assert.deepEqual(
-    requests.map((row) => row.path),
-    ['users/check-in/create'],
-  );
-  assert.deepEqual(requests[0].body, {
-    email: 'kiosk@example.com',
-    password: 'Test-password-1234',
-  });
-  userSchemas.createCheckIn.parse(requests[0].body);
+  const profile = await repo.profile();
+  assert.equal(profile.checkInActive, true);
+  assert.equal(profile.kioskMode, false);
+  assert.equal(can(profile, 'employees.manage'), true);
 });
 
 test('contraseña errónea al cerrar Check-in conserva la sesión', async () => {

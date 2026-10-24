@@ -8,7 +8,6 @@ import { ApiError } from '../../shared/errors.js';
 import { transaction } from '../../shared/transaction.js';
 import { assertAssignable } from '../../security/access.js';
 import { hashPassword, normalizeEmail } from '../../security/crypto.js';
-import { encryptCheckInPassword, decryptCheckInPassword } from '../../security/checkin-secret.js';
 
 // Adapta la fila a datos públicos sin exponer credenciales.
 const publicUser = row => ({ id: row.id, firstName: row.nombre,
@@ -31,7 +30,7 @@ const managed = (actor, callback) => transaction(async connection => {
   const current = await userRepository.find(actor.id, connection);
   if (!current?.active) throw new ApiError(403, 'La cuenta está deshabilitada.');
   const [[session]] = await connection.execute(`SELECT id_sesiones_usuario FROM sesiones_usuario
-    WHERE id_sesiones_usuario = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP(6)`, [actor.sessionId]);
+    WHERE id_sesiones_usuario = ? AND check_in_mode = FALSE AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP(6)`, [actor.sessionId]);
   const [[permission]] = await connection.execute(`SELECT pr.id_permiso FROM permisos_rol pr
     JOIN permisos p ON p.id_permisos = pr.id_permiso WHERE pr.id_rol = ? AND p.tipo_de_permiso = 'employees.manage'`, [current.roleId]);
   if (!session || !permission || current.role !== actor.role || current.stationId !== actor.stationId)
@@ -44,7 +43,7 @@ const assignment = async (actor, input, connection) => {
   if (!role) throw new ApiError(422, 'El rol no existe.');
   const previous = input.userId ? await userRepository.find(input.userId, connection) : null;
   if (role === 'checkin' || previous?.role === 'checkin')
-    throw new ApiError(422, 'Usá el formulario de cuenta Check-in.');
+    throw new ApiError(422, 'Check-in se activa desde una sesión del encargado.');
   if (['encargado', 'camarografo', 'vendedor'].includes(role) && !input.stationId) throw new ApiError(422, 'El rol requiere un puesto.');
   assertAssignable(actor, role, input.stationId);
   if (input.stationId) {
@@ -55,49 +54,9 @@ const assignment = async (actor, input, connection) => {
   }
 };
 export const userService = {
-  async createCheckIn(actor, input) {
-    const password = await hashPassword(input.password);
-    return managed(actor, async connection => {
-      if (!['dueno', 'encargado'].includes(actor.role) || (actor.role === 'encargado' && !actor.stationId))
-        throw new ApiError(403, 'No podés crear cuentas Check-in.');
-      const [[role]] = await connection.execute("SELECT id_rol FROM rol WHERE nombre = 'checkin'");
-      if (!role) throw new ApiError(503, 'Actualizá el esquema para habilitar Check-in.');
-      const [result] = await connection.execute(`INSERT INTO usuarios
-        (nombre, apellido, email, dni, password, id_rol, id_puesto, email_verified)
-        VALUES ('Check-in', '', ?, NULL, ?, ?, ?, TRUE)`,
-        [normalizeEmail(input.email), password, role.id_rol, actor.role === 'encargado' ? actor.stationId : null]);
-      const id = String(result.insertId);
-      await connection.execute('UPDATE usuarios SET checkin_password = ? WHERE id_usuario = ?',
-        [encryptCheckInPassword(input.password, id), id]);
-      return publicUser(await userRepository.find(id, connection));
-    });
-  },
-  async updateCheckIn(actor, input) {
-    const password = input.password ? await hashPassword(input.password) : null;
-    return managed(actor, async connection => {
-      const row = await target(actor, input.userId, connection);
-      if (!['dueno', 'encargado'].includes(actor.role) || row.role !== 'checkin')
-        throw new ApiError(404, 'La cuenta Check-in no existe.');
-      await connection.execute('UPDATE usuarios SET email = ? WHERE id_usuario = ?', [normalizeEmail(input.email), row.id]);
-      if (password) await connection.execute('UPDATE usuarios SET password = ?, checkin_password = ? WHERE id_usuario = ?',
-        [password, encryptCheckInPassword(input.password, String(row.id)), row.id]);
-      await connection.execute('UPDATE sesiones_usuario SET revoked_at = UTC_TIMESTAMP(6) WHERE id_usuario = ? AND revoked_at IS NULL', [row.id]);
-      return publicUser(await userRepository.find(row.id, connection));
-    });
-  },
-  async checkInPassword(actor, userId) {
-    return managed(actor, async connection => {
-      const row = await target(actor, userId, connection);
-      if (!['dueno', 'encargado'].includes(actor.role) || row.role !== 'checkin')
-        throw new ApiError(404, 'La cuenta Check-in no existe.');
-      const [[secret]] = await connection.execute('SELECT checkin_password FROM usuarios WHERE id_usuario = ?', [row.id]);
-      if (!secret.checkin_password) throw new ApiError(409, 'Asigná una nueva contraseña a esta cuenta.');
-      return { password: decryptCheckInPassword(secret.checkin_password, String(row.id)) };
-    });
-  },
   // Combina datos personales con permisos, jornada y kiosco de la sesión actual.
   async profile(actor) { return { ...publicUser(await userRepository.find(actor.id)), permissions: actor.permissions,
-    working: actor.working, kioskMode: actor.kioskMode }; },
+    working: actor.working, kioskMode: actor.kioskMode, checkInActive: actor.checkInActive }; },
   // Normaliza el filtro de correo y convierte las filas visibles al contrato público.
   async query(actor, input) {
     const rows = await userRepository.query(actor, { ...input,

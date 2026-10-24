@@ -13,11 +13,14 @@ import { reportRows, totalMetrics } from '../../domain/metrics';
 import { useWorkspace } from '../../providers/AppProvider';
 import { usePeriodData } from '../../hooks/usePeriodData';
 import { Feedback } from '../../components/ui/Feedback';
+import { ConfirmAction } from '../../components/ui/ConfirmAction';
+import { useAction } from '../../hooks/useAction';
 
 // Reúne indicadores y accesos operativos según permisos.
 export function HomeScreen() {
   const { colors, styles } = useTheme();
-  const { employee } = useWorkspace();
+  const { employee, enterCheckIn } = useWorkspace();
+  const checkInAction = useAction();
   const today = businessDate();
   const period = { from: today, to: today, stationId: '' };
   const { data, loading, refreshing, error, refreshError, reload } =
@@ -30,6 +33,15 @@ export function HomeScreen() {
       onRefresh={reload}
     >
       <Text style={styles.heading}>{displayDate(today)}</Text>
+      {employee.roleId === 'manager' && !employee.checkInActive && (
+        <ConfirmAction
+          title="Activar vista de check-in"
+          question="Este dispositivo quedará dedicado a Check-in. Para volver al sistema tendrás que cerrar sesión e ingresar otra vez. Podés usar otro dispositivo para trabajar."
+          busy={checkInAction.busy}
+          onConfirm={() => checkInAction.run(enterCheckIn)}
+        />
+      )}
+      <Feedback error={checkInAction.error} />
       <Feedback error={error || refreshError} />
       <Text style={styles.muted}>
         {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}

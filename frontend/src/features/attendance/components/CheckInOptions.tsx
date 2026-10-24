@@ -8,7 +8,6 @@ import { Button } from '../../../components/ui/Button';
 import { Field } from '../../../components/ui/Field';
 import { Feedback } from '../../../components/ui/Feedback';
 import { Icon } from '../../../components/ui/Icon';
-import { Select } from '../../../components/ui/Select';
 import { useTheme } from '../../../components/ui/theme';
 import { useAction } from '../../../hooks/useAction';
 import { useWorkspace } from '../../../providers/AppProvider';
@@ -21,12 +20,10 @@ export function CheckInOptions({
   onOpen: () => void;
 }) {
   const { styles, colors, mode, toggle } = useTheme();
-  const { repository, employee, assignCheckIn, logoutCheckIn } = useWorkspace();
+  const { logoutCheckIn } = useWorkspace();
   const insets = useSafeAreaInsets();
-  const [view, setView] = useState<'menu' | 'station' | 'logout' | null>(null);
+  const [view, setView] = useState<'menu' | 'logout' | null>(null);
   const [password, setPassword] = useState('');
-  const [stationId, setStationId] = useState(employee.stationId);
-  const [stations, setStations] = useState<{ id: string; name: string }[]>([]);
   const action = useAction();
   const close = () => {
     if (action.busy) return;
@@ -83,25 +80,11 @@ export function CheckInOptions({
           >
             <View style={styles.card}>
               <Text style={styles.heading}>
-                {view === 'station'
-                  ? 'Cambiar puesto'
-                  : view === 'logout'
-                    ? 'Cerrar sesión'
-                    : 'Opciones de Check-in'}
+                {view === 'logout' ? 'Cerrar sesión' : 'Opciones de Check-in'}
               </Text>
               <Feedback error={action.error} />
               {view === 'menu' ? (
                 <>
-                  <Button
-                    title="Cambiar puesto"
-                    secondary
-                    onPress={() => {
-                      setView('station');
-                      void action.run(async () => {
-                        setStations(await repository.checkInStations());
-                      });
-                    }}
-                  />
                   <Button
                     title="Cerrar sesión"
                     secondary
@@ -115,23 +98,8 @@ export function CheckInOptions({
                 </>
               ) : (
                 <>
-                  {view === 'station' && (
-                    <Select
-                      label="Puesto"
-                      value={stationId}
-                      onChange={setStationId}
-                      options={[
-                        { value: '', label: 'Seleccioná un puesto' },
-                        ...stations.map((row) => ({
-                          value: row.id,
-                          label: row.name,
-                        })),
-                      ]}
-                      disabled={action.busy}
-                    />
-                  )}
                   <Field
-                    label="Contraseña de Check-in"
+                    label="Contraseña del encargado"
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
@@ -141,19 +109,13 @@ export function CheckInOptions({
                     editable={!action.busy}
                   />
                   <Button
-                    title={
-                      view === 'station'
-                        ? 'Confirmar puesto'
-                        : 'Confirmar cierre de sesión'
-                    }
+                    title="Confirmar cierre de sesión"
                     busy={action.busy}
-                    disabled={!password || (view === 'station' && !stationId)}
+                    disabled={!password}
                     onPress={() => {
                       void action.run(async () => {
                         try {
-                          if (view === 'station')
-                            await assignCheckIn(stationId, password);
-                          else await logoutCheckIn(password);
+                          await logoutCheckIn(password);
                           setView(null);
                         } finally {
                           setPassword('');

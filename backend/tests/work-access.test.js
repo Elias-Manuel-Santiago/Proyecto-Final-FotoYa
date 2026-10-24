@@ -24,14 +24,16 @@ test('empleados fuera de jornada solo conservan acceso a su cuenta', () => {
   }
   for (const role of ['dueno', 'encargado', 'cliente']) assert.equal(check(role, '/photos/query'), true);
 });
-test('la cuenta Check-in impide navegar, cerrar sesión y revocar la sesión sin contraseña', () => {
+test('la sesión Check-in del encargado impide volver al sistema o cerrar sin contraseña', () => {
   const kiosk = { kioskMode: true };
   for (const path of ['/logout', '/sessions/revoke', '/password/change'])
-    assert.throws(() => check('checkin', path, kiosk, true), { code: 'KIOSK_LOCKED' });
-  for (const path of ['/users/query', '/sales/create', '/reports/query'])
-    assert.throws(() => check('checkin', path, kiosk), { code: 'KIOSK_LOCKED' });
-  assert.equal(check('checkin', '/me', kiosk, true), true);
-  assert.equal(check('checkin', '/attendance/kiosk/exit', kiosk), true);
+    assert.throws(() => check('encargado', path, kiosk, true), { code: 'KIOSK_LOCKED' });
+  for (const path of ['/users/query', '/sales/create', '/reports/query', '/attendance/kiosk/enter', '/attendance/kiosk/assign', '/attendance/kiosk/stations'])
+    assert.throws(() => check('encargado', path, kiosk), { code: 'KIOSK_LOCKED' });
+  assert.equal(check('encargado', '/me', kiosk, true), true);
+  for (const path of ['/attendance/kiosk/exit', '/attendance/kiosk/employees', '/attendance/kiosk/mark'])
+    assert.equal(check('encargado', path, kiosk), true);
+  assert.equal(check('encargado', '/users/query', { kioskMode: false }), true);
 });
 test('marcaciones exigen credenciales, empleado y estado esperado; no aceptan hora o puesto del cliente', () => {
   const input = { userId: '1', email: 'empleado@example.com', password: 'clave', action: 'check-in', attendanceId: null };

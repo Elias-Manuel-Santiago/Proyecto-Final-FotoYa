@@ -1,6 +1,6 @@
 /**
  * @file
- * Configura la cuenta dedicada de Check-in y registra entradas/salidas.
+ * Bloquea una sesión del encargado en Check-in y registra entradas/salidas.
  * Revalida credenciales, puesto y horario esperado bajo bloqueo.
  */
 import { db } from '../../config/database.js';
@@ -10,52 +10,52 @@ import { hashPassword, verifyPassword, normalizeEmail, newToken } from '../../se
 import { businessDate } from '../sales/sales.rules.js';
 
 const dummyHash = await hashPassword(newToken());
-// Exige la cuenta dedicada para operar el kiosco.
+// El modo pertenece a la sesión, nunca a la cuenta completa.
 export function requireCheckIn(actor) {
-  if (actor.role !== 'checkin')
-    throw new ApiError(403, 'Esta vista requiere una cuenta Check-in.', 'FORBIDDEN');
+  if (actor.role !== 'encargado' || !actor.kioskMode)
+    throw new ApiError(403, 'Activá Check-in desde la cuenta del encargado.', 'FORBIDDEN');
 }
 // Exige un puesto antes de consultar o registrar asistencia.
 const requireKiosk = actor => {
   requireCheckIn(actor);
-  if (!actor.stationId) throw new ApiError(409, 'Seleccioná el puesto desde Opciones.', 'STATION_REQUIRED');
+  if (!actor.stationId) throw new ApiError(409, 'El encargado necesita un puesto asignado.', 'STATION_REQUIRED');
 };
 // Mismo orden de bloqueo que la gestión de usuarios para serializar bajas y reasignaciones.
 // Bloquea y revalida cuenta y sesión antes de modificar kiosco o asistencia.
 const managed = (actor, callback) => transaction(async connection => {
-  requireCheckIn(actor);
+  if (actor.role !== 'encargado') throw new ApiError(403, 'Solo el encargado puede activar Check-in.', 'FORBIDDEN');
   await connection.query('SELECT id_rol FROM rol ORDER BY id_rol FOR UPDATE');
   const [[manager]] = await connection.execute(`SELECT u.password, u.disponible, u.id_puesto AS stationId, r.nombre AS role
     FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol WHERE u.id_usuario = ? FOR UPDATE`, [actor.id]);
   const [[session]] = await connection.execute(`SELECT check_in_mode AS kioskMode FROM sesiones_usuario
     WHERE id_sesiones_usuario = ? AND id_usuario = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP(6) FOR UPDATE`, [actor.sessionId, actor.id]);
-  if (!manager?.disponible || manager.role !== 'checkin' || manager.stationId !== actor.stationId || !session)
+  if (!manager?.disponible || manager.role !== 'encargado' || manager.stationId !== actor.stationId || !session ||
+      Boolean(Number(session.kioskMode)) !== actor.kioskMode)
     throw new ApiError(403, 'La autorización cambió. Volvé a iniciar sesión.', 'FORBIDDEN');
-  return callback(connection, manager);
+  return callback(connection, manager, session);
 });
 
 export const kioskService = {
-  // Reasignar y cerrar sesión exigen la contraseña de la cuenta, incluso por API directa.
-  async stations(actor, input) {
-    requireCheckIn(actor);
-    const [rows] = await db.execute(`SELECT id_puesto AS id, nombre AS name FROM puesto
-      WHERE disponible = TRUE ORDER BY nombre, id_puesto LIMIT ? OFFSET ?`, [String(input.limit), String(input.offset)]);
-    return rows;
-  },
-  async assign(actor, input) {
-    return managed(actor, async (connection, account) => {
-      if (!await verifyPassword(input.password, account.password))
-        throw new ApiError(401, 'La contraseña de Check-in es incorrecta.', 'INVALID_CREDENTIALS');
-      const [[station]] = await connection.execute('SELECT disponible FROM puesto WHERE id_puesto = ? LOCK IN SHARE MODE', [input.stationId]);
-      if (!station?.disponible) throw new ApiError(422, 'Seleccioná un puesto activo.');
-      await connection.execute('UPDATE usuarios SET id_puesto = ? WHERE id_usuario = ?', [input.stationId, actor.id]);
-      return { stationId: input.stationId };
+  // El bloqueo del usuario serializa dos dispositivos que intentan activarlo a la vez.
+  async enter(actor) {
+    return managed(actor, async (connection) => {
+      if (actor.kioskMode) throw new ApiError(409, 'Esta sesión ya está en Check-in.', 'CHECK_IN_ACTIVE');
+      if (!actor.stationId) throw new ApiError(409, 'El encargado necesita un puesto asignado.', 'STATION_REQUIRED');
+      const [[station]] = await connection.execute('SELECT disponible FROM puesto WHERE id_puesto = ? LOCK IN SHARE MODE', [actor.stationId]);
+      if (!station?.disponible) throw new ApiError(409, 'El puesto está inactivo.', 'STATION_REQUIRED');
+      const [[existing]] = await connection.execute(`SELECT id_sesiones_usuario FROM sesiones_usuario
+        WHERE id_usuario = ? AND check_in_mode = TRUE AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP(6)
+        LIMIT 1 FOR UPDATE`, [actor.id]);
+      if (existing) throw new ApiError(409, 'Check-in ya está abierto en otro dispositivo.', 'CHECK_IN_ACTIVE');
+      await connection.execute('UPDATE sesiones_usuario SET check_in_mode = TRUE WHERE id_sesiones_usuario = ?', [actor.sessionId]);
+      return { kioskMode: true };
     });
   },
   async exit(actor, input) {
+    requireKiosk(actor);
     return managed(actor, async (connection, account) => {
       if (!await verifyPassword(input.password, account.password))
-        throw new ApiError(401, 'La contraseña de Check-in es incorrecta.', 'INVALID_CREDENTIALS');
+        throw new ApiError(401, 'La contraseña del encargado es incorrecta.', 'INVALID_CREDENTIALS');
       await connection.execute('UPDATE sesiones_usuario SET revoked_at = UTC_TIMESTAMP(6) WHERE id_sesiones_usuario = ?', [actor.sessionId]);
       return { revoked: true };
     });

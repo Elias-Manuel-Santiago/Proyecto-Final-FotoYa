@@ -18,7 +18,7 @@ export const userRepository = {
   },
   // Aplica filtros y alcance a la lista paginada de usuarios.
   async query(actor, input) {
-    const station = stationScope(actor, input.stationId), where = [], params = [];
+    const station = stationScope(actor, input.stationId), where = ["r.nombre <> 'checkin'"], params = [];
     if (station) { where.push('u.id_puesto = ?'); params.push(station); }
     if (actor.role === 'secretario') where.push("r.nombre <> 'cliente'");
     for (const [name, column] of [['email', 'email'], ['dni', 'dni'], ['active', 'disponible']]) {
@@ -35,6 +35,6 @@ export const userRepository = {
   },
   // Evalúa visibilidad según rol global o coincidencia de puesto.
   canRead(actor, row) {
-    return row && (globalScope(actor) ? actor.role !== 'secretario' || row.role !== 'cliente' : actor.stationId && actor.stationId === row.stationId);
+    return row && row.role !== 'checkin' && (globalScope(actor) ? actor.role !== 'secretario' || row.role !== 'cliente' : actor.stationId && actor.stationId === row.stationId);
   },
 };

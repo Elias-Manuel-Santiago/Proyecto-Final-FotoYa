@@ -37,7 +37,6 @@ const roles: Record<string, RoleId> = {
   camarografo: 'photographer',
   vendedor: 'seller',
   cliente: 'client',
-  checkin: 'checkin',
 };
 interface UserRow extends Omit<Employee, 'roleId' | 'stationId'> {
   role: string;
@@ -226,15 +225,8 @@ export class HttpFotoYaRepository {
     return actor;
   }
 
-  async checkInStations() {
-    const rows = await this.api.all<{ id: string; name: string }>(
-      'attendance/kiosk/stations',
-    );
-    return rows.map((row) => ({ ...row, id: String(row.id) }));
-  }
-
-  async assignCheckIn(stationId: string, password: string) {
-    await this.api.post('attendance/kiosk/assign', { stationId, password });
+  async enterCheckIn() {
+    await this.api.post('attendance/kiosk/enter');
     this.profileRevision += 1;
   }
 
@@ -242,12 +234,6 @@ export class HttpFotoYaRepository {
     // Una contraseña incorrecta conserva la sesión local y remota.
     await this.api.post('attendance/kiosk/exit', { password });
     await this.clearSession();
-  }
-
-  checkInPassword(userId: string) {
-    return this.api.post<{ password: string }>('users/check-in/password', {
-      userId,
-    });
   }
 
   // Recupera empleados del kiosco y normaliza el estado de sus turnos.
@@ -287,7 +273,7 @@ export class HttpFotoYaRepository {
     if (invalid) throw new Error(invalid);
     const actor = await this.profile();
     // Sin jornada o en kiosco basta el perfil: no se consultan recursos de trabajo bloqueados.
-    if (actor.roleId === 'checkin' || actor.kioskMode || !canWork(actor))
+    if (actor.kioskMode || !canWork(actor))
       return {
         employees: [actor],
         stations: [],
@@ -468,21 +454,6 @@ export class HttpFotoYaRepository {
 
   // Resuelve el ID real del rol y elige alta o edición según exista un usuario previo.
   async saveEmployee(input: EmployeeInput) {
-    if (input.roleId === 'checkin') {
-      await this.api.post(
-        input.id ? 'users/check-in/update' : 'users/check-in/create',
-        {
-          email: input.email,
-          ...(input.id
-            ? {
-                userId: input.id,
-                ...(input.password ? { password: input.password } : {}),
-              }
-            : { password: input.password ?? '' }),
-        },
-      );
-      return;
-    }
     const catalog = await this.api.post<
       { id: number | string; name: string }[]
     >('catalog/query', { resource: 'roles' });

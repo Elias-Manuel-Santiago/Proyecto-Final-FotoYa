@@ -45,7 +45,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         {children}
-        {employee?.roleId !== 'checkin' && (
+        {!employee?.kioskMode && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Activar tema ${mode === 'light' ? 'oscuro' : 'claro'}`}

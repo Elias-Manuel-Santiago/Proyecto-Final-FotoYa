@@ -17,8 +17,7 @@ export function attendanceRoutes() {
   const sensitive = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, skipSuccessfulRequests: true,
     standardHeaders: 'draft-8', legacyHeaders: false,
     message: { error: { code: 'RATE_LIMIT', message: 'Demasiados intentos. Probá más tarde.' } } });
-  router.post('/kiosk/stations', validate(paged), endpoint(req => kioskService.stations(req.actor, req.input)));
-  router.post('/kiosk/assign', sensitive, validate(kiosk.assign), endpoint(req => kioskService.assign(req.actor, req.input)));
+  router.post('/kiosk/enter', validate(kiosk.empty), endpoint(req => kioskService.enter(req.actor)));
   router.post('/kiosk/employees', validate(paged), endpoint(req => kioskService.employees(req.actor, req.input)));
   router.post('/kiosk/mark', sensitive, validate(kiosk.mark), endpoint(req => kioskService.mark(req.actor, req.input)));
   router.post('/kiosk/exit', sensitive, validate(kiosk.exit), endpoint(req => kioskService.exit(req.actor, req.input)));

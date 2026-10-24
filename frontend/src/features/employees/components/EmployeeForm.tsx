@@ -59,46 +59,27 @@ export function EmployeeForm({
         label="Rol"
         value={input.roleId}
         options={(
-          data.roles
-            ?.map((row) => row.roleId)
-            .filter(
-              (role) =>
-                !existing ||
-                role !== 'checkin' ||
-                existing.roleId === 'checkin',
-            ) ??
-          assignableRoles(employee).filter(
-            (role) =>
-              !existing || role !== 'checkin' || existing.roleId === 'checkin',
-          )
+          data.roles?.map((row) => row.roleId) ?? assignableRoles(employee)
         ).map((value) => ({
           value,
           label: roleLabels[value],
         }))}
         onChange={(value) => update({ roleId: value as RoleId })}
-        disabled={
-          action.busy ||
-          existing?.id === employee.id ||
-          existing?.roleId === 'checkin'
-        }
+        disabled={action.busy || existing?.id === employee.id}
       />
 
-      {input.roleId !== 'checkin' && (
-        <>
-          <Field
-            label="Nombre"
-            value={input.firstName}
-            onChangeText={(firstName) => update({ firstName })}
-            editable={!action.busy}
-          />
-          <Field
-            label="Apellido"
-            value={input.lastName}
-            onChangeText={(lastName) => update({ lastName })}
-            editable={!action.busy}
-          />
-        </>
-      )}
+      <Field
+        label="Nombre"
+        value={input.firstName}
+        onChangeText={(firstName) => update({ firstName })}
+        editable={!action.busy}
+      />
+      <Field
+        label="Apellido"
+        value={input.lastName}
+        onChangeText={(lastName) => update({ lastName })}
+        editable={!action.busy}
+      />
       <Field
         label="Email"
         value={input.email}
@@ -107,23 +88,17 @@ export function EmployeeForm({
         autoCapitalize="none"
         editable={!action.busy}
       />
-      {input.roleId !== 'checkin' && (
+      <Field
+        label="DNI"
+        value={input.dni}
+        onChangeText={(dni) => update({ dni })}
+        keyboardType="number-pad"
+        maxLength={20}
+        editable={!action.busy}
+      />
+      {!existing && (
         <Field
-          label="DNI"
-          value={input.dni}
-          onChangeText={(dni) => update({ dni })}
-          keyboardType="number-pad"
-          maxLength={20}
-          editable={!action.busy}
-        />
-      )}
-      {(!existing || input.roleId === 'checkin') && (
-        <Field
-          label={
-            existing
-              ? 'Nueva contraseña (opcional, 12 a 128 caracteres)'
-              : 'Contraseña inicial (12 a 128 caracteres)'
-          }
+          label="Contraseña inicial (12 a 128 caracteres)"
           value={input.password ?? ''}
           onChangeText={(password) => update({ password })}
           secureTextEntry
@@ -132,7 +107,7 @@ export function EmployeeForm({
           maxLength={128}
         />
       )}
-      {input.roleId !== 'checkin' && employee.roleId === 'manager' && (
+      {employee.roleId === 'manager' && (
         <Text style={styles.muted}>
           Puesto asignado:{' '}
           {employee.stationName ||
@@ -140,7 +115,7 @@ export function EmployeeForm({
             'Tu puesto'}
         </Text>
       )}
-      {input.roleId !== 'checkin' && employee.roleId !== 'manager' && (
+      {employee.roleId !== 'manager' && (
         <Select
           label="Puesto asignado"
           value={input.stationId}

@@ -12,9 +12,9 @@ export const requiresAttendance = role => ['secretario', 'camarografo', 'vendedo
 // Restringe las rutas según kiosco y jornada después de autenticar al actor.
 export function workAccess(req, res, next) {
   const auth = req.baseUrl === '/api/auth';
-  if (req.actor.role === 'checkin') {
-    if ((auth && req.path === '/me') || (!auth && req.path.startsWith('/attendance/kiosk/'))) return next();
-    throw new ApiError(403, 'La cuenta Check-in solo permite registrar asistencia y configurar su puesto.', 'KIOSK_LOCKED');
+  if (req.actor.kioskMode) {
+    if ((auth && req.path === '/me') || (!auth && ['/attendance/kiosk/employees', '/attendance/kiosk/mark', '/attendance/kiosk/exit'].includes(req.path))) return next();
+    throw new ApiError(403, 'Esta sesión solo permite registrar asistencia o cerrar sesión con la contraseña del encargado.', 'KIOSK_LOCKED');
   }
   if (!auth && requiresAttendance(req.actor.role) && !req.actor.working)
     throw new ApiError(403, 'Registrá tu check-in en el puesto para poder trabajar.', 'CHECK_IN_REQUIRED');

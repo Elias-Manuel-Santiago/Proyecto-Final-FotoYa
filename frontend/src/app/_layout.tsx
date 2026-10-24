@@ -48,12 +48,12 @@ function AppNavigator() {
         contentStyle: { backgroundColor: colors.background },
       }}
     >
-      <Stack.Protected guard={employee?.roleId !== 'checkin'}>
+      <Stack.Protected guard={!employee?.kioskMode}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(workspace)" />
         <Stack.Screen name="+not-found" />
       </Stack.Protected>
-      <Stack.Protected guard={employee?.roleId === 'checkin'}>
+      <Stack.Protected guard={employee?.kioskMode === true}>
         <Stack.Screen name="check-in" />
       </Stack.Protected>
     </Stack>

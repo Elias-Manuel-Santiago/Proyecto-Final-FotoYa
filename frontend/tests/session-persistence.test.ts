@@ -42,18 +42,18 @@ const actor = (role: string, kioskMode = false) => ({
   permissions: [],
 });
 
-for (const role of [
-  'dueno',
-  'encargado',
-  'secretario',
-  'camarografo',
-  'vendedor',
-  'cliente',
-  'checkin',
-]) {
-  test(`recupera la sesión de ${role} y consulta su estado vigente al servidor`, async () => {
+for (const [role, kioskMode] of [
+  ['dueno', false],
+  ['encargado', false],
+  ['secretario', false],
+  ['camarografo', false],
+  ['vendedor', false],
+  ['cliente', false],
+  ['encargado', true],
+] as const) {
+  test(`recupera la sesión de ${role} (Check-in: ${kioskMode}) y consulta su estado vigente al servidor`, async () => {
     const saved = storage();
-    const profile = actor(role, role === 'checkin');
+    const profile = actor(role, kioskMode);
     mock.method(
       globalThis,
       'fetch',
@@ -82,6 +82,56 @@ for (const role of [
     assert.deepEqual(received, data.employees[0]);
   });
 }
+
+test('dos dispositivos restauran modos independientes y cerrar Check-in conserva el token normal', async () => {
+  const kioskSaved = storage(),
+    normalSaved = storage();
+  const normalToken = 'b'.repeat(43);
+  let kioskMode = false;
+  mock.method(globalThis, 'fetch', async (input: string, init: RequestInit) => {
+    const bearer = (init.headers as Record<string, string>).Authorization;
+    if (input.endsWith('/attendance/kiosk/enter')) {
+      assert.equal(bearer, `Bearer ${token}`);
+      kioskMode = true;
+      return Response.json({ data: { kioskMode: true } });
+    }
+    if (input.endsWith('/attendance/kiosk/exit')) {
+      assert.equal(bearer, `Bearer ${token}`);
+      kioskMode = false;
+      return Response.json({ data: { revoked: true } });
+    }
+    assert.equal(input, `${url}/auth/me`);
+    return Response.json({
+      data: {
+        ...actor('encargado', bearer === `Bearer ${token}` && kioskMode),
+        checkInActive: kioskMode,
+      },
+    });
+  });
+  const kiosk = new HttpFotoYaRepository(new ApiClient(url), kioskSaved);
+  const normal = new HttpFotoYaRepository(new ApiClient(url), normalSaved);
+  await kiosk.acceptSession(token);
+  await kiosk.enterCheckIn();
+  await normal.acceptSession(normalToken);
+  const restartedKiosk = new HttpFotoYaRepository(
+    new ApiClient(url),
+    kioskSaved,
+  );
+  const restartedNormal = new HttpFotoYaRepository(
+    new ApiClient(url),
+    normalSaved,
+  );
+  assert.equal(await restartedKiosk.restoreSession(), true);
+  assert.equal(await restartedNormal.restoreSession(), true);
+  assert.equal((await restartedKiosk.snapshot()).employees[0].kioskMode, true);
+  const profile = await restartedNormal.profile();
+  assert.equal(profile.kioskMode, false);
+  assert.equal(profile.checkInActive, true);
+  await restartedKiosk.logoutCheckIn('contraseña-del-encargado');
+  assert.equal(await kioskSaved.read(), null);
+  assert.equal(await normalSaved.read(), normalToken);
+  assert.equal((await restartedNormal.profile()).checkInActive, false);
+});
 
 test('persiste también las sesiones aceptadas desde registro o login social', async () => {
   const saved = storage();

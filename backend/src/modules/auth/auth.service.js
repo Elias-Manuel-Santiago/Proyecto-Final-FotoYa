@@ -20,10 +20,17 @@ export const authService = {
     if (!user.email_verified) throw new ApiError(403, 'Confirmá tu correo para ingresar.', 'EMAIL_UNVERIFIED');
     const token = newToken();
     await transaction(async connection => {
+      // Mantiene el orden de bloqueo usado por activación de kiosco y edición de usuarios.
+      await connection.query('SELECT id_rol FROM rol ORDER BY id_rol FOR UPDATE');
       // Se reconsulta bajo bloqueo para no emitir sesión con una contraseña o disponibilidad anterior.
-      const [[current]] = await connection.execute('SELECT password, disponible, email_verified FROM usuarios WHERE id_usuario = ? FOR UPDATE', [user.id_usuario]);
+      const [[current]] = await connection.execute(`SELECT u.password, u.disponible, u.email_verified, r.nombre AS role
+        FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol WHERE u.id_usuario = ? FOR UPDATE`, [user.id_usuario]);
       if (!current?.disponible || current.password !== user.password) throw new ApiError(401, 'Correo o contraseña incorrectos.', 'INVALID_CREDENTIALS');
       if (!current.email_verified) throw new ApiError(403, 'Confirmá tu correo para ingresar.', 'EMAIL_UNVERIFIED');
+      if (current.role === 'checkin') throw new ApiError(403, 'Ingresá con la cuenta del encargado.');
+      // Un nuevo login reemplaza solo el dispositivo de trabajo; conserva el kiosco.
+      if (current.role === 'encargado') await connection.execute(`UPDATE sesiones_usuario SET revoked_at = UTC_TIMESTAMP(6)
+        WHERE id_usuario = ? AND check_in_mode = FALSE AND revoked_at IS NULL`, [user.id_usuario]);
       await connection.execute(`INSERT INTO sesiones_usuario (id_usuario, token, expires_at)
         VALUES (?, ?, TIMESTAMPADD(HOUR, ?, UTC_TIMESTAMP(6)))`, [user.id_usuario, token, env.SESSION_HOURS]);
     });

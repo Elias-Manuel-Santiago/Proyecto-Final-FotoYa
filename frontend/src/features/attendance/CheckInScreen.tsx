@@ -1,7 +1,7 @@
 /**
  * @file
  * Presenta empleados y pide credenciales para marcar en kiosco. Refresca asistencia y exige
- * contraseña de la cuenta para configurar puesto o cerrar sesión.
+ * contraseña del encargado para cerrar únicamente esta sesión.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -81,7 +81,7 @@ function CheckInStationScreen() {
         <Text style={styles.muted}>
           {employee.stationId
             ? `${employee.stationName ?? 'Puesto asignado'} · Seleccioná tu nombre para registrar tu entrada o salida.`
-            : 'Seleccioná un puesto desde el botón de opciones para comenzar.'}
+            : 'El encargado necesita un puesto asignado.'}
         </Text>
         <Feedback error={error || action.error} success={action.success} />
         {selected ? (

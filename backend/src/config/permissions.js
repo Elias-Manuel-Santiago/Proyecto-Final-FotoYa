@@ -12,5 +12,4 @@ export const rolePermissions = {
   camarografo: ['photos.read', 'photos.upload', 'photos.assign', 'counts.read', 'attendance.self', 'catalog.read'],
   vendedor: ['sales.read', 'sales.create', 'counts.read', 'attendance.self', 'catalog.read'],
   cliente: ['photos.read'],
-  checkin: [],
 };

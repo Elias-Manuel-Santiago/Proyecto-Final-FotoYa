@@ -22,7 +22,7 @@ export const catalogRepository = {
     if (input.resource === 'roles') {
       if (!actor.permissions.includes('employees.read')) throw new ApiError(403, 'No tenés permiso para consultar roles.');
       const [rows] = await db.execute(`SELECT id_rol AS id, nombre AS name FROM rol
-        ${globalScope(actor) ? '' : "WHERE nombre IN ('encargado', 'camarografo', 'vendedor', 'checkin')"} ORDER BY id_rol`);
+        ${globalScope(actor) ? "WHERE nombre <> 'checkin'" : "WHERE nombre IN ('encargado', 'camarografo', 'vendedor')"} ORDER BY id_rol`);
       return rows;
     }
     if (['cities', 'events'].includes(input.resource)) {

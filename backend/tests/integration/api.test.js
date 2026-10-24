@@ -127,8 +127,8 @@ integration('API: POST, autenticación, CORS y validación', async () => {
   assert.equal((await call('reports/query', { ...period, stationId: '1 OR 1=1' })).status, 422);
   assert.equal((await call('reports/query', { ...period, actorId: users.dueno })).status, 422);
 });
-integration('check-in: puesto, credenciales, cuenta dedicada y acceso desde otros dispositivos', async () => {
-  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='vendedor'");
+integration('check-in: una sesión de trabajo y una de kiosco, activación concurrente y cierre aislado', async () => {
+  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre = 'vendedor'");
   const ids = [];
   for (const [name, station, active] of [['kioskEmployee', '1', true], ['kioskOther', '2', true], ['kioskInactive', '1', false]]) {
     const [result] = await db.execute(`INSERT INTO usuarios (nombre,apellido,email,dni,password,id_rol,id_puesto,disponible)
@@ -136,92 +136,111 @@ integration('check-in: puesto, credenciales, cuenta dedicada y acceso desde otro
     ids.push(String(result.insertId));
   }
   const employee = ids[0], credentials = { email: 'kioskemployee@example.com', password: 'Test-password-1234' };
-  const session = (await call('auth/login', credentials)).data.data.token;
-  const device = (path, input = {}) => http.post(`/api/${path}`, input, { headers: { Authorization: `Bearer ${session}` } });
-  assert.equal((await device('auth/me')).data.data.working, false);
-  assert.equal((await device('auth/me')).data.data.stationName, 'Uno');
+  const managerCredentials = { email: 'kioskmanager@example.com', password: 'Manager-password-1234' };
+  const [[managerRole]] = await db.query("SELECT id_rol FROM rol WHERE nombre = 'encargado'");
+  const [manager] = await db.execute(`INSERT INTO usuarios(nombre,apellido,email,dni,password,id_rol,id_puesto)
+    VALUES ('Encargado','Kiosco',?,'71000000',?,?,'1')`,
+    [managerCredentials.email, await hashPassword(managerCredentials.password), managerRole.id_rol]);
+  const managerId = String(manager.insertId);
+  const request = token => (path, input = {}) => http.post(`/api/${path}`, input, { headers: { Authorization: `Bearer ${token}` } });
+  const deviceToken = (await call('auth/login', credentials)).data.data.token;
+  const device = request(deviceToken);
   assert.equal((await device('sales/query', period)).data.error.code, 'CHECK_IN_REQUIRED');
+  for (const name of ['dueno', 'secretario', 'vendedor', 'camarografo', 'cliente'])
+    assert.equal((await call('attendance/kiosk/enter', {}, name)).status, 403);
   assert.equal((await call('attendance/kiosk/employees', {}, 'encargado')).status, 403);
-  const created = await call('users/check-in/create', { email: 'kiosk@example.com', password: credentials.password }, 'encargado');
-  assert.equal(created.status, 200);
-  const kioskId = created.data.data.id;
-  assert.equal(created.data.data.stationId, '1');
-  assert.equal(created.data.data.dni, '');
-  assert.equal(created.data.data.checkin_password, undefined);
-  const kioskToken = (await call('auth/login', { email: 'kiosk@example.com', password: credentials.password })).data.data.token;
-  const kiosk = (path, input = {}) => http.post(`/api/${path}`, input, { headers: { Authorization: `Bearer ${kioskToken}` } });
-  for (const role of ['dueno', 'encargado']) {
-    const secret = await call('users/check-in/password', { userId: kioskId }, role);
-    assert.equal(secret.status, 200);
-    assert.equal(secret.data.data.password, credentials.password);
-  }
-  assert.equal((await call('users/check-in/password', { userId: kioskId }, 'otroEncargado')).status, 404);
-  for (const role of ['secretario', 'vendedor', 'cliente'])
-    assert.equal((await call('users/check-in/password', { userId: kioskId }, role)).status, 403);
-  const ownerCreated = await call('users/check-in/create', { email: 'kiosk-owner@example.com', password: credentials.password });
-  assert.equal(ownerCreated.status, 200);
-  assert.equal(ownerCreated.data.data.stationId, null);
-  const ownerToken = (await call('auth/login', { email: 'kiosk-owner@example.com', password: credentials.password })).data.data.token;
-  const ownerKiosk = (path, input = {}) => http.post(`/api/${path}`, input, { headers: { Authorization: `Bearer ${ownerToken}` } });
-  assert.equal((await ownerKiosk('attendance/kiosk/employees')).data.error.code, 'STATION_REQUIRED');
-  assert.equal((await ownerKiosk('attendance/kiosk/assign', { stationId: '1', password: credentials.password })).status, 200);
-  assert.equal((await ownerKiosk('auth/me')).data.data.stationId, '1');
-  const [[stored]] = await db.execute('SELECT password, checkin_password, dni FROM usuarios WHERE id_usuario = ?', [kioskId]);
-  assert.equal(stored.dni, null);
-  assert.notEqual(stored.checkin_password, credentials.password);
-  assert(await verifyPassword(credentials.password, stored.password));
-  assert.equal((await kiosk('auth/me')).data.data.role, 'checkin');
+  for (const path of ['users/check-in/create', 'users/check-in/update', 'users/check-in/password'])
+    assert.equal((await call(path, {})).status, 404);
+  const [columns] = await db.query("SHOW COLUMNS FROM usuarios LIKE 'checkin_password'");
+  assert.equal(columns.length, 0);
+
+  const firstToken = (await call('auth/login', managerCredentials)).data.data.token;
+  // Simula dos sesiones anteriores al despliegue intentando reservar el único kiosco.
+  const secondToken = newToken();
+  await db.execute('INSERT INTO sesiones_usuario(id_usuario,token,expires_at) VALUES (?,?,TIMESTAMPADD(HOUR,2,UTC_TIMESTAMP(6)))', [managerId, secondToken]);
+  // Un kiosco vencido no debe impedir una nueva activación.
+  await db.execute(`INSERT INTO sesiones_usuario(id_usuario,token,check_in_mode,created_at,expires_at)
+    VALUES (?,?,TRUE,TIMESTAMPADD(HOUR,-2,UTC_TIMESTAMP(6)),TIMESTAMPADD(HOUR,-1,UTC_TIMESTAMP(6)))`, [managerId, newToken()]);
+  const candidates = [request(firstToken), request(secondToken)];
+  const activation = await Promise.all(candidates.map(candidate => candidate('attendance/kiosk/enter')));
+  assert.deepEqual(activation.map(result => result.status).sort(), [200, 409]);
+  const winner = activation.findIndex(result => result.status === 200), kiosk = candidates[winner], previousNormal = candidates[1 - winner];
+  assert.equal((await previousNormal('attendance/kiosk/enter')).data.error.code, 'CHECK_IN_ACTIVE');
+  assert.equal((await kiosk('auth/me')).data.data.kioskMode, true);
+  assert.equal((await previousNormal('auth/me')).data.data.kioskMode, false);
+  assert.equal((await previousNormal('auth/me')).data.data.checkInActive, true);
+  assert.equal((await call('auth/me', {}, 'otroEncargado')).data.data.checkInActive, false);
+
+  let normal = request((await call('auth/login', managerCredentials)).data.data.token);
+  assert.equal((await previousNormal('auth/me')).status, 401);
+  assert.equal((await normal('auth/me')).status, 200);
+  assert.equal((await kiosk('auth/me')).status, 200);
+  assert.equal((await normal('auth/logout')).status, 200);
+  assert.equal((await kiosk('auth/me')).status, 200);
+  normal = request((await call('auth/login', managerCredentials)).data.data.token);
+  await migrate(db, env);
   assert.equal((await kiosk('auth/me')).data.data.kioskMode, true);
   try {
-    for (const path of ['users/query', 'auth/logout', 'auth/sessions/revoke', 'auth/password/change'])
+    for (const path of ['users/query', 'sales/query', 'auth/logout', 'auth/sessions/query', 'auth/sessions/revoke', 'auth/password/change',
+      'attendance/kiosk/enter', 'attendance/kiosk/assign', 'attendance/kiosk/stations'])
       assert.equal((await kiosk(path)).data.error.code, 'KIOSK_LOCKED');
     const roster = (await kiosk('attendance/kiosk/employees')).data.data;
-    assert(roster.some(row => row.id === employee && row.working === false));
-    assert(!roster.some(row => ids.slice(1).includes(row.id)));
+    assert(roster.some(row => row.id === employee)); assert(!roster.some(row => ids.slice(1).includes(row.id)));
     assert(roster.every(row => row.email === undefined && row.password === undefined));
     const mark = { ...credentials, userId: employee, action: 'check-in', attendanceId: null };
     assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, password: 'incorrecta' })).status, 401);
     assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, email: 'vendedor@example.com' })).status, 401);
     assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, userId: ids[1], email: 'kioskother@example.com' })).status, 401);
     const results = await Promise.all([kiosk('attendance/kiosk/mark', mark), kiosk('attendance/kiosk/mark', mark)]);
-    assert.deepEqual(results.map(row => row.status).sort(), [200, 409]);
-    assert.equal((await device('auth/me')).data.data.working, true);
+    assert.deepEqual(results.map(result => result.status).sort(), [200, 409]);
     assert.equal((await device('sales/query', period)).status, 200);
-    assert.equal((await kiosk('auth/me')).data.data.id, kioskId);
-    assert.equal((await call('auth/me', {}, 'encargado')).data.data.kioskMode, false);
+    assert.equal((await kiosk('auth/me')).data.data.id, managerId);
+    assert.equal((await normal('users/query')).status, 200);
     const current = (await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee);
-    // Una jornada abierta continúa al cruzar medianoche y conserva el día de entrada al salir.
     await db.execute('UPDATE horarios SET id_dias = 1, check_in = TIMESTAMPADD(HOUR,-26,UTC_TIMESTAMP(6)) WHERE id_horario = ?', [current.attendanceId]);
-    assert.equal((await device('auth/me')).data.data.working, true);
-    const checkout = { ...mark, action: 'check-out', attendanceId: current.attendanceId };
-    assert.equal((await kiosk('attendance/kiosk/mark', checkout)).status, 200);
-    assert.equal((await kiosk('attendance/kiosk/mark', checkout)).status, 409);
-    assert.equal((await device('auth/me')).data.data.working, false);
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).status, 200);
     assert.equal((await device('sales/query', period)).status, 403);
     const [[closed]] = await db.execute('SELECT id_dias, check_out FROM horarios WHERE id_horario = ?', [current.attendanceId]);
     assert.equal(closed.id_dias, '1'); assert(closed.check_out);
-    assert.equal((await kiosk('attendance/kiosk/assign', { stationId: '2', password: 'incorrecta' })).status, 401);
-    assert.equal((await kiosk('auth/me')).data.data.stationId, '1');
-    assert.equal((await kiosk('attendance/kiosk/assign', { stationId: '999999', password: credentials.password })).status, 422);
-    assert.equal((await kiosk('attendance/kiosk/assign', { stationId: '2', password: credentials.password })).status, 200);
-    assert.equal((await kiosk('auth/me')).data.data.stationId, '2');
-    assert.equal((await call('users/check-in/password', { userId: kioskId }, 'encargado')).status, 404);
-    assert.equal((await call('users/check-in/password', { userId: kioskId }, 'otroEncargado')).status, 200);
-    assert.equal((await kiosk('attendance/kiosk/exit', { password: 'incorrecta' })).status, 401);
+    assert.equal((await kiosk('attendance/kiosk/exit', { password: credentials.password })).status, 401);
     assert.equal((await kiosk('auth/me')).status, 200);
-    assert.equal((await kiosk('attendance/kiosk/exit', { password: credentials.password })).status, 200);
+    assert.equal((await kiosk('attendance/kiosk/exit', { password: managerCredentials.password })).status, 200);
     assert.equal((await kiosk('auth/me')).status, 401);
-    const newPassword = 'Changed-checkin-password-1234';
-    const updated = await call('users/check-in/update', { userId: kioskId, email: 'kiosk@example.com', password: newPassword }, 'otroEncargado');
-    assert.equal(updated.status, 200);
-    assert.equal((await call('users/check-in/password', { userId: kioskId })).data.data.password, newPassword);
-    assert.equal((await call('auth/login', { email: 'kiosk@example.com', password: credentials.password })).status, 401);
-    assert.equal((await call('auth/login', { email: 'kiosk@example.com', password: newPassword })).status, 200);
-    assert.equal((await call('users/query', {}, 'encargado')).status, 200);
+    assert.equal((await normal('auth/me')).data.data.checkInActive, false);
+    assert.equal((await normal('users/query')).status, 200);
+    // La reserva se libera al cerrar y el dispositivo normal puede convertirse en el próximo kiosco.
+    assert.equal((await normal('attendance/kiosk/enter')).status, 200);
+    const nextKiosk = normal;
+    normal = request((await call('auth/login', managerCredentials)).data.data.token);
+    const newPassword = 'Changed-manager-password-1234';
+    assert.equal((await normal('auth/password/change', { currentPassword: managerCredentials.password, password: newPassword })).status, 200);
+    assert.equal((await nextKiosk('auth/me')).status, 401);
+    assert.equal((await normal('auth/me')).status, 401);
+    assert.equal((await call('auth/login', { ...managerCredentials, password: newPassword })).status, 200);
   } finally {
     await db.execute('DELETE FROM horarios WHERE id_usuario = ?', [employee]);
   }
 });
+
+integration('el retiro de cuentas dedicadas conserva datos heredados sin exponer contraseñas', async () => {
+  await db.query("INSERT IGNORE INTO rol(nombre) VALUES ('checkin')");
+  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre = 'checkin'");
+  await db.query('ALTER TABLE usuarios ADD COLUMN checkin_password TEXT NULL');
+  const [legacy] = await db.execute(`INSERT INTO usuarios(nombre,apellido,email,dni,password,id_rol,id_puesto,checkin_password)
+    VALUES ('Check-in','','legacy-kiosk@example.com',NULL,?,?,1,'legacy-encrypted-copy')`, [passwordHash, role.id_rol]);
+  const legacyId = String(legacy.insertId), token = newToken();
+  await db.execute('INSERT INTO sesiones_usuario(id_usuario,token,expires_at) VALUES (?,?,TIMESTAMPADD(HOUR,2,UTC_TIMESTAMP(6)))', [legacyId, token]);
+  await migrate(db, env);
+  const [[row]] = await db.execute('SELECT disponible,checkin_password FROM usuarios WHERE id_usuario = ?', [legacyId]);
+  assert.equal(row.disponible, 1);
+  assert.equal(row.checkin_password, 'legacy-encrypted-copy');
+  assert.equal((await http.post('/api/auth/me', {}, { headers: { Authorization: `Bearer ${token}` } })).status, 401);
+  assert.equal((await call('auth/login', { email: 'legacy-kiosk@example.com', password: 'Test-password-1234' })).status, 403);
+  assert(!(await call('users/query')).data.data.some(user => user.id === legacyId));
+  assert(!(await call('catalog/query', { resource: 'roles' })).data.data.some(item => item.name === 'checkin'));
+  assert.equal((await call('users/detail', { userId: legacyId })).status, 404);
+});
+
 integration('puestos: alta, baja reversible, permisos e historial', async () => {
   // Simula una instalación existente con su catálogo de permisos ya poblado.
   await db.query('ALTER TABLE puesto DROP COLUMN disponible');

@@ -5,13 +5,7 @@
  */
 // Nombres de rol usados por la interfaz; el repositorio los traduce desde los nombres del servidor.
 export type RoleId =
-  | 'owner'
-  | 'manager'
-  | 'secretary'
-  | 'photographer'
-  | 'seller'
-  | 'client'
-  | 'checkin';
+  'owner' | 'manager' | 'secretary' | 'photographer' | 'seller' | 'client';
 
 // Perfil público y estado de acceso del usuario; permisos y jornada pueden actualizarse durante la sesión.
 export interface Employee {
@@ -27,12 +21,19 @@ export interface Employee {
   permissions?: readonly string[];
   working?: boolean;
   kioskMode?: boolean;
+  checkInActive?: boolean;
 }
 
 // Datos editables del usuario; id distingue edición y password se envía en el alta.
 export type EmployeeInput = Omit<
   Employee,
-  'id' | 'active' | 'permissions' | 'working' | 'kioskMode' | 'stationName'
+  | 'id'
+  | 'active'
+  | 'permissions'
+  | 'working'
+  | 'kioskMode'
+  | 'checkInActive'
+  | 'stationName'
 > & {
   id?: string;
   password?: string;
