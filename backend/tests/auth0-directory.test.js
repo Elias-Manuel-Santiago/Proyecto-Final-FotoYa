@@ -74,12 +74,38 @@ test('al alcanzar el límite de búsqueda usa exportación completa y decodifica
   assert(exported && downloaded);
 });
 
-test('un fallo de Auth0 no entrega una lista parcial ni expone la respuesta del proveedor', async () => {
+test('un fallo de Auth0 incluye estado y cuerpo completos para diagnóstico sin entregar una lista parcial', async () => {
   const directory = createAuth0Directory({ fetchImpl: async url => url.endsWith('/oauth/token')
-    ? json({ access_token: 'token' }) : new Response('secret-provider-error', { status: 403 }) });
+    ? json({ access_token: 'token' }) : new Response('Insufficient scope: read:users', { status: 403 }) });
   await assert.rejects(directory.query(), error => {
     assert.equal(error.code, 'AUTH0_DIRECTORY_UNAVAILABLE');
-    assert(!error.message.includes('secret-provider-error'));
+    assert.match(error.message, /403/);
+    assert.match(error.message, /Insufficient scope: read:users/);
+    assert.match(error.message, /\/api\/v2\/users/);
+    return true;
+  });
+});
+
+test('el diagnóstico conserva errores de red y sus causas', async () => {
+  const directory = createAuth0Directory({ fetchImpl: async () => {
+    throw new TypeError('fetch failed', { cause: Object.assign(new Error('DNS lookup failed'), { code: 'ENOTFOUND' }) });
+  } });
+  await assert.rejects(directory.query(), error => {
+    assert.match(error.message, /fetch failed/);
+    assert.match(error.message, /DNS lookup failed/);
+    assert.match(error.message, /ENOTFOUND/);
+    return true;
+  });
+});
+
+test('el diagnóstico oculta credenciales que Auth0 incluya en el cuerpo del error', async () => {
+  const directory = createAuth0Directory({ fetchImpl: async url => url.endsWith('/oauth/token')
+    ? json({ access_token: 'management-token' })
+    : new Response(`Denied for ${env.AUTH0_MANAGEMENT_CLIENT_SECRET}, bearer management-token`, { status: 403 }) });
+  await assert.rejects(directory.query(), error => {
+    assert.match(error.message, /Denied for/);
+    assert(!error.message.includes(env.AUTH0_MANAGEMENT_CLIENT_SECRET));
+    assert(!error.message.includes('management-token'));
     return true;
   });
 });

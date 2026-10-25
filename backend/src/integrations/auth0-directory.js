@@ -3,12 +3,26 @@ import { gunzipSync } from 'node:zlib';
 import { env } from '../config/env.js';
 import { ApiError } from '../shared/errors.js';
 
-const unavailable = () => new ApiError(502,
-  'No se pudo consultar Auth0. Revisá la conexión y los permisos read:users de la aplicación de servidor.', 'AUTH0_DIRECTORY_UNAVAILABLE');
+// Diagnóstico temporal: incluye respuesta HTTP o error original y sus causas.
+const unavailable = (error, secrets = []) => {
+  let detail = JSON.stringify(error, (key, value) => {
+    if (/^(authorization|client_secret|access_token|refresh_token|id_token)$/i.test(key)) return '[REDACTED]';
+    if (value instanceof Error) return Object.fromEntries(Object.getOwnPropertyNames(value).map(name => [name, value[name]]));
+    return value;
+  }) ?? 'Error sin detalle.';
+  for (const secret of [env.AUTH0_MANAGEMENT_CLIENT_SECRET, ...secrets]) {
+    if (secret) {
+      detail = detail.replaceAll(secret, '[REDACTED]');
+      // También cubre secretos escapados dentro de una respuesta JSON textual.
+      detail = detail.replaceAll(JSON.stringify(secret).slice(1, -1), '[REDACTED]');
+    }
+  }
+  return new ApiError(502, `No se pudo consultar Auth0: ${detail}`, 'AUTH0_DIRECTORY_UNAVAILABLE');
+};
 
 // Solo publica datos de perfil; nunca tokens de identidades, metadatos o credenciales.
 export function directoryUser(row) {
-  if (typeof row.user_id !== 'string' || !row.user_id) throw unavailable();
+  if (typeof row.user_id !== 'string' || !row.user_id) throw unavailable('El perfil no contiene user_id.');
   const identities = (row.identities ?? []).map(identity => ({
     subject: `${identity.provider}|${identity.user_id}`,
     provider: identity.provider,
@@ -26,7 +40,11 @@ export function createAuth0Directory({ fetchImpl = (...args) => fetch(...args), 
   let credential, snapshot, progress, running;
   async function request(url, options = {}) {
     const response = await fetchImpl(url, { ...options, signal: AbortSignal.timeout(8000), redirect: 'error' });
-    if (!response.ok) throw unavailable();
+    if (!response.ok) throw unavailable({
+      method: options.method ?? 'GET', endpoint: new URL(url).pathname,
+      status: response.status, statusText: response.statusText,
+      body: await response.text(),
+    }, [credential?.value]);
     return response;
   }
   async function token() {
@@ -38,7 +56,7 @@ export function createAuth0Directory({ fetchImpl = (...args) => fetch(...args), 
         audience: `https://${env.AUTH0_DOMAIN}/api/v2/` }),
     });
     const data = await response.json();
-    if (typeof data.access_token !== 'string') throw unavailable();
+    if (typeof data.access_token !== 'string') throw unavailable({ message: 'La respuesta de /oauth/token no contiene access_token.', response: data });
     credential = { value: data.access_token, expires: now() + (Number(data.expires_in || 60) - 30) * 1000 };
     return credential.value;
   }
@@ -62,14 +80,14 @@ export function createAuth0Directory({ fetchImpl = (...args) => fetch(...args), 
     progress ??= { rows: [], page: 0, started: now() };
     if (now() - progress.started > 5 * 60000) {
       progress = undefined;
-      throw unavailable();
+      throw unavailable('La consulta del directorio superó los cinco minutos.');
     }
     if (progress.jobId) {
       const job = await management(`jobs/${encodeURIComponent(progress.jobId)}`);
-      if (job.status === 'failed') throw unavailable();
+      if (job.status === 'failed') throw unavailable(job, [credential?.value]);
       if (job.status !== 'completed') return { status: 'pending' };
       const location = new URL(job.location);
-      if (location.protocol !== 'https:' || location.username || location.password) throw unavailable();
+      if (location.protocol !== 'https:' || location.username || location.password) throw unavailable('Auth0 devolvió una URL de exportación no admitida.');
       // La URL firmada viene de Auth0; no se envía nuestra credencial al servidor del archivo.
       const response = await request(location.href);
       const compressed = Buffer.from(await response.arrayBuffer());
@@ -79,12 +97,12 @@ export function createAuth0Directory({ fetchImpl = (...args) => fetch(...args), 
       return complete(content.split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line)));
     }
     const page = await management(`users?include_totals=true&per_page=100&page=${progress.page}&sort=user_id:1&fields=user_id,given_name,family_name,name,nickname,email,blocked,identities&include_fields=true`);
-    if (!Array.isArray(page.users)) throw unavailable();
+    if (!Array.isArray(page.users)) throw unavailable({ message: 'La respuesta de /users no contiene users.', response: page }, [credential?.value]);
     // Auth0 limita las búsquedas a 1000 resultados, incluso el total informado.
     if (page.total >= 1000 || progress.rows.length + page.users.length >= 1000) {
       const job = await management('jobs/users-exports', { format: 'json', fields:
         ['user_id', 'given_name', 'family_name', 'name', 'nickname', 'email', 'blocked', 'identities'].map(name => ({ name })) });
-      if (typeof job.id !== 'string') throw unavailable();
+      if (typeof job.id !== 'string') throw unavailable({ message: 'La exportación no contiene id.', response: job }, [credential?.value]);
       progress.jobId = job.id;
       progress.rows = [];
       return { status: 'pending' };
@@ -98,8 +116,9 @@ export function createAuth0Directory({ fetchImpl = (...args) => fetch(...args), 
     query() {
       // Evita lanzar exportaciones/páginas duplicadas por consultas concurrentes.
       running ??= advance().catch(error => {
+        const failure = error instanceof ApiError ? error : unavailable(error, [credential?.value]);
         progress = undefined; credential = undefined;
-        throw error instanceof ApiError ? error : unavailable();
+        throw failure;
       }).finally(() => { running = undefined; });
       return running;
     },
