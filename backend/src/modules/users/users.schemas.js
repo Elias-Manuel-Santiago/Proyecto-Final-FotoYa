@@ -18,5 +18,6 @@ export const create = z.object({ ...fields, password }).strict();
 export const update = z.object({ userId: id, ...fields }).strict();
 export const active = z.object({ userId: id, active: z.boolean() }).strict();
 export const detail = z.object({ userId: id }).strict();
+export const auth0Query = z.object({}).strict();
 export const query = z.object({ ...pagination, stationId: id.optional(), email: email.optional(),
   dni: fields.dni.optional(), active: z.boolean().optional() }).strict();

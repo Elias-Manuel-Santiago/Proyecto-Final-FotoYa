@@ -34,11 +34,15 @@ test('Auth0 rechaza firma falsa, issuer, audience, vencimiento y proveedores dis
       .setProtectedHeader({ alg: 'RS256' }).setIssuer('https://test.auth0.com/').setAudience('web')
       .setIssuedAt().setExpirationTime('5m').sign(key);
     assert.deepEqual(await verifySocialToken(await token(), publicKey), { subject: 'google-oauth2|123', email: 'ana@example.com' });
+    assert.deepEqual(await verifySocialToken(await token({ sub: 'amazon|amzn1.account.123' }), publicKey),
+      { subject: 'amazon|amzn1.account.123', email: 'ana@example.com' });
     for (const value of [await token({}, alien.privateKey),
       await new SignJWT({ sub: 'github|123', email: 'a@example.com' }).setProtectedHeader({ alg: 'RS256' }).setIssuer('https://evil.example/').setAudience('web').setIssuedAt().setExpirationTime('5m').sign(privateKey),
       await new SignJWT({ sub: 'github|123', email: 'a@example.com' }).setProtectedHeader({ alg: 'RS256' }).setIssuer('https://test.auth0.com/').setAudience('other').setIssuedAt().setExpirationTime('5m').sign(privateKey),
       await new SignJWT({ sub: 'github|123', email: 'a@example.com' }).setProtectedHeader({ alg: 'RS256' }).setIssuer('https://test.auth0.com/').setAudience('web').setIssuedAt().setExpirationTime(1).sign(privateKey),
-      await token({ sub: 'auth0|123' }), await token({ email: null })])
+      await token({ sub: 'auth0|123' }), await token({ email: null }),
+      await token({ sub: 'amazon|123', email: '' }), await token({ sub: 'amazon|123', email: 'invalid' }),
+      await token({ sub: 'amazon|' }), await token({ sub: 'amazon|123' }, alien.privateKey)])
       await assert.rejects(verifySocialToken(value, publicKey), { code: 'INVALID_SOCIAL_IDENTITY' });
   } finally { Object.assign(env, previous); }
 });

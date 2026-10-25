@@ -20,6 +20,7 @@ import type {
   EventSaleInput,
   SalePhoto,
   CheckInEmployee,
+  Auth0DirectoryResult,
 } from '../domain/models';
 import { canWork } from '../domain/permissions';
 import { businessDate, periodError, utcInstant } from '../domain/dates';
@@ -101,6 +102,9 @@ function user(row: UserRow): Employee {
 }
 
 export class HttpFotoYaRepository {
+  async auth0Users(): Promise<Auth0DirectoryResult> {
+    return this.api.post<Auth0DirectoryResult>('users/auth0/query');
+  }
   private profileRevision = 0;
   onProfile?: (employee: Employee) => void;
   // Permite al proveedor recibir actualizaciones del perfil desde el repositorio.

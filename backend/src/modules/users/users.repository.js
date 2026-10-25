@@ -6,7 +6,7 @@
 import { db } from '../../config/database.js';
 import { globalScope, stationScope } from '../../security/access.js';
 
-const columns = `u.id_usuario AS id, u.nombre, u.apellido, u.email, u.dni, u.id_rol AS roleId,
+const columns = `u.id_usuario AS id, u.nombre, u.apellido, u.email, u.dni, u.auth0_sub, u.id_rol AS roleId,
 r.nombre AS role, u.id_puesto AS stationId, u.disponible AS active, u.created_at, u.updated_at`;
 export const userRepository = {
   // Busca usuario con rol y puesto usando el pool o la conexión recibida.

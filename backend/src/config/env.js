@@ -22,6 +22,8 @@ const schema = z.object({
   TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
   AUTH0_DOMAIN: z.string().regex(/^[a-zA-Z0-9.-]+$/).optional(),
   AUTH0_CLIENT_IDS: z.string().optional(),
+  AUTH0_MANAGEMENT_CLIENT_ID: z.string().optional(),
+  AUTH0_MANAGEMENT_CLIENT_SECRET: z.string().optional(),
   MAIL_API_KEY: z.string().optional(), MAIL_INBOX_ID: z.string().regex(/^\d+$/).optional(),
   SENDER: z.email().optional(),
   DB_HOST: z.string().min(1), DB_PORT: positive(3306, 65535), DB_NAME: z.string().min(1),

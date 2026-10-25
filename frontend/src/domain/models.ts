@@ -22,7 +22,22 @@ export interface Employee {
   working?: boolean;
   kioskMode?: boolean;
   checkInActive?: boolean;
+  auth0Subject?: string | null;
+  authenticationProviders?: string[];
 }
+
+export interface Auth0User {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  active: boolean;
+  identities: { subject: string; provider: string; connection?: string }[];
+  authenticationProviders: string[];
+}
+
+export type Auth0DirectoryResult =
+  { status: 'pending' } | { status: 'complete'; users: Auth0User[] };
 
 // Datos editables del usuario; id distingue edición y password se envía en el alta.
 export type EmployeeInput = Omit<
@@ -34,6 +49,8 @@ export type EmployeeInput = Omit<
   | 'kioskMode'
   | 'checkInActive'
   | 'stationName'
+  | 'auth0Subject'
+  | 'authenticationProviders'
 > & {
   id?: string;
   password?: string;

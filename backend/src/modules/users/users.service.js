@@ -8,12 +8,15 @@ import { ApiError } from '../../shared/errors.js';
 import { transaction } from '../../shared/transaction.js';
 import { assertAssignable } from '../../security/access.js';
 import { hashPassword, normalizeEmail } from '../../security/crypto.js';
+import { auth0Directory } from '../../integrations/auth0-directory.js';
 
 // Adapta la fila a datos públicos sin exponer credenciales.
 const publicUser = row => ({ id: row.id, firstName: row.nombre,
   lastName: row.apellido, email: row.email,
   dni: row.dni ?? '', roleId: String(row.roleId), role: row.role,
-  stationId: row.stationId, stationName: row.stationName, active: Boolean(row.active), createdAt: row.created_at, updatedAt: row.updated_at });
+  stationId: row.stationId, stationName: row.stationName, active: Boolean(row.active), createdAt: row.created_at, updatedAt: row.updated_at,
+  auth0Subject: row.auth0_sub ?? null,
+  authenticationProviders: [row.auth0_sub ? row.auth0_sub.split('|')[0] : 'local'] });
 // Ordena campos personales y normaliza el correo para las escrituras SQL.
 const personalData = input => [input.firstName, input.lastName, normalizeEmail(input.email), input.dni];
 // Resuelve el usuario objetivo y comprueba que el actor pueda administrarlo.
@@ -54,6 +57,10 @@ const assignment = async (actor, input, connection) => {
   }
 };
 export const userService = {
+  async auth0Users(actor) {
+    if (actor.role !== 'dueno') throw new ApiError(403, 'Solo el dueño puede consultar el directorio de Auth0.', 'FORBIDDEN');
+    return auth0Directory.query();
+  },
   // Combina datos personales con permisos, jornada y kiosco de la sesión actual.
   async profile(actor) { return { ...publicUser(await userRepository.find(actor.id)), permissions: actor.permissions,
     working: actor.working, kioskMode: actor.kioskMode, checkInActive: actor.checkInActive }; },

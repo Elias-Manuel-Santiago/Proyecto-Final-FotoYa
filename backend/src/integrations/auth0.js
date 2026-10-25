@@ -6,6 +6,7 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { env } from '../config/env.js';
 import { ApiError } from '../shared/errors.js';
+import { z } from 'zod';
 
 let keys;
 // Reutiliza las claves públicas del proveedor para verificar la identidad antes del registro local.
@@ -21,9 +22,13 @@ export async function verifySocialToken(idToken, keySet) {
   try {
     const { payload } = await jwtVerify(idToken, keySet, { issuer: `https://${env.AUTH0_DOMAIN}/`,
       audience: env.AUTH0_CLIENT_IDS.split(',').map(v => v.trim()), algorithms: ['RS256'], requiredClaims: ['exp', 'iat', 'sub'] });
-    if (!/^(google-oauth2|github|apple)\|/.test(payload.sub) || typeof payload.email !== 'string') throw new Error();
+    if (!/^(google-oauth2|github|apple|amazon)\|.+$/.test(payload.sub))
+      throw new ApiError(401, 'El proveedor de acceso social no está habilitado.', 'INVALID_SOCIAL_IDENTITY');
+    if (!z.email().safeParse(typeof payload.email === 'string' ? payload.email.trim() : null).success)
+      throw new ApiError(401, 'El proveedor no compartió un correo válido. Revisá los permisos de correo y volvé a ingresar.', 'INVALID_SOCIAL_IDENTITY');
     return { subject: payload.sub, email: payload.email.trim().toLowerCase() };
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(401, 'La identidad social no es válida o no incluye un correo. Volvé a ingresar.', 'INVALID_SOCIAL_IDENTITY');
   }
 }
