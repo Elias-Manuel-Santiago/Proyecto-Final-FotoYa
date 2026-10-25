@@ -7,7 +7,7 @@ import { db } from '../src/config/database.js';
 after(() => db.end());
 
 test('solo la sesión en modo Check-in del encargado puede operar asistencia', () => {
-  for (const role of ['dueno', 'secretario', 'camarografo', 'vendedor', 'cliente', 'checkin']) {
+  for (const role of ['dueno', 'secretario', 'editor', 'camarografo', 'vendedor', 'cliente', 'checkin']) {
     for (const kioskMode of [false, true])
       assert.throws(() => requireCheckIn({ role, kioskMode }), { status: 403 });
   }

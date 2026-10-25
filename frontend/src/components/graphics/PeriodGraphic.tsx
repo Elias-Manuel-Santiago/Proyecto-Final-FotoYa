@@ -1,17 +1,14 @@
-import { Text, View } from 'react-native';
 import { displayDate } from '../../domain/dates';
 import {
   dailyValues,
   graphicValue,
   periodDates,
-  sumGraphicValues,
   type GraphicMetric,
   type GraphicScope,
   type GraphicsData,
 } from '../../domain/graphics';
 import type { Period } from '../../domain/models';
-import { useTheme } from '../ui/theme';
-import { MetricChart, formatGraphicValue } from './MetricChart';
+import { MetricChart } from './MetricChart';
 
 export function PeriodGraphic({
   data,
@@ -26,34 +23,9 @@ export function PeriodGraphic({
   metric: GraphicMetric;
   onDay: (date: string) => void;
 }) {
-  const { styles } = useTheme();
   const dates = periodDates(period.from, period.to);
   return (
     <>
-      <View style={styles.row}>
-        {scopes.map((scope) => (
-          <View
-            key={scope.id}
-            style={[styles.card, { flexGrow: 1, flexBasis: 210 }]}
-          >
-            <Text style={styles.muted}>{scope.label}</Text>
-            <Text style={styles.title}>
-              {formatGraphicValue(
-                graphicValue(
-                  sumGraphicValues(
-                    dates.map((date) => dailyValues(data, scope, date)),
-                  ),
-                  metric,
-                ),
-                metric,
-              )}
-            </Text>
-            <Text style={styles.muted}>
-              {displayDate(period.from)} — {displayDate(period.to)}
-            </Text>
-          </View>
-        ))}
-      </View>
       <MetricChart
         title="Evolución del período"
         metric={metric}

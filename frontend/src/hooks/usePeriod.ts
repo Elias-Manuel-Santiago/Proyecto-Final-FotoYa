@@ -20,7 +20,14 @@ export function usePeriod() {
   });
   const period =
     employee.roleId === 'manager'
-      ? { ...filters, stationId: employee.stationId, city: '', event: '' }
+      ? {
+          ...filters,
+          stationId: employee.stationId,
+          city: '',
+          event: '',
+          stationIds: undefined,
+          scopeIds: undefined,
+        }
       : filters;
   // Aplica cambios parciales conservando el resto de los filtros.
   const update = (patch: Partial<Period>) =>

@@ -12,6 +12,7 @@ import { errorMessage } from '../../domain/format';
 import { Screen } from '../../components/ui/Screen';
 import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
+import { FilterSection } from '../../components/filters/FilterSection';
 import { Feedback, EmptyState } from '../../components/ui/Feedback';
 import { useTheme } from '../../components/ui/theme';
 
@@ -90,23 +91,25 @@ export function ClientsScreen() {
   }
   return (
     <Screen title="Clientes">
-      <Field
-        label="Buscar por correo o DNI"
-        value={search}
-        onChangeText={setSearch}
-        autoCapitalize="none"
-        maxLength={254}
-        editable={!busy}
-      />
-      <Button
-        title="Buscar"
-        disabled={busy}
-        onPress={() => {
-          setOffset(0);
-          setFilter(search.trim());
-          setRevision((value) => value + 1);
-        }}
-      />
+      <FilterSection>
+        <Field
+          label="Buscar por correo o DNI"
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          maxLength={254}
+          editable={!busy}
+        />
+        <Button
+          title="Buscar"
+          disabled={busy}
+          onPress={() => {
+            setOffset(0);
+            setFilter(search.trim());
+            setRevision((value) => value + 1);
+          }}
+        />
+      </FilterSection>
       <Feedback error={selected ? '' : error || current?.error} />
       {loading ? (
         <ActivityIndicator accessibilityLabel="Cargando clientes" />

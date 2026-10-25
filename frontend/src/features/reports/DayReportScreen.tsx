@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Text } from 'react-native';
 import { DailyGraphic } from '../../components/graphics/DailyGraphic';
 import { ScopePicker } from '../../components/graphics/ScopePicker';
+import { PeriodFilters } from '../../components/filters/PeriodFilters';
 import { Button } from '../../components/ui/Button';
 import { Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
@@ -29,8 +30,9 @@ export function DayReportScreen() {
   const { styles } = useTheme();
   const { employee, data: base } = useWorkspace();
   const own = employee.roleId === 'manager';
-  const day =
-    typeof params.day === 'string' && validDate(params.day) ? params.day : '';
+  const [day, setDay] = useState(
+    typeof params.day === 'string' && validDate(params.day) ? params.day : '',
+  );
   const [metric, setMetric] = useState<GraphicMetric>(
     graphicMetrics.find((m) => m.value === params.metric)?.value ?? 'earnings',
   );
@@ -78,18 +80,35 @@ export function DayReportScreen() {
           Puesto: {stations[0]?.name ?? employee.stationName ?? 'Tu puesto'}
         </Text>
       )}
-      {!own && (
-        <ScopePicker
-          scopes={available}
-          selected={selected}
-          onChange={setSelected}
-        />
-      )}
-      <Select
-        label="Indicador del gráfico diario"
-        value={metric}
-        options={graphicMetrics}
-        onChange={(v) => setMetric(v as GraphicMetric)}
+      <PeriodFilters
+        singleDay
+        period={{
+          from: day,
+          to: day,
+          stationId: own ? employee.stationId : '',
+        }}
+        stations={stations}
+        allowScopeChange={false}
+        onChange={(value) => {
+          if (value.from) setDay(value.from);
+        }}
+        indicator={
+          <Select
+            label="Indicador del gráfico diario"
+            value={metric}
+            options={graphicMetrics}
+            onChange={(v) => setMetric(v as GraphicMetric)}
+          />
+        }
+        scopePicker={
+          !own ? (
+            <ScopePicker
+              scopes={available}
+              selected={selected}
+              onChange={setSelected}
+            />
+          ) : undefined
+        }
       />
       <Feedback error={error} />
       {loading && (

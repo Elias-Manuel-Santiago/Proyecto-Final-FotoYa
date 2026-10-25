@@ -169,14 +169,14 @@ test('rendimiento conserva personas sin ventas, datos sin autor y base de turnos
         ...values,
         stationId: '1',
         employeeId: null,
-        role: 'photographer',
+        role: 'editor',
         name: 'Sin autor',
       },
       {
         ...values,
         stationId: '1',
         employeeId: null,
-        role: 'photographer',
+        role: 'editor',
         name: 'Sin autor',
       },
     ],
@@ -185,5 +185,5 @@ test('rendimiento conserva personas sin ventas, datos sin autor y base de turnos
   assert.equal(sellers.length, 2);
   assert.equal(graphicValue(sellers[0], 'percentage'), 0);
   assert.equal(graphicValue(sellers[1], 'percentage'), 40);
-  assert.equal(peopleValues(data, ['1'], 'photographer')[0].taken, 20);
+  assert.equal(peopleValues(data, ['1'], 'editor')[0].taken, 20);
 });

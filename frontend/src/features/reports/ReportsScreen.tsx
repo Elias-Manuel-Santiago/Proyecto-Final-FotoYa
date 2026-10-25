@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
 import { EmployeeGraphic } from '../../components/graphics/EmployeeGraphic';
 import { PeriodGraphic } from '../../components/graphics/PeriodGraphic';
@@ -32,6 +32,7 @@ export function ReportsScreen() {
     own ? [`station:${employee.stationId}`] : ['total'],
   );
   const [metric, setMetric] = useState<GraphicMetric>('earnings');
+  const [teamRole, setTeamRole] = useState<'seller' | 'editor'>('seller');
   const scopes = own
     ? available
     : available.filter((s) => selected.includes(s.id));
@@ -52,20 +53,36 @@ export function ReportsScreen() {
         stations={stations}
         onChange={update}
         allowScopeChange={false}
-      />
-      {!own && (
-        <ScopePicker
-          scopes={available}
-          selected={selected}
-          onChange={setSelected}
-        />
-      )}
-      <Select
-        label="Indicador de los gráficos"
-        value={metric}
-        options={graphicMetrics}
-        onChange={(v) => setMetric(v as GraphicMetric)}
-      />
+        indicator={
+          <Select
+            label="Indicador de los gráficos"
+            value={metric}
+            options={graphicMetrics}
+            onChange={(v) => setMetric(v as GraphicMetric)}
+          />
+        }
+        scopePicker={
+          !own ? (
+            <ScopePicker
+              scopes={available}
+              selected={selected}
+              onChange={setSelected}
+            />
+          ) : undefined
+        }
+      >
+        <View style={{ paddingTop: 16 }}>
+          <Select
+            label="Rendimiento del equipo"
+            value={teamRole}
+            options={[
+              { value: 'seller', label: 'Vendedores' },
+              { value: 'editor', label: 'Editores' },
+            ]}
+            onChange={(value) => setTeamRole(value as typeof teamRole)}
+          />
+        </View>
+      </PeriodFilters>
       <Text style={styles.muted}>
         Ventas: operaciones registradas, incluidas compras repetidas. Precio por
         venta: ingresos / operaciones. Conversión: familias compradoras /
@@ -102,6 +119,7 @@ export function ReportsScreen() {
             }
           />
           <EmployeeGraphic
+            role={teamRole}
             data={data}
             scopes={scopes}
             metric={metric}

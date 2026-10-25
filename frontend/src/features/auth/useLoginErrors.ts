@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { ApiError } from '../../data/api-client';
 import { errorMessage } from '../../domain/format';
 
-export type AuthMode = 'login' | 'register' | 'verify' | 'social';
+export type AuthMode = 'login' | 'register' | 'verify';
 type AuthField =
   | 'email'
   | 'password'
@@ -90,7 +90,7 @@ export function useLoginErrors(mode: AuthMode) {
         errors.email = 'Ingresá un email válido.';
       if (!password) errors.password = 'Ingresá tu contraseña.';
     }
-    if (mode === 'register' || mode === 'social') {
+    if (mode === 'register') {
       if (!firstName.trim()) errors.firstName = 'Ingresá tu nombre.';
       if (!lastName.trim()) errors.lastName = 'Ingresá tu apellido.';
       if (

@@ -34,17 +34,17 @@ test('alta, edición y baja conservan el historial; email y DNI son únicos', as
       ?.firstName,
     'Editado',
   );
-  await repo.setEmployeeActive('manager', 'photographer', false);
+  await repo.setEmployeeActive('manager', 'editor', false);
   const data = await repo.snapshot();
   assert.equal(
-    data.employees.find((row) => row.id === 'photographer')?.active,
+    data.employees.find((row) => row.id === 'editor')?.active,
     false,
   );
   assert.equal(data.attendance.length, 1);
-  await assert.rejects(repo.checkIn('photographer', 'new-turn'), /activo/);
-  await repo.setEmployeeActive('manager', 'photographer', true);
+  await assert.rejects(repo.checkIn('editor', 'new-turn'), /activo/);
+  await repo.setEmployeeActive('manager', 'editor', true);
   assert.equal(
-    (await repo.snapshot()).employees.find((row) => row.id === 'photographer')
+    (await repo.snapshot()).employees.find((row) => row.id === 'editor')
       ?.active,
     true,
   );

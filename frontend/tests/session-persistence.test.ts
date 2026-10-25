@@ -46,6 +46,7 @@ for (const [role, kioskMode] of [
   ['dueno', false],
   ['encargado', false],
   ['secretario', false],
+  ['editor', false],
   ['camarografo', false],
   ['vendedor', false],
   ['cliente', false],

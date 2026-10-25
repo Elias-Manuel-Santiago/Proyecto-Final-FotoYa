@@ -36,16 +36,18 @@ const session = async (connection, user) => {
     VALUES (?, ?, TIMESTAMPADD(HOUR, ?, UTC_TIMESTAMP(6)))`, [user.id_usuario, token, env.SESSION_HOURS]);
   return { token, tokenType: 'Bearer', expiresIn: env.SESSION_HOURS * 3600 };
 };
-// Crea la cuenta cliente y pide confirmar el correo antes de habilitar el acceso.
+// Crea la cuenta cliente y acepta el correo ya verificado por la identidad externa.
 async function createClient(input, identity) {
   const password = await hashPassword(identity ? newToken() : input.password);
   return transaction(async connection => {
     const [[role]] = await connection.execute("SELECT id_rol FROM rol WHERE nombre = 'cliente' LOCK IN SHARE MODE");
     if (!role) throw new ApiError(503, 'El rol cliente no está configurado.');
     const email = identity?.email ?? normalizeEmail(input.email);
+    const verified = identity?.emailVerified === true;
     const [result] = await connection.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, password, id_rol, email_verified, auth0_sub)
-      VALUES (?, ?, ?, ?, ?, ?, FALSE, ?)`, [input.firstName, input.lastName, email, input.dni, password, role.id_rol, identity?.subject ?? null]);
-    return issueCode(connection, { id_usuario: result.insertId, email });
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [input.firstName, input.lastName, email, input.dni, password, role.id_rol, verified, identity?.subject ?? null]);
+    const user = { id_usuario: result.insertId, email };
+    return verified ? session(connection, user) : issueCode(connection, user);
   });
 }
 export const registrationService = {
@@ -91,7 +93,7 @@ export const registrationService = {
     if (!result) throw new ApiError(422, 'Código incorrecto, vencido o bloqueado. Solicitá uno nuevo.', 'INVALID_CODE');
     return result;
   },
-  // Resuelve la identidad externa: inicia sesión, pide confirmación o solicita datos faltantes.
+  // Resuelve la identidad externa sin exigir datos personales adicionales.
   async social(input) {
     const identity = await socialIdentity(input.idToken);
     const [[found]] = await db.execute('SELECT id_usuario FROM usuarios WHERE auth0_sub = ?', [identity.subject]);
@@ -99,12 +101,17 @@ export const registrationService = {
       const [[user]] = await connection.execute(`SELECT u.*, r.nombre AS role FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
         WHERE u.id_usuario = ? FOR UPDATE`, [found.id_usuario]);
       if (!user?.disponible || user.role !== 'cliente') throw new ApiError(403, 'La cuenta no está disponible.');
+      // Retoma cuentas creadas antes de aceptar la verificación del proveedor.
+      if (!user.email_verified && identity.emailVerified === true && normalizeEmail(user.email) === identity.email) {
+        await connection.execute('UPDATE usuarios SET email_verified = TRUE WHERE id_usuario = ?', [user.id_usuario]);
+        await connection.execute("UPDATE tokens_autenticacion SET used_at = UTC_TIMESTAMP(6) WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL", [user.id_usuario]);
+        user.email_verified = true;
+      }
       return user.email_verified ? session(connection, user) : issueCode(connection, user);
     });
     // Un correo ya registrado no se vincula automáticamente a una identidad externa nueva.
     const [[existing]] = await db.execute('SELECT id_usuario FROM usuarios WHERE email = ?', [identity.email]);
     if (existing) throw new ApiError(409, 'Este correo ya tiene una cuenta. Ingresá con su método original.', 'ACCOUNT_EXISTS');
-    if (!input.firstName || !input.lastName || !input.dni) return { registrationRequired: true, email: identity.email };
-    return createClient(input, identity);
+    return createClient({ firstName: identity.firstName ?? '', lastName: identity.lastName ?? '', dni: null }, identity);
   },
 };

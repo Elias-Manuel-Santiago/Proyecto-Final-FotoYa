@@ -22,6 +22,8 @@ export function matchesPeriod(
   return (
     row.date >= period.from &&
     row.date <= period.to &&
+    (period.stationIds === undefined ||
+      period.stationIds.includes(row.stationId)) &&
     (!period.stationId || row.stationId === period.stationId)
   );
 }
@@ -78,6 +80,8 @@ export function reportRows(data: AppData, employee: Employee, period: Period) {
   return visibleStations(data, employee)
     .filter(
       (station) =>
+        (period.stationIds === undefined ||
+          period.stationIds.includes(station.id)) &&
         (!period.stationId || period.stationId === station.id) &&
         (!period.city || period.city === (station.cityId ?? station.city)) &&
         (!period.event || period.event === (station.eventId ?? station.event)),

@@ -35,7 +35,8 @@ const roles: Record<string, RoleId> = {
   dueno: 'owner',
   encargado: 'manager',
   secretario: 'secretary',
-  camarografo: 'photographer',
+  editor: 'editor',
+  camarografo: 'cameraman',
   vendedor: 'seller',
   cliente: 'client',
 };

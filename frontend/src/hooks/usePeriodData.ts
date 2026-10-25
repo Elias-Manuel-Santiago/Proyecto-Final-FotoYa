@@ -79,7 +79,8 @@ export function usePeriodData(period: Period, attendanceSelf = false) {
   };
 
   return {
-    data,
+    data:
+      period.stationIds === undefined ? data : { ...data, summary: undefined },
     loading: state.loading && !invalid,
     refreshing: state.refreshing && !invalid,
     error: state.error,

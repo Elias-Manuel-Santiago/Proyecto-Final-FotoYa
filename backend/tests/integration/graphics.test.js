@@ -25,7 +25,7 @@ before(async () => {
   await db.query(`INSERT INTO usuarios(nombre,apellido,email,dni,password,id_rol,id_puesto)
     SELECT 'Vendedor','Uno','seller@example.com','100','unused',id_rol,1 FROM rol WHERE nombre='vendedor'`);
   await db.query(`INSERT INTO usuarios(nombre,apellido,email,dni,password,id_rol,id_puesto)
-    SELECT 'Cámara','Uno','camera@example.com','200','unused',id_rol,1 FROM rol WHERE nombre='camarografo'`);
+    SELECT 'Cámara','Uno','camera@example.com','200','unused',id_rol,1 FROM rol WHERE nombre='editor'`);
   await db.query("INSERT INTO dias(fecha,fotos,descartes,id_puesto) VALUES ('2026-10-24',3,1,1),('2026-10-24',1,0,2),('2026-10-23',0,0,1)");
   await db.query(`INSERT INTO fotos(id_archivo,id_dia,id_puesto,id_camarografo,created_at) VALUES
     ('one.jpg',1,1,2,'2026-10-24 15:15:00'),('two.jpg',1,1,2,'2026-10-24 16:15:00'),('legacy.jpg',1,1,NULL,NULL)`);

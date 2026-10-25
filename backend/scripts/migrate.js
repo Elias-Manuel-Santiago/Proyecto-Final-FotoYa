@@ -6,8 +6,8 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { protectUsers } from './lib/protect-users.js';
-import { seedPermissions } from './lib/seed-permissions.js';
 import { migrateVerifications } from './lib/migrate-verifications.js';
+import { migrateEmployeeRoles } from './lib/migrate-employee-roles.js';
 
 // Inspeccionar el esquema permite repetir la actualización sin tablas auxiliares.
 export async function migrate(db, env, { init = false } = {}) {
@@ -99,7 +99,7 @@ export async function migrate(db, env, { init = false } = {}) {
     }
     if (!await hasIndex('fotos', 'ix_fotos_puesto_cliente')) await connection.query('CREATE INDEX ix_fotos_puesto_cliente ON fotos (id_puesto, id_cliente, id_fotos)');
     await connection.beginTransaction();
-    await seedPermissions(connection);
+    await migrateEmployeeRoles(connection);
     // Check-in pertenece a la sesión del encargado. Una migración nunca libera un kiosco.
     for (const name of ['clients.read', 'clients.manage']) {
       const [inserted] = await connection.execute('INSERT IGNORE INTO permisos (tipo_de_permiso) VALUES (?)', [name]);

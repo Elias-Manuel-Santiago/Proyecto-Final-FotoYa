@@ -29,7 +29,7 @@ export interface GraphicPerson extends GraphicValues {
   stationId: string;
   employeeId: string | null;
   name: string;
-  role: 'seller' | 'photographer';
+  role: 'seller' | 'editor';
   opportunityTaken?: number;
   missingTimes?: number;
 }

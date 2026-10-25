@@ -53,7 +53,8 @@ const spanishRoles = {
   owner: 'dueno',
   manager: 'encargado',
   secretary: 'secretario',
-  photographer: 'camarografo',
+  editor: 'editor',
+  cameraman: 'camarografo',
   seller: 'vendedor',
   client: 'cliente',
 };
@@ -219,7 +220,7 @@ function fixture(
   return { api, repo, requests };
 }
 
-test('la matriz de fallback coincide con los seis roles del backend', () => {
+test('la matriz de fallback coincide con los siete roles del backend', () => {
   for (const [role, spanish] of Object.entries(spanishRoles)) {
     assert.deepEqual(
       [...rolePermissions[role as keyof typeof rolePermissions]].sort(),
@@ -271,8 +272,8 @@ test('un cliente sin puesto solo consulta su perfil y sus fotos', async () => {
   assert.equal(can(data.employees[0], 'reports.read'), false);
 });
 
-test('camarógrafo recibe vendidas desde conteos sin consultar ventas', async () => {
-  const { repo, requests } = fixture('camarografo');
+test('editor recibe vendidas desde conteos sin consultar ventas', async () => {
+  const { repo, requests } = fixture('editor');
   const data = await repo.snapshot(period);
   const rows = reportRows(data, data.employees[0], {
     ...period,
@@ -630,7 +631,13 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
 });
 
 test('sin check-in o en modo check-in el snapshot solo consulta el perfil', async () => {
-  for (const role of ['camarografo', 'vendedor', 'secretario', 'encargado']) {
+  for (const role of [
+    'editor',
+    'camarografo',
+    'vendedor',
+    'secretario',
+    'encargado',
+  ]) {
     const { repo, requests } = fixture(role, {
       'auth/me': {
         ...actor(role),
@@ -713,8 +720,8 @@ test('la lista de venta cambia de día a medianoche de Argentina', () => {
   );
 });
 
-test('conteos del camarógrafo no compensan días con sobreventa entre sí', async () => {
-  const { repo } = fixture('camarografo', {
+test('conteos del editor no compensan días con sobreventa entre sí', async () => {
+  const { repo } = fixture('editor', {
     'reports/days/query': [
       {
         stationId: '1',
@@ -839,7 +846,7 @@ test('gráficos normaliza agregados, horas y turnos sin inventar autores; el enc
           stationId: 1,
           employeeId: null,
           name: 'Sin autor',
-          role: 'photographer',
+          role: 'editor',
           taken: '10',
           sold: '2',
           sales: '3',

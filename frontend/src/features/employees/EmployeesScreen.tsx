@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Field } from '../../components/ui/Field';
 import { Select } from '../../components/ui/Select';
+import { FilterSection } from '../../components/filters/FilterSection';
 import { EmptyState, Feedback } from '../../components/ui/Feedback';
 import { Button } from '../../components/ui/Button';
 import { Screen } from '../../components/ui/Screen';
@@ -105,21 +106,23 @@ function EmployeeDirectory() {
           <Feedback error={directoryError} />
         </>
       )}
-      <Field
-        label="Buscar por nombre, email o DNI"
-        value={search}
-        onChangeText={setSearch}
-      />
-      <Select
-        label="Estado"
-        value={status}
-        onChange={setStatus}
-        options={[
-          { value: 'all', label: 'Todos' },
-          { value: 'active', label: 'Activos' },
-          { value: 'inactive', label: 'Inactivos' },
-        ]}
-      />
+      <FilterSection>
+        <Field
+          label="Buscar por nombre, email o DNI"
+          value={search}
+          onChangeText={setSearch}
+        />
+        <Select
+          label="Estado"
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: 'all', label: 'Todos' },
+            { value: 'active', label: 'Activos' },
+            { value: 'inactive', label: 'Inactivos' },
+          ]}
+        />
+      </FilterSection>
       {!rows.length && <EmptyState />}
       <ResponsiveGrid>
         {rows.map((row) => (

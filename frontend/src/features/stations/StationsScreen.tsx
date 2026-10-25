@@ -12,6 +12,10 @@ import { Field } from '../../components/ui/Field';
 import { EmptyState, Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
 import { Select } from '../../components/ui/Select';
+import { FilterSection } from '../../components/filters/FilterSection';
+import { ScopeColumns } from '../../components/filters/ScopeColumns';
+import { graphicScopes } from '../../domain/graphics';
+import { periodScopePatch, scopeColumns } from '../../domain/filter-scopes';
 import { useTheme } from '../../components/ui/theme';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
@@ -27,10 +31,13 @@ export function StationsScreen() {
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
+  const [scopeIds, setScopeIds] = useState<string[]>([]);
+  const selectedIds = periodScopePatch(data.stations, scopeIds).stationIds;
   const [pricing, setPricing] = useState('');
   const action = useAction();
   const rows = data.stations.filter(
     (row) =>
+      (selectedIds === undefined || selectedIds.includes(row.id)) &&
       (status === 'all' || (status === 'active') === (row.active !== false)) &&
       `${row.name} ${row.address} ${row.city} ${row.event}`
         .toLowerCase()
@@ -105,21 +112,28 @@ export function StationsScreen() {
           />
         </View>
       )}
-      <Field
-        label="Buscar puesto, dirección, ciudad o evento"
-        value={search}
-        onChangeText={setSearch}
-      />
-      <Select
-        label="Estado"
-        value={status}
-        onChange={setStatus}
-        options={[
-          { value: 'all', label: 'Todos' },
-          { value: 'active', label: 'Activos' },
-          { value: 'inactive', label: 'Inactivos' },
-        ]}
-      />
+      <FilterSection>
+        <ScopeColumns
+          columns={scopeColumns(graphicScopes(data.stations))}
+          selected={scopeIds}
+          onChange={setScopeIds}
+        />
+        <Field
+          label="Buscar puesto, dirección, ciudad o evento"
+          value={search}
+          onChangeText={setSearch}
+        />
+        <Select
+          label="Estado"
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: 'all', label: 'Todos' },
+            { value: 'active', label: 'Activos' },
+            { value: 'inactive', label: 'Inactivos' },
+          ]}
+        />
+      </FilterSection>
       {!rows.length && <EmptyState />}
       <ResponsiveGrid>
         {rows.map((station) => (

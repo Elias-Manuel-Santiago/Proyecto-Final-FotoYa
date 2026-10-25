@@ -65,17 +65,21 @@ export function AttendanceScreen() {
         period={period}
         stations={visibleStations(data, employee)}
         onChange={update}
-      />
-      <Select
-        label="Empleado"
-        value={employeeId}
-        onChange={setEmployeeId}
-        options={[
-          { value: '', label: 'Todos' },
-          ...employees.map((row) => ({ value: row.id, label: fullName(row) })),
-        ]}
-      />
-      <SortControl ascending={ascending} onChange={setAscending} />
+      >
+        <Select
+          label="Empleado"
+          value={employeeId}
+          onChange={setEmployeeId}
+          options={[
+            { value: '', label: 'Todos' },
+            ...employees.map((row) => ({
+              value: row.id,
+              label: fullName(row),
+            })),
+          ]}
+        />
+        <SortControl ascending={ascending} onChange={setAscending} />
+      </PeriodFilters>
       <Feedback error={error || refreshError} />
       <Text style={styles.muted}>
         {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}

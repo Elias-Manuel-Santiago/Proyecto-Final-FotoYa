@@ -47,7 +47,7 @@ const assignment = async (actor, input, connection) => {
   const previous = input.userId ? await userRepository.find(input.userId, connection) : null;
   if (role === 'checkin' || previous?.role === 'checkin')
     throw new ApiError(422, 'Check-in se activa desde una sesión del encargado.');
-  if (['encargado', 'camarografo', 'vendedor'].includes(role) && !input.stationId) throw new ApiError(422, 'El rol requiere un puesto.');
+  if (['encargado', 'editor', 'camarografo', 'vendedor'].includes(role) && !input.stationId) throw new ApiError(422, 'El rol requiere un puesto.');
   assertAssignable(actor, role, input.stationId);
   if (input.stationId) {
     const [[station]] = await connection.execute('SELECT disponible AS active FROM puesto WHERE id_puesto = ? LOCK IN SHARE MODE', [input.stationId]);

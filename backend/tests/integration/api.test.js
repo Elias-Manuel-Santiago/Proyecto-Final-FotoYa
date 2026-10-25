@@ -75,7 +75,7 @@ before(async () => {
     recoveryMail.push({ email, code });
   } } });
   mock.module('../../src/integrations/auth0.js', { namedExports: { socialIdentity: async idToken => ({
-    subject: `google-oauth2|${idToken}`, email: idToken === 'owner' ? 'dueno@example.com' : `${idToken}@social.example.com`,
+    emailVerified: true, subject: `google-oauth2|${idToken}`, email: idToken === 'owner' ? 'dueno@example.com' : `${idToken}@social.example.com`,
   }) } });
   ({ authRepository } = await import('../../src/modules/auth/auth.repository.js'));
   ({ photoUploads, businessDate } = await import('../../src/modules/photos/photos.upload.js'));
@@ -84,7 +84,7 @@ before(async () => {
   await db.query("INSERT INTO ciudad (nombre) VALUES ('Ciudad')");
   await db.query("INSERT INTO puesto (nombre, direccion, id_ciudad) VALUES ('Uno','A',1),('Dos','B',1),('Sin registros','C',1)");
   for (const [key, role, station] of [['dueno', 'dueno', null], ['encargado', 'encargado', '1'], ['otroEncargado', 'encargado', '2'],
-    ['secretario', 'secretario', '1'], ['vendedor', 'vendedor', '1'], ['camarografo', 'camarografo', '1'], ['cliente', 'cliente', null], ['otroCliente', 'cliente', null]]) {
+    ['secretario', 'secretario', '1'], ['vendedor', 'vendedor', '1'], ['editor', 'editor', '1'], ['camarografo', 'camarografo', '1'], ['cliente', 'cliente', null], ['otroCliente', 'cliente', null]]) {
     const [[r]] = await db.execute('SELECT id_rol FROM rol WHERE nombre = ?', [role]);
     const dni = String(10000000 + Object.keys(users).length), email = `${key.toLowerCase()}@example.com`;
     const [result] = await db.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, password, id_rol, id_puesto)
@@ -103,7 +103,7 @@ before(async () => {
   await db.query('INSERT INTO precios_venta (id_venta,id_precio,precio_unitario_aplicado,cantidad) VALUES (1,1,20,30),(1,1,20,20),(2,2,25,20),(3,1,20,10)');
   await db.query('INSERT INTO fotos_venta (id_foto,id_venta) VALUES (1,1),(2,1)');
   await db.execute("INSERT INTO horarios (id_dias,id_usuario,check_in,check_out) VALUES (1,?,'2026-10-14 23:00:00','2026-10-15 01:00:00')", [users.vendedor]);
-  for (const role of ['secretario', 'vendedor', 'camarografo'])
+  for (const role of ['secretario', 'vendedor', 'editor', 'camarografo'])
     await db.execute("INSERT INTO horarios (id_dias,id_usuario,check_in) VALUES (1,?,'2026-10-14 12:00:00')", [users[role]]);
   const { createApp } = await import('../../src/app.js');
   const app = createApp();
@@ -114,6 +114,16 @@ after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
   if (db) await db.end();
   if (admin) { await admin.query(`DROP DATABASE IF EXISTS \`${database}\``); await admin.end(); }
+});
+
+integration('Camarógrafo consulta ventas pero no vende, carga ni asigna fotos', async () => {
+  assert.equal((await call('sales/query', period, 'camarografo')).status, 200);
+  assert.equal((await call('attendance/mine', period, 'camarografo')).status, 200);
+  for (const path of ['sales/create', 'sales/event', 'sales/photos', 'sales/photos/access', 'sales/photos/assign', 'photos/assign'])
+    assert.equal((await call(path, {}, 'camarografo')).status, 403, path);
+  assert.equal((await upload(undefined, { role: 'camarografo' })).status, 403);
+  const catalog = (await call('catalog/query', { resource: 'roles' }, 'encargado')).data.data;
+  for (const name of ['editor', 'camarografo', 'vendedor']) assert(catalog.some(role => role.name === name));
 });
 
 integration('la apertura no requiere tabla y la migración retira event_sales de bases anteriores', async () => {
@@ -158,7 +168,7 @@ integration('check-in: una sesión de trabajo y una de kiosco, activación concu
   const deviceToken = (await call('auth/login', credentials)).data.data.token;
   const device = request(deviceToken);
   assert.equal((await device('sales/query', period)).data.error.code, 'CHECK_IN_REQUIRED');
-  for (const name of ['dueno', 'secretario', 'vendedor', 'camarografo', 'cliente'])
+  for (const name of ['dueno', 'secretario', 'vendedor', 'editor', 'camarografo', 'cliente'])
     assert.equal((await call('attendance/kiosk/enter', {}, name)).status, 403);
   assert.equal((await call('attendance/kiosk/employees', {}, 'encargado')).status, 403);
   for (const path of ['users/check-in/create', 'users/check-in/update', 'users/check-in/password'])
@@ -304,7 +314,7 @@ integration('puestos: alta, baja reversible, permisos e historial', async () => 
   const [[existing]] = await db.query('SELECT MIN(disponible) AS active FROM puesto');
   assert.equal(Number(existing.active), 1);
   const input = { name: 'Nuevo puesto', address: 'Calle 123', city: 'Ciudad', event: 'Nuevo evento' };
-  for (const role of ['encargado', 'secretario', 'vendedor', 'camarografo', 'cliente']) {
+  for (const role of ['encargado', 'secretario', 'vendedor', 'editor', 'camarografo', 'cliente']) {
     assert.equal((await call('catalog/stations/create', input, role)).status, 403);
     assert.equal((await call('catalog/stations/availability', { stationId: '1', active: false }, role)).status, 403);
   }
@@ -503,7 +513,7 @@ integration('cliente durante carga y asignaciones concurrentes respetan permisos
   assert.equal((await call('photos/assign', { photoId, clientEmail: 'vendedor@example.com' }, 'encargado')).status, 422);
   const assignments = await Promise.all([
     call('photos/assign', { photoId, clientEmail: 'cliente@example.com' }, 'encargado'),
-    call('photos/assign', { photoId, clientEmail: 'otroCliente@example.com' }, 'camarografo'),
+    call('photos/assign', { photoId, clientEmail: 'otroCliente@example.com' }, 'editor'),
   ]);
   assert.deepEqual(assignments.map(r => r.status).sort(), [200, 409]);
 });
@@ -664,7 +674,7 @@ integration('encargado administra precios de su puesto y conserva tarifas histó
   const created = await call('catalog/prices/create', input, 'encargado');
   assert.equal(created.status, 200); const priceId = created.data.data.id;
   assert.equal((await call('catalog/prices/create', { ...input, stationId: '2' }, 'encargado')).status, 403);
-  for (const role of ['vendedor', 'secretario', 'camarografo', 'cliente'])
+  for (const role of ['vendedor', 'secretario', 'editor', 'cliente'])
     assert.equal((await call('catalog/prices/query', { stationId: '1' }, role)).status, 403);
   const [[foreign]] = await db.query('SELECT id_precios AS id FROM precios WHERE id_puesto=2 LIMIT 1');
   assert.equal((await call('catalog/prices/query', { stationId: '2' }, 'encargado')).status, 403);
@@ -744,8 +754,8 @@ integration('recuperación pública por Mailtrap reemplaza códigos y revoca tod
 
 integration('cambio de contraseña revoca sesiones y logout no altera asistencia', async () => {
   const [[before]] = await db.query('SELECT COUNT(*) AS count FROM horarios');
-  const changed = await call('auth/password/change', { currentPassword: 'Test-password-1234', password: 'Changed-password-1234' }, 'camarografo');
-  assert.equal(changed.status, 200); assert.equal((await call('auth/me', {}, 'camarografo')).status, 401);
+  const changed = await call('auth/password/change', { currentPassword: 'Test-password-1234', password: 'Changed-password-1234' }, 'editor');
+  assert.equal(changed.status, 200); assert.equal((await call('auth/me', {}, 'editor')).status, 401);
   assert.equal((await call('auth/logout', {}, 'cliente')).status, 200); assert.equal((await call('auth/me', {}, 'cliente')).status, 401);
   const [[after]] = await db.query('SELECT COUNT(*) AS count FROM horarios'); assert.equal(after.count, before.count);
 });
@@ -911,19 +921,24 @@ integration('clientes se consultan de a veinte, con búsqueda parcial por correo
   assert.equal((await call('clients/query', { search: 'dueno@example.com' })).data.data.clients.length, 0);
 });
 
-integration('registro social completa datos y código, conserva identidad y no vincula cuentas por correo', async () => {
+integration('registro social verificado inicia sesión sin datos personales ni código y no vincula cuentas por correo', async () => {
   assert.equal((await call('auth/social', { idToken: 'owner' }, 'anon')).data.error.code, 'ACCOUNT_EXISTS');
-  assert.equal((await call('auth/social', { idToken: 'social-test' }, 'anon')).data.data.registrationRequired, true);
-  const result = await call('auth/social', { idToken: 'social-test', firstName: 'Social', lastName: 'Cliente', dni: '88888888' }, 'anon');
+  const mailCount = verificationMail.length;
+  const result = await call('auth/social', { idToken: 'social-test' }, 'anon');
   assert.equal(result.status, 200);
-  const { verificationToken } = result.data.data;
-  assert.equal((await call('auth/verification/confirm', { verificationToken, code: verificationMail.at(-1).code }, 'anon')).status, 200);
+  assert.ok(result.data.data.token);
+  assert.equal(result.data.data.verificationToken, undefined);
+  assert.equal(verificationMail.length, mailCount);
+  tokens.socialClient = result.data.data.token;
+  assert.equal((await call('auth/me', {}, 'socialClient')).status, 200);
   const login = await call('auth/social', { idToken: 'social-test' }, 'anon');
   assert.equal(login.status, 200);
   tokens.socialClient = login.data.data.token;
   const profile = await call('auth/me', {}, 'socialClient');
   assert.equal(profile.data.data.role, 'cliente');
   const clientId = String(profile.data.data.id);
+  const [[stored]] = await db.execute('SELECT nombre, apellido, dni FROM usuarios WHERE id_usuario = ?', [clientId]);
+  assert.equal(stored.nombre, ''); assert.equal(stored.apellido, ''); assert.equal(stored.dni, null);
   await call('clients/deactivate', { clientId });
   assert.equal((await call('auth/social', { idToken: 'social-test' }, 'anon')).status, 403);
   assert.equal((await call('auth/me', {}, 'socialClient')).status, 401);

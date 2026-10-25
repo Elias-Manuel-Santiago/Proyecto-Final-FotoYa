@@ -9,7 +9,8 @@ export const roleLabels: Record<RoleId, string> = {
   owner: 'Dueño',
   manager: 'Encargado',
   secretary: 'Secretario',
-  photographer: 'Camarógrafo',
+  editor: 'Editor',
+  cameraman: 'Camarógrafo',
   seller: 'Vendedor',
   client: 'Cliente',
 };
@@ -72,7 +73,7 @@ export const rolePermissions: Record<RoleId, readonly Permission[]> = {
     'attendance.self',
     'sales.read',
   ],
-  photographer: [
+  editor: [
     'photos.read',
     'photos.upload',
     'photos.assign',
@@ -87,6 +88,7 @@ export const rolePermissions: Record<RoleId, readonly Permission[]> = {
     'attendance.self',
     'catalog.read',
   ],
+  cameraman: ['sales.read', 'counts.read', 'attendance.self', 'catalog.read'],
   client: ['photos.read'],
 };
 
@@ -107,7 +109,7 @@ export function can(employee: Employee, permission: Permission) {
 // Exige jornada abierta a los roles que la necesitan.
 export function canWork(employee: Employee) {
   return (
-    !['secretary', 'photographer', 'seller'].includes(employee.roleId) ||
+    !['secretary', 'editor', 'cameraman', 'seller'].includes(employee.roleId) ||
     employee.working === true
   );
 }
@@ -135,6 +137,14 @@ export function requireStation(employee: Employee, stationId: string) {
 // Define los roles ofrecidos en el formulario según quién administra usuarios.
 export function assignableRoles(employee: Employee): RoleId[] {
   return employee.roleId === 'owner'
-    ? ['owner', 'manager', 'secretary', 'photographer', 'seller', 'client']
-    : ['manager', 'photographer', 'seller'];
+    ? [
+        'owner',
+        'manager',
+        'secretary',
+        'editor',
+        'cameraman',
+        'seller',
+        'client',
+      ]
+    : ['manager', 'editor', 'cameraman', 'seller'];
 }

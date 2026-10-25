@@ -32,11 +32,11 @@ test('solo el dueño administra puestos y la baja conserva el historial', async 
     after.stations.find((row) => row.id === 'centro')?.active,
     false,
   );
-  const failed = await repo.uploadPhotos('photographer', 'centro', [image]);
+  const failed = await repo.uploadPhotos('editor', 'centro', [image]);
   assert.match(failed[0].error ?? '', /baja/);
   await repo.setStationActive('owner', 'centro', true);
   assert.equal(
-    (await repo.uploadPhotos('photographer', 'centro', [image]))[0].error,
+    (await repo.uploadPhotos('editor', 'centro', [image]))[0].error,
     undefined,
   );
 });

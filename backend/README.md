@@ -42,6 +42,10 @@ Sólo las contraseñas se guardan hasheadas con scrypt. Nombre, apellido, email 
 
 La actualización adapta instalaciones anteriores: descifra los datos personales con la `DATA_ENCRYPTION_KEY` anterior, elimina hashes de búsqueda y cambia `token_hash` por `token`. Las sesiones y tokens anteriores se invalidan porque sus valores originales no se pueden recuperar; será necesario iniciar sesión otra vez. La antigua tabla de reservas de carga se elimina; las fotos confirmadas se conservan. No borrar la clave anterior hasta completar la conversión. Al terminar elimina `backend_locks` y `backend_migrations`; no vuelve a crearlas. Los cambios de usuarios se coordinan bloqueando las filas del catálogo de roles dentro de la transacción. Las asignaciones de permisos existentes se conservan.
 
+### Roles de empleados
+
+`npm run db:migrate` convierte el rol Camarógrafo anterior en `editor`, conservando su ID, todos sus usuarios, permisos e historial. Crea un nuevo `camarografo` con los permisos iniciales del vendedor excepto `sales.create`: puede consultar ventas, conteos, catálogos y asistencia propia, pero no registrar ventas ni cargar/asignar fotos. Ambos roles requieren puesto y check-in. Repetir la migración conserva las cuentas del nuevo Camarógrafo y las asignaciones de permisos administradas. Desplegar backend y frontend junto con esta migración.
+
 Crear el primer dueño desde una terminal, dentro de `backend`:
 
 ```powershell
@@ -179,13 +183,13 @@ Conservar el mismo `operationId` y contenido al reintentar una venta: recupera s
 
 Contraseñas con scrypt (sal aleatoria, N=131072, r=8, p=1). Tokens de sesión aleatorios de 256 bits guardados sin hash. Los demás datos de la aplicación se almacenan sin hashes ni cifrado. La API sigue validando permisos, disponibilidad, vencimiento y revocación de sesiones; los listados de sesiones no exponen tokens.
 
-Los roles iniciales son `dueno`, `encargado`, `secretario`, `camarografo`, `vendedor` y `cliente`. Los permisos efectivos se consultan en `permisos_rol` en cada petición. Dueño y secretario tienen el alcance global definido para sus consultas; encargado y personal operativo quedan limitados a su puesto. El cliente sólo consulta sus fotos. Un puesto NULL nunca concede alcance global. El encargado no asigna roles globales ni administra usuarios fuera de su puesto. La API impide cambiar la propia asignación o desactivar la propia cuenta. Cambiar permisos en MySQL tiene efecto en la siguiente solicitud; el seed inicial no restablece asignaciones en cada migración.
+Los roles iniciales son `dueno`, `encargado`, `secretario`, `editor`, `camarografo`, `vendedor` y `cliente`. Los permisos efectivos se consultan en `permisos_rol` en cada petición. Dueño y secretario tienen el alcance global definido para sus consultas; encargado y personal operativo quedan limitados a su puesto. El cliente sólo consulta sus fotos. Un puesto NULL nunca concede alcance global. El encargado no asigna roles globales ni administra usuarios fuera de su puesto. La API impide cambiar la propia asignación o desactivar la propia cuenta. Cambiar permisos en MySQL tiene efecto en la siguiente solicitud; el seed inicial no restablece asignaciones en cada migración.
 
 El `.env.example` usa el proyecto Supabase **Foto Ya**, con bucket privado existente **Fotos**. La clave secreta sólo pertenece al backend. La autorización se hace en MySQL antes de pedir la firma; no crear políticas de lectura pública ni hacer público el bucket. Las URLs firmadas son capacidades temporales: duran 60 segundos por defecto (máximo configurable 300) y una URL ya emitida no se revoca al cerrar la sesión. La firma y carga usan el cliente oficial de Supabase; el navegador carga la imagen mediante GET propio de Supabase. Los archivos nuevos se suben con caché de cero segundos. [Referencia de acceso a archivos privados](https://supabase.com/docs/guides/storage/serving/downloads).
 
 ## Carga y asignación de fotos
 
-El camarógrafo y el encargado cargan y asignan fotos dentro de su puesto. Se admiten JPG, PNG y WebP de hasta 6 MiB, verificando la firma binaria del contenido. El nombre enviado por el usuario no determina la ruta de almacenamiento: se genera una ruta aleatoria. Cada solicitud carga una foto.
+El editor y el encargado cargan y asignan fotos dentro de su puesto. Se admiten JPG, PNG y WebP de hasta 6 MiB, verificando la firma binaria del contenido. El nombre enviado por el usuario no determina la ruta de almacenamiento: se genera una ruta aleatoria. Cada solicitud carga una foto.
 
 El campo `clientId` puede omitirse o enviarse vacío: la foto queda con `id_cliente = NULL`. Si se envía, debe identificar una cuenta cliente existente y disponible; no se exige que el cliente tenga un puesto asignado. Una foto sin cliente permanece visible sólo al personal con permiso y alcance sobre su puesto. Ningún cliente puede listarla, ver sus metadatos ni obtener una URL.
 
@@ -261,7 +265,7 @@ Ejecutar `npm run db:migrate` antes de iniciar esta versión. Agrega `usuarios.e
 
 Configurar `MAIL_API_KEY`, `MAIL_INBOX_ID` y `SENDER` según el sandbox de Mailtrap, como en RN1. El cliente usa siempre `sandbox: true`: los mensajes se consultan en el inbox de pruebas de Mailtrap y no se entregan a la casilla real. No hay credenciales de estos servicios en RN1 adjunto; sus `.env.example` son referencias, no configuraciones operativas.
 
-Configurar `AUTH0_DOMAIN` (hostname sin protocolo) y `AUTH0_CLIENT_IDS` (IDs Native y SPA separados por coma). Habilitar las conexiones Google (`google-oauth2`), GitHub (`github`), Apple (`apple`) y Amazon (`amazon`) en ambas aplicaciones de Auth0. El backend valida firma RS256/JWKS, issuer, audiencia y vencimiento del ID token; nunca toma correo, rol o ID social declarados por el frontend. Las identidades sociales se vinculan por `sub`, y no se fusionan automáticamente con cuentas existentes que compartan correo. El registro social pide nombre, apellido y DNI y también confirma correo mediante el código local.
+Configurar `AUTH0_DOMAIN` (hostname sin protocolo) y `AUTH0_CLIENT_IDS` (IDs Native y SPA separados por coma). Habilitar las conexiones Google (`google-oauth2`), GitHub (`github`), Apple (`apple`) y Amazon (`amazon`) en ambas aplicaciones de Auth0. El backend valida firma RS256/JWKS, issuer, audiencia y vencimiento del ID token; nunca toma correo, rol o ID social declarados por el frontend. Las identidades sociales se vinculan por `sub`, y no se fusionan automáticamente con cuentas existentes que compartan correo. El registro social usa el nombre y apellido compartidos por el proveedor, permite que falten y guarda DNI nulo. No pide completar datos personales. Si el ID token validado incluye `email_verified: true`, crea la sesión directamente; de lo contrario, confirma correo mediante el código local. Las cuentas sociales pendientes anteriores también se confirman al volver a ingresar con el mismo proveedor y correo verificado.
 
 La pantalla Usuarios del dueño agrega todas las cuentas del tenant Auth0, incluidas las que todavía no completaron el registro local. Crear una aplicación Machine-to-Machine, autorizarla para Auth0 Management API con `read:users` y configurar **solo en el backend** `AUTH0_MANAGEMENT_CLIENT_ID` y `AUTH0_MANAGEMENT_CLIENT_SECRET`. El backend obtiene y reutiliza el token mediante client credentials. No usar los IDs Native/SPA para esta credencial.
 
@@ -276,7 +280,7 @@ Todas estas rutas usan POST y el envelope habitual:
 | Ruta | Cuerpo y resultado |
 | --- | --- |
 | `auth/register` | `{ firstName, lastName, email, dni, password }` → `{ verificationToken, email, expiresIn }` |
-| `auth/social` | `{ idToken, firstName?, lastName?, dni? }` → sesión, verificación o `{ registrationRequired: true, email }` |
+| `auth/social` | `{ idToken }` → sesión o verificación de correo |
 | `auth/verification/start` | `{ email, password }` → reinicia verificación de una cuenta local pendiente |
 | `auth/verification/resend` | `{ verificationToken }` → nuevo desafío; invalida el anterior |
 | `auth/verification/confirm` | `{ verificationToken, code }` → confirma correo y crea sesión |

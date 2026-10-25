@@ -41,8 +41,8 @@ export const graphicsRepository = {
       GROUP BY d.id_puesto,v.id_vendedor,u.nombre,u.apellido`, [input.from, input.to, input.from, input.to, ...params]);
 
     // El importe se reparte por foto cuando una venta histórica vincula más de una familia.
-    const [photographers] = await connection.execute(`SELECT d.id_puesto AS stationId, f.id_camarografo AS employeeId,
-      'photographer' AS role, COALESCE(CONCAT(u.nombre,' ',u.apellido),'Sin camarógrafo registrado') AS name,
+    const [editors] = await connection.execute(`SELECT d.id_puesto AS stationId, f.id_camarografo AS employeeId,
+      'editor' AS role, COALESCE(CONCAT(u.nombre,' ',u.apellido),'Sin editor registrado') AS name,
       COUNT(DISTINCT f.id_fotos) AS taken, COUNT(DISTINCT v.id_venta) AS sales,
       COALESCE(SUM(v.precio_total / links.photos),0) AS earnings,
       COUNT(DISTINCT CASE WHEN v.id_venta IS NOT NULL THEN f.id_fotos END) AS sold
@@ -53,7 +53,7 @@ export const graphicsRepository = {
       GROUP BY d.id_puesto,f.id_camarografo,u.nombre,u.apellido`, params);
 
     const [unattributed] = await connection.execute(`SELECT d.id_puesto AS stationId,NULL AS employeeId,
-      'photographer' AS role,'Sin camarógrafo registrado' AS name,
+      'editor' AS role,'Sin editor registrado' AS name,
       SUM(GREATEST(d.fotos-(SELECT COUNT(*) FROM fotos f WHERE f.id_dia=d.id_dias),0)) AS taken,
       COALESCE(SUM(v.sales),0) AS sales,COALESCE(SUM(v.earnings),0) AS earnings,COALESCE(SUM(v.sold),0) AS sold
       FROM dias d LEFT JOIN (SELECT v.id_dias,COUNT(*) AS sales,SUM(v.precio_total) AS earnings,
@@ -65,11 +65,11 @@ export const graphicsRepository = {
     // También aparecen empleados que trabajaron y no registraron producción o ventas.
     const [workers] = await connection.execute(`SELECT DISTINCT d.id_puesto AS stationId,h.id_usuario AS employeeId,
       CONCAT(u.nombre,' ',u.apellido) AS name,
-      CASE r.nombre WHEN 'vendedor' THEN 'seller' ELSE 'photographer' END AS role,
+      CASE r.nombre WHEN 'vendedor' THEN 'seller' ELSE 'editor' END AS role,
       ${opportunities('h.id_usuario')} AS opportunityTaken,${missingTimes} AS missingTimes
       FROM horarios h JOIN dias d ON d.id_dias=h.id_dias JOIN usuarios u ON u.id_usuario=h.id_usuario
       JOIN rol r ON r.id_rol=u.id_rol WHERE d.fecha BETWEEN ? AND ?${scope}
-      AND r.nombre IN ('vendedor','camarografo')`, [input.from, input.to, input.from, input.to, ...params]);
+      AND r.nombre IN ('vendedor','editor')`, [input.from, input.to, input.from, input.to, ...params]);
     let hours = [], attendance = [];
     if (input.day) {
       const dayParams = [input.day, ...(station ? [station] : [])];
@@ -96,7 +96,7 @@ export const graphicsRepository = {
         AND (COALESCE(h.check_out,h.closed_at) IS NULL OR COALESCE(h.check_out,h.closed_at) > CONCAT(?,' 03:00:00'))${scope}
         ORDER BY d.id_puesto,h.check_in`, [input.day, input.day, ...(station ? [station] : [])]);
     }
-    return { days, hours, people: [...sellers, ...photographers, ...unattributed], workers, attendance };
+    return { days, hours, people: [...sellers, ...editors, ...unattributed], workers, attendance };
     });
   },
 };

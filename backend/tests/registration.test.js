@@ -19,6 +19,8 @@ test('registro público fija cliente sin aceptar rol, puesto, disponibilidad ni 
   assert.equal(register.parse(input).dni, '12345678');
   for (const extra of [{ roleId: '1' }, { stationId: '1' }, { active: true }, { email_verified: true }])
     assert.equal(register.safeParse({ ...input, ...extra }).success, false);
+  assert.equal(social.safeParse({ idToken: 'signed' }).success, true);
+  assert.equal(social.safeParse({ idToken: 'signed', dni: '12345678' }).success, false);
   assert.equal(social.safeParse({ idToken: 'signed', email: 'forged@example.com' }).success, false);
   assert.equal(clientQuery.safeParse({ offset: 1 }).success, false);
   assert.equal(clientQuery.safeParse({ limit: 100 }).success, false);
@@ -33,9 +35,15 @@ test('Auth0 rechaza firma falsa, issuer, audience, vencimiento y proveedores dis
     const token = (claims = {}, key = privateKey) => new SignJWT({ sub: 'google-oauth2|123', email: 'ANA@example.com', ...claims })
       .setProtectedHeader({ alg: 'RS256' }).setIssuer('https://test.auth0.com/').setAudience('web')
       .setIssuedAt().setExpirationTime('5m').sign(key);
-    assert.deepEqual(await verifySocialToken(await token(), publicKey), { subject: 'google-oauth2|123', email: 'ana@example.com' });
+    assert.deepEqual(await verifySocialToken(await token(), publicKey), { subject: 'google-oauth2|123', email: 'ana@example.com', emailVerified: false, firstName: '', lastName: '' });
     assert.deepEqual(await verifySocialToken(await token({ sub: 'amazon|amzn1.account.123' }), publicKey),
-      { subject: 'amazon|amzn1.account.123', email: 'ana@example.com' });
+      { subject: 'amazon|amzn1.account.123', email: 'ana@example.com', emailVerified: false, firstName: '', lastName: '' });
+    assert.deepEqual(await verifySocialToken(await token({ given_name: ' Ana ', family_name: ' Pérez ' }), publicKey),
+      { subject: 'google-oauth2|123', email: 'ana@example.com', emailVerified: false, firstName: 'Ana', lastName: 'Pérez' });
+    assert.equal((await verifySocialToken(await token({ name: 'Display name' }), publicKey)).firstName, 'Display name');
+    assert.equal((await verifySocialToken(await token({ email_verified: true }), publicKey)).emailVerified, true);
+    for (const value of [false, 'true', 1, null])
+      assert.equal((await verifySocialToken(await token({ email_verified: value }), publicKey)).emailVerified, false);
     for (const value of [await token({}, alien.privateKey),
       await new SignJWT({ sub: 'github|123', email: 'a@example.com' }).setProtectedHeader({ alg: 'RS256' }).setIssuer('https://evil.example/').setAudience('web').setIssuedAt().setExpirationTime('5m').sign(privateKey),
       await new SignJWT({ sub: 'github|123', email: 'a@example.com' }).setProtectedHeader({ alg: 'RS256' }).setIssuer('https://test.auth0.com/').setAudience('other').setIssuedAt().setExpirationTime('5m').sign(privateKey),

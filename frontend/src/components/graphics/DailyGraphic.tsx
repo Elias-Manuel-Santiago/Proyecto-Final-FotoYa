@@ -136,6 +136,7 @@ export function DailyGraphic({
                             {(
                               {
                                 vendedor: 'Vendedor',
+                                editor: 'Editor',
                                 camarografo: 'Camarógrafo',
                                 encargado: 'Encargado',
                                 secretario: 'Secretario',

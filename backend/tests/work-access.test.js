@@ -14,7 +14,7 @@ const check = (role, path, overrides = {}, auth = false) => {
   return allowed;
 };
 test('empleados fuera de jornada solo conservan acceso a su cuenta', () => {
-  for (const role of ['secretario', 'camarografo', 'vendedor']) {
+  for (const role of ['secretario', 'editor', 'camarografo', 'vendedor']) {
     assert.equal(check(role, '/me', { working: false }, true), true);
     assert.equal(check(role, '/password/change', { working: false }, true), true);
     for (const path of ['/photos/query', '/sales/create', '/attendance/mine', '/catalog/query', '/users/query']) {

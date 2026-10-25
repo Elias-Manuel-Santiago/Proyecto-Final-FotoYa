@@ -32,7 +32,7 @@ export function EmployeeForm({
     lastName: existing?.lastName ?? '',
     email: existing?.email ?? '',
     dni: existing?.dni ?? '',
-    roleId: existing?.roleId ?? 'photographer',
+    roleId: existing?.roleId ?? 'editor',
     stationId: existing?.stationId ?? employee.stationId,
   }));
   const action = useAction();

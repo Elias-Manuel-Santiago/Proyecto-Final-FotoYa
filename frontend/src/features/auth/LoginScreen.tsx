@@ -21,7 +21,6 @@ import { useTheme } from '../../components/ui/theme';
 interface AuthResult {
   token?: string;
   verificationToken?: string;
-  registrationRequired?: boolean;
   email?: string;
 }
 
@@ -39,7 +38,6 @@ export function LoginScreen() {
   const [dni, setDni] = useState('');
   const [code, setCode] = useState('');
   const [verificationToken, setVerificationToken] = useState('');
-  const [idToken, setIdToken] = useState('');
   const [busy, setBusy] = useState(false);
   const {
     localError,
@@ -58,11 +56,10 @@ export function LoginScreen() {
     const timer = setTimeout(() => setCanResend(true), 60000);
     return () => clearTimeout(timer);
   }, [verificationToken]);
-  // Interpreta si la respuesta trae sesión, confirmación pendiente o datos personales faltantes.
+  // Interpreta si la respuesta trae sesión o confirmación de correo pendiente.
   async function result(value: AuthResult) {
     clearErrors();
     if (value.token) {
-      setIdToken('');
       setPassword('');
       await acceptSession(value.token);
     } else if (value.verificationToken) {
@@ -76,9 +73,6 @@ export function LoginScreen() {
       setNotice(
         'Enviamos un código de seis dígitos a tu correo. Vence en diez minutos.',
       );
-    } else if (value.registrationRequired) {
-      setEmail(value.email ?? '');
-      setMode('social');
     }
   }
   // Gestiona el estado ocupado y convierte fallos de autenticación en mensajes del formulario.
@@ -99,7 +93,6 @@ export function LoginScreen() {
     if (!token || consumed.current === token) return;
     consumed.current = token;
     social.consume();
-    setIdToken(token);
     void run(async () =>
       result(
         await repository.api.post<AuthResult>('auth/social', {
@@ -148,15 +141,6 @@ export function LoginScreen() {
           password,
         }),
       );
-    } else if (mode === 'social') {
-      await result(
-        await repository.api.post<AuthResult>('auth/social', {
-          idToken,
-          firstName,
-          lastName,
-          dni,
-        }),
-      );
     } else {
       await result(
         await repository.api.post<AuthResult>('auth/verification/confirm', {
@@ -167,7 +151,7 @@ export function LoginScreen() {
     }
   }
   if (employee) return <Redirect href="/home" />;
-  const creating = mode === 'register' || mode === 'social';
+  const creating = mode === 'register';
   return (
     <Screen compact title="Foto Ya">
       <Image
@@ -218,7 +202,7 @@ export function LoginScreen() {
           />
         </>
       )}
-      {mode === 'verify' || mode === 'social' ? (
+      {mode === 'verify' ? (
         <Text style={styles.text}>{email}</Text>
       ) : (
         <Field
@@ -328,7 +312,6 @@ export function LoginScreen() {
           setNotice('');
           setPassword('');
           setConfirmation('');
-          setIdToken('');
           setVerificationToken('');
         }}
       />
@@ -350,7 +333,6 @@ export function LoginScreen() {
               onPress={() => {
                 void run(async () => {
                   const token = await social.signIn(connection);
-                  setIdToken(token);
                   await result(
                     await repository.api.post<AuthResult>('auth/social', {
                       idToken: token,

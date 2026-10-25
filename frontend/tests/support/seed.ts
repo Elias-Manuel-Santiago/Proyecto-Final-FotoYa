@@ -40,12 +40,12 @@ export function createSeed(): AppData {
       active: true,
     },
     {
-      id: 'photographer',
+      id: 'editor',
       firstName: 'Diego',
       lastName: 'Ruiz',
       email: 'diego@example.com',
       dni: '33444555',
-      roleId: 'photographer',
+      roleId: 'editor',
       stationId: 'centro',
       active: true,
     },
@@ -127,7 +127,7 @@ export function createSeed(): AppData {
     attendance: [
       {
         id: 'attendance-1',
-        employeeId: 'photographer',
+        employeeId: 'editor',
         stationId: 'centro',
         date: today,
         checkIn: `${today}T11:00:00.000Z`,

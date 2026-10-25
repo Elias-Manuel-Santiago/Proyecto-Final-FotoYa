@@ -63,8 +63,9 @@ export function SalesScreen() {
         period={period}
         stations={visibleStations(data, employee)}
         onChange={update}
-      />
-      <SortControl ascending={ascending} onChange={setAscending} />
+      >
+        <SortControl ascending={ascending} onChange={setAscending} />
+      </PeriodFilters>
       <Feedback error={error || refreshError} />
       <Text style={styles.muted}>
         {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}

@@ -26,7 +26,10 @@ export async function verifySocialToken(idToken, keySet) {
       throw new ApiError(401, 'El proveedor de acceso social no está habilitado.', 'INVALID_SOCIAL_IDENTITY');
     if (!z.email().safeParse(typeof payload.email === 'string' ? payload.email.trim() : null).success)
       throw new ApiError(401, 'El proveedor no compartió un correo válido. Revisá los permisos de correo y volvé a ingresar.', 'INVALID_SOCIAL_IDENTITY');
-    return { subject: payload.sub, email: payload.email.trim().toLowerCase() };
+    const profileName = value => typeof value === 'string' ? [...value.trim()].slice(0, 100).join('') : '';
+    return { subject: payload.sub, email: payload.email.trim().toLowerCase(), emailVerified: payload.email_verified === true,
+      firstName: profileName(payload.given_name) || profileName(payload.name),
+      lastName: profileName(payload.family_name) };
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(401, 'La identidad social no es válida o no incluye un correo. Volvé a ingresar.', 'INVALID_SOCIAL_IDENTITY');

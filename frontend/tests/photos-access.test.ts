@@ -12,8 +12,8 @@ import { image, now, repository, sale, today } from './fixtures';
 
 test('cada envío registra una foto nueva, conserva su referencia y no registra ventas', async () => {
   const repo = repository();
-  await repo.uploadPhotos('photographer', 'centro', [image]);
-  await repo.uploadPhotos('photographer', 'centro', [image]);
+  await repo.uploadPhotos('editor', 'centro', [image]);
+  await repo.uploadPhotos('editor', 'centro', [image]);
   const data = await repo.snapshot();
   assert.equal(
     data.counts.find((row) => row.stationId === 'centro' && row.date === today)
@@ -36,17 +36,17 @@ test('una carga parcial cuenta solo confirmadas y admite reintentar la fallida',
     },
   });
   const batch = [image, { ...image, key: 'photo-2' }];
-  const results = await repo.uploadPhotos('photographer', 'centro', batch);
+  const results = await repo.uploadPhotos('editor', 'centro', batch);
   assert.equal(results[1].error, 'Fallo de prueba');
   assert.equal((await repo.snapshot()).counts[0].taken, 101);
   failing = false;
-  await repo.uploadPhotos('photographer', 'centro', [batch[1]]);
+  await repo.uploadPhotos('editor', 'centro', [batch[1]]);
   assert.equal((await repo.snapshot()).counts[0].taken, 102);
 });
 
 test('archivos vacíos o que no son imágenes no incrementan el conteo', async () => {
   const repo = repository();
-  const results = await repo.uploadPhotos('photographer', 'centro', [
+  const results = await repo.uploadPhotos('editor', 'centro', [
     { ...image, size: 0 },
     { ...image, key: 'text', mimeType: 'text/plain' },
   ]);
@@ -59,7 +59,7 @@ test('la matriz de permisos distingue administración, consulta y operación', (
   const get = (id: string) => data.employees.find((row) => row.id === id)!;
   for (const id of ['owner', 'secretary'])
     assert.equal(visibleStations(data, get(id)).length, 3);
-  for (const id of ['manager', 'photographer', 'seller'])
+  for (const id of ['manager', 'editor', 'seller'])
     assert.deepEqual(
       visibleStations(data, get(id)).map((row) => row.id),
       ['centro'],
@@ -78,7 +78,7 @@ test('la matriz de permisos distingue administración, consulta y operación', (
 
 test('el adaptador rechaza operaciones invocadas sin permiso o en otro puesto', async () => {
   const repo = repository();
-  await assert.rejects(repo.recordSale('photographer', sale), /permiso/);
+  await assert.rejects(repo.recordSale('editor', sale), /permiso/);
   await assert.rejects(repo.recordSale('owner', sale), /permiso/);
   await assert.rejects(
     repo.recordSale('manager', { ...sale, stationId: 'parque' }),
