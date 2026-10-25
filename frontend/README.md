@@ -85,6 +85,8 @@ En **Estadísticas e ingresos**, el encargado consulta únicamente su puesto asi
 
 Desde el login se puede crear una cuenta local de cliente o continuar con Google, GitHub o Apple. El alta pide nombre, apellido y DNI; la local también pide correo y contraseña confirmada de 12–128 caracteres. Ambos registros exigen confirmar un código enviado mediante el sandbox de Mailtrap, con opción de reenvío. El backend debe tener aplicada la migración y configurado Mailtrap.
 
+Debajo del campo contraseña, «Olvidé mi contraseña» permite recuperar una cuenta local: se ingresa el email y luego el código de seis dígitos junto con la nueva contraseña y su confirmación (12–128 caracteres). El código vence en diez minutos, admite cinco intentos y puede reenviarse después de un minuto. El envío usa el mismo inbox de Mailtrap Sandbox que el registro. Al completar el cambio se cierran las sesiones anteriores y se vuelve a iniciar sesión. Las cuentas sociales continúan usando su proveedor.
+
 Configurar las variables de `frontend/.env.example`: `EXPO_PUBLIC_AUTH0_DOMAIN`, `EXPO_PUBLIC_AUTH0_CLIENT_ID` (aplicación Native) y `EXPO_PUBLIC_AUTH0_WEB_CLIENT_ID` (aplicación SPA). Sus IDs deben coincidir con `AUTH0_CLIENT_IDS` del backend. `app.config.js` habilita el plugin de Auth0 cuando hay configuración nativa; usa el esquema `fotoya`, bundle ID y package `com.fotoya.app`. Se incluyó `expo-dev-client`: Auth0 móvil requiere una nueva build de desarrollo, no Expo Go.
 
 En Auth0, configurar callbacks/logout para Native:

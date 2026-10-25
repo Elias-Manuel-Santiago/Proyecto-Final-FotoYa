@@ -23,3 +23,8 @@ export const social = z.object({ idToken: z.string().min(1).max(16000), ...Objec
 // El desafío vincula reenvío y confirmación sin revelar el código enviado por correo.
 export const challenge = z.object({ verificationToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
 export const verify = challenge.extend({ code: z.string().regex(/^\d{6}$/) }).strict();
+export const passwordResetStart = z.object({ email }).strict();
+export const passwordResetConfirm = z.object({
+  recoveryToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  code: z.string().regex(/^\d{6}$/), password,
+}).strict();

@@ -14,7 +14,11 @@ export function useAction() {
   const [success, setSuccess] = useState('');
 
   // Ignora ejecuciones simultáneas y libera el estado ocupado al resolver o fallar.
-  async function run(action: () => Promise<void>, message = '') {
+  async function run(
+    action: () => Promise<void>,
+    message = '',
+    onError?: (cause: unknown) => void,
+  ) {
     if (running.current) return;
     running.current = true;
     setBusy(true);
@@ -24,7 +28,8 @@ export function useAction() {
       await action();
       setSuccess(message);
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (onError) onError(cause);
+      else setError(errorMessage(cause));
     } finally {
       running.current = false;
       setBusy(false);

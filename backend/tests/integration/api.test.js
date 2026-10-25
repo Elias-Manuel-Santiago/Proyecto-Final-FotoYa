@@ -29,6 +29,7 @@ const objects = new Map(), storageCalls = { uploads: 0 };
 let failureMode = null;
 let removalFailure = false;
 const verificationMail = [];
+const recoveryMail = [];
 let mailFailure = false;
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=', 'base64');
 const storage = {
@@ -69,6 +70,9 @@ before(async () => {
   mock.module('../../src/integrations/mail.js', { namedExports: { sendVerification: async (email, code) => {
     if (mailFailure) throw new ApiError(502, 'Correo no disponible.', 'MAIL_UNAVAILABLE');
     verificationMail.push({ email, code });
+  }, sendPasswordReset: async (email, code) => {
+    if (mailFailure) throw new ApiError(502, 'Correo no disponible.', 'MAIL_UNAVAILABLE');
+    recoveryMail.push({ email, code });
   } } });
   mock.module('../../src/integrations/auth0.js', { namedExports: { socialIdentity: async idToken => ({
     subject: `google-oauth2|${idToken}`, email: idToken === 'owner' ? 'dueno@example.com' : `${idToken}@social.example.com`,
@@ -702,6 +706,40 @@ integration('ventas solo lista, previsualiza y vende fotos del día actual de Ar
   assert.equal((await call('sales/photos/access', { photoId: '1' }, 'vendedor')).status, 404);
   assert.equal((await call('sales/create', input, 'vendedor')).status, 422);
   await kioskCall('1', false);
+});
+
+integration('recuperación pública por Mailtrap reemplaza códigos y revoca todas las sesiones sin habilitar cuentas sociales', async () => {
+  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='cliente'");
+  const email = 'recuperar@example.com', password = 'Recovered-password-1234';
+  const [created] = await db.execute(`INSERT INTO usuarios (nombre,apellido,email,dni,password,id_rol)
+    VALUES ('Recuperar','Prueba',?,'99887766',?,?)`, [email, passwordHash, role.id_rol]);
+  const oldLogin = await call('auth/login', { email, password: 'Test-password-1234' }, 'anon');
+  assert.equal(oldLogin.status, 200);
+  const start = () => call('auth/password/reset/start', { email }, 'anon');
+  const first = (await start()).data.data;
+  const originalMail = recoveryMail.at(-1), mailCount = recoveryMail.length;
+  assert.equal(originalMail.email, email); assert.match(originalMail.code, /^\d{6}$/);
+  assert.equal((await start()).status, 200); assert.equal(recoveryMail.length, mailCount);
+  await db.execute("UPDATE tokens_autenticacion SET sent_at = TIMESTAMPADD(MINUTE,-2,UTC_TIMESTAMP(6)) WHERE id_usuario=?", [created.insertId]);
+  mailFailure = true;
+  try { assert.equal((await start()).status, 502); } finally { mailFailure = false; }
+  const [[preserved]] = await db.execute("SELECT used_at FROM tokens_autenticacion WHERE id_usuario=? AND tipo='password_reset'", [created.insertId]);
+  assert.equal(preserved.used_at, null);
+  const second = (await start()).data.data;
+  const body = { recoveryToken: second.recoveryToken, code: recoveryMail.at(-1).code, password };
+  assert.equal((await call('auth/password/reset/confirm', { ...body, recoveryToken: first.recoveryToken, code: originalMail.code }, 'anon')).status, 422);
+  const confirmations = await Promise.all([call('auth/password/reset/confirm', body, 'anon'), call('auth/password/reset/confirm', body, 'anon')]);
+  assert.deepEqual(confirmations.map(response => response.status).sort(), [200, 422]);
+  assert.deepEqual(confirmations.find(response => response.status === 200).data.data, { changed: true, loginRequired: true });
+  assert.equal((await http.post('/api/auth/me', {}, { headers: { Authorization: `Bearer ${oldLogin.data.data.token}` } })).status, 401);
+  assert.equal((await call('auth/login', { email, password: 'Test-password-1234' }, 'anon')).status, 401);
+  assert.equal((await call('auth/login', { email, password }, 'anon')).status, 200);
+  assert.equal((await call('auth/password/reset/confirm', body, 'anon')).status, 422);
+  await db.execute('UPDATE usuarios SET auth0_sub=? WHERE id_usuario=?', ['google-oauth2|recovery-test', created.insertId]);
+  const count = recoveryMail.length;
+  const social = await start(), unknown = await call('auth/password/reset/start', { email: 'unknown@example.com' }, 'anon');
+  assert.equal(social.status, 200); assert.equal(unknown.status, 200); assert.equal(recoveryMail.length, count);
+  assert.deepEqual(Object.keys(social.data.data), Object.keys(unknown.data.data));
 });
 
 integration('cambio de contraseña revoca sesiones y logout no altera asistencia', async () => {

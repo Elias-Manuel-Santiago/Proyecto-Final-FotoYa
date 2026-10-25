@@ -107,7 +107,7 @@ Después de actualizar, ejecutar `npm run db:migrate`: agrega `puesto.disponible
 
 Las respuestas exitosas usan `{ "data": ... }`; los errores `{ "error": { "code", "message", "requestId" } }`. Los listados devuelven un array. Paginación: `limit` (1–100, predeterminado 30), `offset` (predeterminado 0). Una página con menos elementos que `limit` indica el final. Los identificadores se envían como strings; los IDs de catálogo también deben convertirse a strings al usarlos como entrada. Los importes DECIMAL y algunos agregados se entregan como strings para conservar precisión.
 
-Salvo `/api/health` y `/api/auth/login`, enviar `Authorization: Bearer <token>`. El actor siempre se obtiene de la sesión; nunca se acepta un actor enviado en el cuerpo. Los campos desconocidos se rechazan. `OPTIONS` queda disponible para CORS, y GET responde 405.
+Las rutas de health, login, registro local/social, verificación de correo y recuperación de contraseña son públicas. Para las demás, enviar `Authorization: Bearer <token>`. El actor siempre se obtiene de la sesión; nunca se acepta un actor enviado en el cuerpo. Los campos desconocidos se rechazan. `OPTIONS` queda disponible para CORS, y GET responde 405.
 
 | Ruta POST | Cuerpo / función |
 | --- | --- |
@@ -268,6 +268,8 @@ Todas estas rutas usan POST y el envelope habitual:
 | `auth/verification/start` | `{ email, password }` → reinicia verificación de una cuenta local pendiente |
 | `auth/verification/resend` | `{ verificationToken }` → nuevo desafío; invalida el anterior |
 | `auth/verification/confirm` | `{ verificationToken, code }` → confirma correo y crea sesión |
+| `auth/password/reset/start` | `{ email }` → `{ recoveryToken, email, expiresIn }`; solicita o reenvía el código de recuperación |
+| `auth/password/reset/confirm` | `{ recoveryToken, code, password }` → `{ changed: true, loginRequired: true }` |
 | `clients/query` | `{ search?: string, offset?: number }` → `{ clients, hasMore }`; 20 filas, offset múltiplo de 20 |
 | `clients/deactivate` | `{ clientId }` → `{ deactivated: true }` |
 
@@ -275,7 +277,11 @@ El código tiene seis dígitos, vence en diez minutos y admite cinco intentos. E
 
 `clients/query` devuelve únicamente clientes disponibles, busca por coincidencia parcial de correo o DNI y usa una fila adicional para `hasMore`. La baja conserva la fila y el historial, pone `disponible=FALSE` y revoca sesiones y tokens, incluida la verificación pendiente. Se revalida el permiso dentro de la transacción.
 
-Quedan pendientes ganancias netas, recuperación de contraseña, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API; las simulaciones sólo se usan en `frontend/tests/support`.
+La recuperación de contraseña es pública y usa el mismo Mailtrap Sandbox y las mismas variables de correo. En el login, «Olvidé mi contraseña» abre el formulario de email, código de seis dígitos y nueva contraseña (12–128 caracteres, con confirmación). El código vence a los diez minutos y se bloquea después de cinco intentos incorrectos. El reenvío se habilita después de un minuto e invalida el desafío anterior. Los mensajes se consultan en Mailtrap, igual que los de registro.
+
+Se utiliza `tokens_autenticacion` con `tipo = 'password_reset'`, separado de la verificación de correo; no requiere cambios de esquema en una base ya actualizada. Sólo se guardan digests del desafío y del código vinculado. Las solicitudes para cuentas inexistentes, inactivas, sociales o Check-in devuelven la misma forma de respuesta sin enviar correo ni habilitar contraseñas locales. Para no revelar cuentas por el tiempo de espera, una solicitud dentro del minuto también devuelve esa respuesta sin modificar ni reenviar el código pendiente; se puede volver a solicitar desde el formulario después de un minuto. Si Mailtrap falla, se revierte el envío y se conserva el desafío previo. Al confirmar se cambia el hash scrypt, se revocan todas las sesiones y tokens pendientes y se exige un nuevo login. El cambio no modifica la verificación del email ni la disponibilidad de la cuenta.
+
+Quedan pendientes ganancias netas, correcciones/auditoría de operaciones y administración de catálogos/permisos desde la API. El frontend se conecta por HTTP a esta API; las simulaciones sólo se usan en `frontend/tests/support`.
 
 La verificación de correo usa `tokens_autenticacion` con `tipo = 'email_verification'`: `token` contiene el digest del desafío, `code_hash` el digest del código vinculado al desafío, y `sent_at`/`attempts` controlan reenvíos e intentos. Se conserva una fila por usuario para este tipo; los demás tipos admiten varias. La confirmación marca `used_at` y el reenvío reemplaza el desafío. `db:migrate` copia las verificaciones de la antigua `client_verifications`, conserva códigos, fechas e intentos y elimina esa tabla después de confirmar la copia. Ejecutar con la API detenida y respaldo previo.
 

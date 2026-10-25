@@ -8,6 +8,7 @@ import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
+import { PasswordField } from '@/components/ui/PasswordField';
 import { EmptyState, Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
 import { useTheme } from '../../components/ui/theme';
@@ -15,6 +16,7 @@ import type { CheckInEmployee } from '../../domain/models';
 import { errorMessage, fullName } from '../../domain/format';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
+import { useLoginErrors } from '../auth/useLoginErrors';
 import { CheckInOptions } from './components/CheckInOptions';
 
 // Selecciona empleado y confirma su entrada o salida con sus propias credenciales.
@@ -40,6 +42,14 @@ function CheckInStationScreen() {
   const [closingSales, setClosingSales] = useState(false);
   const loadRevision = useRef(0);
   const action = useAction();
+  const {
+    localError,
+    fieldErrors,
+    changeField,
+    clearErrors,
+    handleError,
+    validate,
+  } = useLoginErrors('login');
   const reload = useCallback(async () => {
     const revision = ++loadRevision.current;
     if (!employee.stationId) {
@@ -83,6 +93,7 @@ function CheckInStationScreen() {
     setEmail('');
     setPassword('');
     action.clear();
+    clearErrors();
   };
   const setSalesOpen = (open: boolean) => {
     loadRevision.current += 1;
@@ -113,7 +124,10 @@ function CheckInStationScreen() {
             ? `${employee.stationName ?? 'Puesto asignado'} · Seleccioná tu nombre para registrar tu entrada o salida.`
             : 'El encargado necesita un puesto asignado.'}
         </Text>
-        <Feedback error={error || action.error} success={action.success} />
+        <Feedback
+          error={error || localError || action.error}
+          success={action.success}
+        />
         <View style={styles.card}>
           <Text style={styles.heading}>
             {saleEvent
@@ -190,20 +204,23 @@ function CheckInStationScreen() {
             <Field
               label="Mail del empleado"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={changeField('email', setEmail)}
+              error={fieldErrors.email}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              maxLength={254}
               editable={!action.busy}
             />
-            <Field
-              label="Contraseña del empleado"
+            <PasswordField
+              key="login"
+              label="Contraseña"
               value={password}
-              onChangeText={setPassword}
-              secureTextEntry
+              onChangeText={changeField('password', setPassword)}
+              error={fieldErrors.password}
+              maxLength={128}
               autoCapitalize="none"
               autoCorrect={false}
-              maxLength={128}
               editable={!action.busy}
             />
             <Button
@@ -211,14 +228,11 @@ function CheckInStationScreen() {
                 selected.working ? 'Confirmar check-out' : 'Confirmar check-in'
               }
               busy={action.busy}
-              disabled={
-                !email.trim() ||
-                !password ||
-                !saleEvent?.attendanceOpen ||
-                loading ||
-                !!error
-              }
+              disabled={!saleEvent?.attendanceOpen || loading || !!error}
               onPress={() => {
+                clearErrors();
+                action.clear();
+                if (!validate({ email, password })) return;
                 void action.run(
                   async () => {
                     try {
@@ -237,6 +251,7 @@ function CheckInStationScreen() {
                   selected.working
                     ? 'Check-out registrado.'
                     : 'Check-in registrado.',
+                  (cause) => handleError(cause, true),
                 );
               }}
             />

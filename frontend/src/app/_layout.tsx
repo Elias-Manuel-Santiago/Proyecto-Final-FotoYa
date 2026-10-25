@@ -50,6 +50,7 @@ function AppNavigator() {
     >
       <Stack.Protected guard={!employee?.kioskMode}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="forgot-password" />
         <Stack.Screen name="(workspace)" />
         <Stack.Screen name="+not-found" />
       </Stack.Protected>

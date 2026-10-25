@@ -4,9 +4,9 @@ import { Image } from 'expo-image';
  * Coordina login, registro local/social y confirmación. Acepta sesiones mediante AppProvider y
  * consume el retorno social una vez.
  */
-import { Redirect } from 'expo-router';
+import { Link, Redirect } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import { useApp } from '../../providers/AppProvider';
 import { useSocial } from '../../providers/social-context';
 import { ApiError } from '../../data/api-client';
@@ -246,6 +246,20 @@ export function LoginScreen() {
           editable={!locked}
         />
       )}
+      {mode === 'login' && (
+        <Link href="/forgot-password" asChild>
+          <Pressable
+            accessibilityRole="link"
+            disabled={locked}
+            accessibilityState={{ disabled: locked }}
+            style={{ alignSelf: 'flex-start', paddingVertical: 8 }}
+          >
+            <Text style={[styles.muted, { textDecorationLine: 'underline' }]}>
+              Olvidé mi contraseña
+            </Text>
+          </Pressable>
+        </Link>
+      )}
       {mode === 'register' && (
         <>
           <Text style={styles.muted}>Usá entre 8 y 128 caracteres.</Text>
@@ -324,9 +338,8 @@ export function LoginScreen() {
           {(
             [
               ['Google', 'google-oauth2'],
-              ['GitHub', 'github'],
               ['Apple', 'apple'],
-              ['Facebook', 'facebook'],
+              ['Amazon', 'amazon'],
             ] as const
           ).map(([label, connection]) => (
             <Button

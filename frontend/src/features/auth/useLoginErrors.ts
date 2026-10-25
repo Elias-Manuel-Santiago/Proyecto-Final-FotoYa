@@ -77,12 +77,12 @@ export function useLoginErrors(mode: AuthMode) {
   function validate({
     email,
     password,
-    confirmation,
-    firstName,
-    lastName,
-    dni,
-    code,
-  }: AuthValues) {
+    confirmation = '',
+    firstName = '',
+    lastName = '',
+    dni = '',
+    code = '',
+  }: Pick<AuthValues, 'email' | 'password'> & Partial<AuthValues>) {
     const errors: FieldErrors = {};
     if (mode === 'login' || mode === 'register') {
       if (!email.trim()) errors.email = 'Ingresá tu email.';
