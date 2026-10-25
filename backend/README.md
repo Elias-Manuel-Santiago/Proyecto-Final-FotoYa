@@ -4,6 +4,10 @@ Node.js 22+, Express 5, MySQL 8.0.16+ (InnoDB) y Supabase Storage. Supabase Stor
 
 ## Inicio
 
+### Política de privacidad pública
+
+`GET /privacy` devuelve una página HTML en español sin requerir sesión. Para el campo **Consent Privacy Notice URL** de Login with Amazon, usar `https://<dominio-publico-del-backend>/privacy` después de desplegar el backend. La página también admite `HEAD`; el resto de la API mantiene sus métodos actuales. Verificar que los datos y el canal de contacto publicados en `public/privacy.html` correspondan a la operación de Foto Ya.
+
 Ejecutar desde `backend`:
 
 ```powershell

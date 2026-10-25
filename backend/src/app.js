@@ -9,6 +9,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { authenticate } from './security/authenticate.js';
 import { workAccess } from './security/work-access.js';
 import { ApiError, errorHandler } from './shared/errors.js';
@@ -29,8 +30,11 @@ export function createApp() {
   app.use((req, res, next) => {
     req.id = randomUUID(); res.set({ 'X-Request-Id': req.id, 'Cache-Control': 'no-store' }); next();
   });
+  app.use(helmet());
+  // Documento público para los enlaces de privacidad de las pantallas de consentimiento.
+  app.get('/privacy', (req, res) => res.sendFile(fileURLToPath(new URL('../public/privacy.html', import.meta.url))));
   // La protección general se ejecuta también sobre login y health, antes de resolver una sesión.
-  app.use(helmet(), cors({ methods: ['POST'], origin(origin, callback) {
+  app.use(cors({ methods: ['POST'], origin(origin, callback) {
     callback(origin && !env.CORS_ORIGINS.includes(origin) ? new ApiError(403, 'Origen no permitido.') : null, true);
   } }));
   app.use(rateLimit({ windowMs: 60000, limit: 600, standardHeaders: 'draft-8', legacyHeaders: false,
