@@ -11,7 +11,7 @@ Antes de usar estas funciones, aplicar `npm run db:migrate` desde `backend`. La 
 ## Cambiar la barra de navegación y sus íconos
 
 - `src/components/navigation/workspace-navigation.ts`: `workspaceLinks` define ruta, texto, permisos e **icon** de cada sección.
-- `src/components/ui/Icon.tsx`: `outlines` contiene el SVG de cada ícono; `filled` permite una variante para la sección seleccionada. Reemplazar el SVG bajo la misma clave cambia su aspecto en toda la aplicación. Los archivos de `assets/images/ui-svg/` no se cargan automáticamente.
+- `src/components/ui/Icon.tsx`: `icons` asocia cada nombre con un archivo local de `assets/images/ui-svg/`; `filled` permite asignar otro archivo local para la sección seleccionada. Para cambiar un dibujo, editar o reemplazar el SVG en esa carpeta. `eventos` usa `evento.svg` y `ciudades` usa `ciudades.svg`. Los íconos conservan el color del tema claro/oscuro y el color seleccionado.
 - `src/components/navigation/WorkspaceHeader.tsx`: dibuja la barra lateral y las pestañas móviles; controla tamaños, distribución y estado seleccionado.
 
 Aplicación Expo SDK 58 con TypeScript y Expo Router, conectada a la API Express existente.
