@@ -28,6 +28,7 @@ interface DirectoryEntry {
   active: boolean;
   authenticationProviders: string[];
   localUser?: Employee;
+  accounts?: DirectoryEntry[];
 }
 
 // Se vincula por identidad, nunca por correo: un mismo correo puede tener varias cuentas.
@@ -73,8 +74,9 @@ export function filterUserDirectory(
   actor: Employee,
   filters: { role: string; stationId: string; status: string; search: string },
 ) {
-  return rows.filter(
+  const visible = rows.filter(
     (row) =>
+      row.localUser?.roleId !== 'client' &&
       row.localUser?.id !== actor.id &&
       (!filters.role || row.localUser?.roleId === filters.role) &&
       (!filters.stationId || row.stationId === filters.stationId) &&
@@ -85,4 +87,30 @@ export function filterUserDirectory(
         .toLowerCase()
         .includes(filters.search.trim().toLowerCase()),
   );
+  return groupUserDirectory(visible);
+}
+
+// Agrupa tarjetas para mostrar; no modifica las identidades de autenticación.
+export function groupUserDirectory(rows: DirectoryEntry[]): DirectoryEntry[] {
+  const groups = new Map<string, DirectoryEntry[]>();
+  for (const row of rows) {
+    const email = row.email.trim().toLowerCase();
+    const key = email ? `email:${email}` : `id:${row.id}`;
+    const accounts = groups.get(key) ?? [];
+    accounts.push(row);
+    groups.set(key, accounts);
+  }
+  return [...groups.values()].map((accounts) => {
+    const primary =
+      accounts.find((account) => account.localUser) ?? accounts[0];
+    return {
+      ...primary,
+      accounts,
+      authenticationProviders: [
+        ...new Set(
+          accounts.flatMap((account) => account.authenticationProviders),
+        ),
+      ],
+    };
+  });
 }

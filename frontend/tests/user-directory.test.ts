@@ -4,6 +4,7 @@ import type { Auth0User, Employee } from '../src/domain/models';
 import {
   authenticationLabel,
   filterUserDirectory,
+  groupUserDirectory,
   userDirectory,
 } from '../src/domain/user-directory';
 
@@ -28,6 +29,65 @@ const external: Auth0User = {
   identities: [{ subject: 'amazon|123', provider: 'amazon' }],
   authenticationProviders: ['amazon'],
 };
+
+test('agrupa correos sin distinguir mayúsculas y conserva fichas y servicios', () => {
+  const local = {
+    ...employee,
+    roleId: 'seller' as const,
+    auth0Subject: null,
+    authenticationProviders: ['local'],
+  };
+  const google = {
+    ...external,
+    id: 'google|456',
+    email: ' ANA@example.com ',
+    identities: [],
+    authenticationProviders: ['google-oauth2', 'amazon'],
+  };
+  const rows = groupUserDirectory(userDirectory([local], [external, google]));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].localUser?.id, local.id);
+  assert.equal(rows[0].accounts?.length, 3);
+  assert.deepEqual(rows[0].authenticationProviders, [
+    'local',
+    'amazon',
+    'google-oauth2',
+  ]);
+});
+
+test('no agrupa cuentas sin correo ni correos diferentes', () => {
+  const other = { ...external, id: 'other', email: 'other@example.com' };
+  const missing = { ...external, id: 'missing', email: '' };
+  const missingToo = { ...missing, id: 'missing-too', email: ' ' };
+  assert.equal(
+    groupUserDirectory(
+      userDirectory([], [external, other, missing, missingToo]),
+    ).length,
+    4,
+  );
+});
+
+test('el directorio de empleados excluye clientes locales y vinculados a Auth0', () => {
+  const actor = { ...employee, id: 'owner', roleId: 'owner' as const };
+  const seller = {
+    ...employee,
+    id: 'seller',
+    roleId: 'seller' as const,
+    auth0Subject: null,
+  };
+  const localClient = { ...employee, id: 'local-client', auth0Subject: null };
+  const rows = userDirectory([employee, localClient, seller], [external]);
+  const visible = filterUserDirectory(rows, actor, {
+    role: '',
+    stationId: '',
+    status: 'all',
+    search: '',
+  });
+  assert.deepEqual(
+    visible.map((row) => row.localUser?.id),
+    ['seller'],
+  );
+});
 
 test('la cuenta Auth0 vinculada aparece una vez y conserva la ficha local', () => {
   const rows = userDirectory([employee], [external]);

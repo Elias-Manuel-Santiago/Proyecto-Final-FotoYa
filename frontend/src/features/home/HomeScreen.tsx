@@ -4,8 +4,6 @@
  */
 import { Text, View } from 'react-native';
 import { Metrics } from '../../components/metrics/Metrics';
-import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
-import { NavigationCard } from '../../components/ui/NavigationCard';
 import { Screen } from '../../components/ui/Screen';
 import { useTheme } from '../../components/ui/theme';
 import { businessDate, displayDate } from '../../domain/dates';
@@ -67,67 +65,6 @@ export function HomeScreen() {
           )}
         </>
       )}
-      <Text style={styles.heading}>Accesos rápidos</Text>
-      <ResponsiveGrid minWidth={280}>
-        {['owner', 'secretary'].includes(employee.roleId) &&
-          can(employee, 'catalog.read') && (
-            <>
-              <NavigationCard
-                href="/cities"
-                icon="ciudades"
-                title="Ciudades"
-                description="Explorá los eventos de cada ciudad."
-              />
-              <NavigationCard
-                href="/events"
-                icon="eventos"
-                title="Eventos"
-                description="Consultá los eventos y sus puestos."
-              />
-            </>
-          )}
-
-        {can(employee, 'photos.read') && (
-          <NavigationCard
-            href="/photos"
-            icon="fotos-galeria"
-            title={employee.roleId === 'client' ? 'Mis fotos' : 'Fotos'}
-            description="Buscá y revisá las fotografías disponibles."
-          />
-        )}
-        {can(employee, 'attendance.self') && (
-          <NavigationCard
-            href="/my-attendance"
-            icon="asistencia"
-            title="Mi asistencia"
-            description="Consultá tus jornadas y registros de asistencia."
-          />
-        )}
-        {can(employee, 'sales.read') && (
-          <NavigationCard
-            href="/sales"
-            icon="ventas"
-            title="Ventas"
-            description="Revisá las operaciones y sus importes."
-          />
-        )}
-        {can(employee, 'employees.manage') && (
-          <NavigationCard
-            href="/employees/new"
-            icon="añadir"
-            title="Alta de usuario"
-            description="Registrá una nueva cuenta en el sistema."
-          />
-        )}
-        {can(employee, 'reports.read') && (
-          <NavigationCard
-            href="/reports"
-            icon="estadisticas"
-            title="Estadísticas"
-            description="Consultá la actividad y los ingresos por período."
-          />
-        )}
-      </ResponsiveGrid>
     </Screen>
   );
 }

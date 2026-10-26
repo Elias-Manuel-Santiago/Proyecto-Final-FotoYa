@@ -34,7 +34,7 @@ export const workspaceLinks: NavigationItem[] = [
   {
     href: '/employees',
     icon: 'usuarios',
-    label: 'Usuarios',
+    label: 'Empleados',
     permission: 'employees.read',
   },
   {

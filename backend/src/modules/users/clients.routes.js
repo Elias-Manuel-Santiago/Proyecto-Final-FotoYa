@@ -20,11 +20,12 @@ export function clientRoutes() {
     const search = req.input.search.toLowerCase();
     // LOCATE trata %, _ y barras como texto, no como comodines SQL.
     const [rows] = await db.execute(`SELECT u.id_usuario AS id, u.nombre AS firstName, u.apellido AS lastName, u.email, u.dni,
-      u.email_verified AS verified FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
+      u.email_verified AS verified, u.auth0_sub AS auth0Subject FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
       WHERE r.nombre = 'cliente' AND u.disponible = TRUE AND (? = '' OR LOCATE(?, u.email) > 0 OR (? <> '' AND LOCATE(?, u.dni) > 0))
       ORDER BY u.id_usuario LIMIT 21 OFFSET ?`, [search, search, search.replace(/[.\s-]/g, ''), search.replace(/[.\s-]/g, ''), String(req.input.offset)]);
     // La fila adicional solo detecta otra página; se entregan como máximo veinte clientes.
-    return { clients: rows.slice(0, 20), hasMore: rows.length > 20 };
+    return { clients: rows.slice(0, 20).map(({ auth0Subject, ...client }) => ({ ...client,
+      authenticationProviders: [auth0Subject ? auth0Subject.split('|')[0] : 'local'] })), hasMore: rows.length > 20 };
   }));
   router.post('/deactivate', permit('clients.manage'), validate(z.object({ clientId: id }).strict()), endpoint(req => transaction(async connection => {
     await connection.query('SELECT id_rol FROM rol ORDER BY id_rol FOR UPDATE');

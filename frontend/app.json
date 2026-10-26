@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/main-icon.jpg",
     "scheme": "fotoya",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.fotoya.app",
       "icon": "./assets/images/main-icon.jpg"

@@ -134,47 +134,13 @@ export function WorkspaceHeader({ children }: { children: ReactNode }) {
         >
           {brand}
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Text numberOfLines={1} style={styles.label}>
-              {showStation
-                ? (station?.name ??
-                  employee.stationName ??
-                  'Sin puesto asignado')
-                : roleLabels[employee.roleId]}
-            </Text>
             {showStation && (
               <Text numberOfLines={1} style={styles.muted}>
                 {roleLabels[employee.roleId]}
               </Text>
             )}
           </View>
-          <Link href="/profile" asChild>
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={`Mi usuario: ${employee.firstName}`}
-              style={({ pressed }) => ({
-                minHeight: 44,
-                minWidth: 44,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                paddingHorizontal: 10,
-                borderRadius: 12,
-                backgroundColor: pressed ? colors.accent : 'transparent',
-                maxWidth: bottom ? 132 : 220,
-              })}
-            >
-              <Icon name="mi-usuario" size={22} color={colors.primary} />
-              {(!bottom || width >= 420) && (
-                <Text
-                  numberOfLines={1}
-                  style={[styles.label, { flexShrink: 1 }]}
-                >
-                  {employee.firstName}
-                </Text>
-              )}
-            </Pressable>
-          </Link>
+ 
         </View>
       </View>
       <View style={{ flex: 1, minHeight: 0, flexDirection: 'row' }}>

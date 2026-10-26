@@ -1,3 +1,5 @@
+import { UserCard } from '../../components/ui/UserCard';
+import { useAction } from '../../hooks/useAction';
 import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
 /**
  * @file
@@ -23,11 +25,14 @@ interface Client {
   email: string;
   dni: string;
   verified: boolean;
+  authenticationProviders?: string[];
 }
 // Busca clientes por correo o DNI y administra su baja en una lista paginada.
 export function ClientsScreen() {
   const { styles } = useTheme();
-  const { repository, employee } = useWorkspace();
+  const { repository, employee, data, auth0Users, directoryError, refresh } =
+    useWorkspace();
+  const refreshAction = useAction();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
   const [offset, setOffset] = useState(0);
@@ -70,7 +75,15 @@ export function ClientsScreen() {
     return () => {
       active = false;
     };
-  }, [repository, key]);
+  }, [repository, key, data]);
+  const grouped = new Map<string, Client[]>();
+  for (const client of rows) {
+    const email = client.email.trim().toLowerCase();
+    const key = email || `id:${client.id}`;
+    const accounts = grouped.get(key) ?? [];
+    accounts.push(client);
+    grouped.set(key, accounts);
+  }
   // Da de baja al cliente seleccionado y actualiza la lista al completarse.
   async function deactivate() {
     if (!selected || busy) return;
@@ -90,7 +103,13 @@ export function ClientsScreen() {
     }
   }
   return (
-    <Screen title="Clientes">
+    <Screen
+      title="Clientes"
+      refreshing={refreshAction.busy}
+      onRefresh={() => void refreshAction.run(refresh)}
+    >
+      <Feedback error={directoryError} />
+      <Feedback error={refreshAction.error} />
       <FilterSection>
         <Field
           label="Buscar por correo o DNI"
@@ -117,31 +136,56 @@ export function ClientsScreen() {
         <>
           {!rows.length && !error && !current?.error && <EmptyState />}
           <ResponsiveGrid>
-            {rows.map((client) => (
-              <View key={client.id} style={styles.card}>
-                <Text style={styles.heading}>
-                  {client.firstName} {client.lastName}
-                </Text>
-                <Text style={styles.text}>{client.email}</Text>
-                <Text style={styles.text}>DNI: {client.dni}</Text>
-                {!client.verified && (
-                  <Text style={styles.muted}>
-                    Correo pendiente de confirmación
-                  </Text>
-                )}
-                {can(employee, 'clients.manage') && (
-                  <Button
-                    title="Dar de baja"
-                    danger
-                    disabled={busy}
-                    onPress={() => {
-                      setError('');
-                      setSelected(client);
-                    }}
-                  />
-                )}
-              </View>
-            ))}
+            {[...grouped.values()].map((accounts) => {
+              const client = accounts[0];
+              const email = client.email.trim().toLowerCase();
+              const providers = [
+                ...accounts.flatMap(
+                  (account) => account.authenticationProviders ?? [],
+                ),
+                ...auth0Users
+                  .filter(
+                    (user) =>
+                      email && user.email.trim().toLowerCase() === email,
+                  )
+                  .flatMap((user) => user.authenticationProviders),
+              ];
+              return (
+                <UserCard
+                  key={client.id}
+                  name={
+                    `${client.firstName} ${client.lastName}`.trim() ||
+                    client.email ||
+                    'Sin nombre'
+                  }
+                  email={client.email}
+                  providers={providers}
+                >
+                  {accounts.map((client) => (
+                    <View key={client.id} style={{ gap: 12 }}>
+                      <Text style={styles.text}>{client.email}</Text>
+                      <Text style={styles.text}>DNI: {client.dni}</Text>
+                      {!client.verified && (
+                        <Text style={styles.muted}>
+                          Correo pendiente de confirmación
+                        </Text>
+                      )}
+                      {can(employee, 'clients.manage') && (
+                        <Button
+                          title="Dar de baja"
+                          danger
+                          disabled={busy}
+                          onPress={() => {
+                            setError('');
+                            setSelected(client);
+                          }}
+                        />
+                      )}
+                    </View>
+                  ))}
+                </UserCard>
+              );
+            })}
           </ResponsiveGrid>
         </>
       )}
@@ -161,8 +205,8 @@ export function ClientsScreen() {
       <Button
         title="Actualizar"
         secondary
-        disabled={loading || busy}
-        onPress={() => setRevision((value) => value + 1)}
+        disabled={loading || busy || refreshAction.busy}
+        onPress={() => void refreshAction.run(refresh)}
       />
       <Modal
         visible={!!selected}

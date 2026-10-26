@@ -4,17 +4,17 @@ import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
  * Lista usuarios del alcance recibido. Expone acciones de alta y detalle según permisos.
  */
 import { Link } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { useState } from 'react';
+import { Text } from 'react-native';
 import { Field } from '../../components/ui/Field';
 import { Select } from '../../components/ui/Select';
 import { FilterSection } from '../../components/filters/FilterSection';
 import { EmptyState, Feedback } from '../../components/ui/Feedback';
-import { Button } from '../../components/ui/Button';
+import { UserCard } from '../../components/ui/UserCard';
+import { useAction } from '../../hooks/useAction';
 import { Screen } from '../../components/ui/Screen';
 import { useTheme } from '../../components/ui/theme';
-import { errorMessage, fullName } from '../../domain/format';
-import type { Auth0User } from '../../domain/models';
+import { fullName } from '../../domain/format';
 import {
   authenticationLabel,
   filterUserDirectory,
@@ -29,81 +29,32 @@ export function EmployeesScreen() {
 }
 function EmployeeDirectory() {
   const { styles } = useTheme();
-  const { data, employee, repository } = useWorkspace();
+  const { data, employee, auth0Users, directoryError, refresh } =
+    useWorkspace();
+  const refreshAction = useAction();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [role, setRole] = useState('');
   const [stationId, setStationId] = useState('');
-  const [auth0Users, setAuth0Users] = useState<Auth0User[]>([]);
-  const [directoryError, setDirectoryError] = useState('');
-  const [directoryLoading, setDirectoryLoading] = useState(
-    employee.roleId === 'owner',
-  );
-  const [reload, setReload] = useState(0);
   const isOwner = employee.roleId === 'owner';
-  useEffect(() => {
-    if (!isOwner) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const started = Date.now();
-    const load = async () => {
-      try {
-        const result = await repository.auth0Users();
-        if (cancelled) return;
-        if (result.status === 'complete') {
-          setAuth0Users(result.users);
-          setDirectoryLoading(false);
-        } else if (Date.now() - started < 120000) {
-          timer = setTimeout(() => void load(), 1500);
-        } else {
-          throw new Error(
-            'Auth0 sigue preparando la lista. Volvé a consultar en unos momentos.',
-          );
-        }
-      } catch (error) {
-        if (cancelled) return;
-        setDirectoryError(errorMessage(error));
-        setDirectoryLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [employee.id, isOwner, repository, reload]);
   const rows = filterUserDirectory(
     userDirectory(data.employees, isOwner ? auth0Users : []),
     employee,
     { role, stationId, status, search },
   );
   return (
-    <Screen title="Usuarios">
+    <Screen
+      title="Empleados"
+      refreshing={refreshAction.busy}
+      onRefresh={() => void refreshAction.run(refresh)}
+    >
+      <Feedback error={refreshAction.error} />
       {can(employee, 'employees.manage') && (
         <Link href="/employees/new" style={[styles.card, styles.text]}>
           Alta de usuario
         </Link>
       )}
-      {isOwner && (
-        <>
-          <Button
-            title="Actualizar usuarios de Auth0"
-            secondary
-            busy={directoryLoading}
-            onPress={() => {
-              setDirectoryLoading(true);
-              setDirectoryError('');
-              setReload((value) => value + 1);
-            }}
-          />
-          {directoryLoading && (
-            <Text style={styles.muted}>
-              Cargando usuarios del tenant de Auth0…
-            </Text>
-          )}
-          <Feedback error={directoryError} />
-        </>
-      )}
+      <Feedback error={directoryError} />
       <FilterSection>
         <Field
           label="Buscar por nombre, email o DNI"
@@ -116,10 +67,9 @@ function EmployeeDirectory() {
           onChange={setRole}
           options={[
             { value: '', label: 'Todos' },
-            ...Object.entries(roleLabels).map(([value, label]) => ({
-              value,
-              label,
-            })),
+            ...Object.entries(roleLabels)
+              .filter(([value]) => value !== 'client')
+              .map(([value, label]) => ({ value, label })),
           ]}
         />
         <Select
@@ -148,13 +98,12 @@ function EmployeeDirectory() {
       {!rows.length && <EmptyState />}
       <ResponsiveGrid>
         {rows.map((row) => (
-          <View style={styles.card} key={row.id}>
-            <Text style={styles.heading}>
-              {fullName(row).trim() || row.email || 'Sin nombre'}
-            </Text>
-            <Text style={styles.text}>
-              {row.email || 'Sin correo compartido'}
-            </Text>
+          <UserCard
+            key={row.id}
+            name={fullName(row).trim() || row.email || 'Sin nombre'}
+            email={row.email}
+            providers={row.authenticationProviders}
+          >
             <Text style={styles.text}>
               {row.localUser
                 ? roleLabels[row.localUser.roleId]
@@ -166,21 +115,29 @@ function EmployeeDirectory() {
             <Text style={styles.muted}>
               Autenticación: {authenticationLabel(row.authenticationProviders)}
             </Text>
+            {row.authenticationProviders.length > 1 && (
+              <Text style={styles.muted}>
+                Este correo está registrado en varios servicios.
+              </Text>
+            )}
             <Text style={styles.muted}>
               {row.active ? 'Activo' : 'Inactivo'}
             </Text>
-            {row.localUser && (
-              <Link
-                href={{
-                  pathname: '/employees/[id]',
-                  params: { id: row.localUser.id },
-                }}
-                style={styles.text}
-              >
-                Ver ficha de {fullName(row)}
-              </Link>
-            )}
-          </View>
+            {(row.accounts ?? [row])
+              .filter((account) => account.localUser)
+              .map((account) => (
+                <Link
+                  key={account.id}
+                  href={{
+                    pathname: '/employees/[id]',
+                    params: { id: account.localUser!.id },
+                  }}
+                  style={styles.text}
+                >
+                  Ver ficha de {fullName(account)}
+                </Link>
+              ))}
+          </UserCard>
         ))}
       </ResponsiveGrid>
     </Screen>

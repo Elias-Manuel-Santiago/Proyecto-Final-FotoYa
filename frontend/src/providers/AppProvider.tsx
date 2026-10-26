@@ -13,14 +13,17 @@ import {
   type ReactNode,
 } from 'react';
 import { AppState } from 'react-native';
-import type { AppData, Employee } from '../domain/models';
+import type { AppData, Auth0User, Employee } from '../domain/models';
 import { ApiClient } from '../data/api-client';
 import { HttpFotoYaRepository } from '../data/http-repository';
 import { createSessionStorage } from '../data/session-storage';
+import { useAuth0Directory } from '../hooks/useAuth0Directory';
 import { errorMessage } from '../domain/format';
 
 interface AppContextValue {
   data: AppData | null;
+  auth0Users: Auth0User[];
+  directoryError: string;
   employee: Employee | null;
   loading: boolean;
   restoring: boolean;
@@ -54,6 +57,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(RESTORE_PERSISTED_SESSION);
   const [restoring, setRestoring] = useState(RESTORE_PERSISTED_SESSION);
   const [error, setError] = useState('');
+  const { auth0Users, directoryError } = useAuth0Directory(
+    data,
+    employee,
+    repository,
+  );
   // La generación cambia al limpiar sesión e invalida cargas que todavía estén en vuelo.
   const generation = useRef(0);
   const signedIn = useRef(false);
@@ -237,6 +245,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         data,
+        auth0Users,
+        directoryError,
         employee,
         loading,
         restoring,

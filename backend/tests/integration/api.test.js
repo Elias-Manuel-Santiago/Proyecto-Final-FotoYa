@@ -855,6 +855,8 @@ integration('registro local exige código, permite reenvío y revoca acceso tras
   assert.equal((await call('auth/verification/confirm', { verificationToken, code: verificationMail.at(-1).code }, 'anon')).status, 422);
   const listed = await call('clients/query', { search: 'nuevo@example.com' });
   assert.equal(listed.data.data.clients.length, 1);
+  assert.deepEqual(listed.data.data.clients[0].authenticationProviders, ['local']);
+  assert.equal(listed.data.data.clients[0].auth0Subject, undefined);
   const clientId = String(listed.data.data.clients[0].id);
   const [[verification]] = await db.execute("SELECT used_at FROM tokens_autenticacion WHERE id_usuario = ? AND tipo = 'email_verification'", [clientId]);
   assert(verification.used_at);
