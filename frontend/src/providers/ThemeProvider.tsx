@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext, themes } from '../components/ui/theme';
 import { useApp } from './AppProvider';
 import { Icon } from '../components/ui/Icon';
-import { useNavigationMode } from '../hooks/useNavigationMode';
 function savedTheme(): 'light' | 'dark' | null {
   if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return null;
   try {
@@ -26,7 +25,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [choice, setChoice] = useState<'light' | 'dark' | null>(null);
   const saved = useSyncExternalStore(subscribeTheme, savedTheme, () => null);
   const mode = choice ?? saved ?? (system === 'dark' ? 'dark' : 'light');
-  const { bottom } = useNavigationMode();
   const insets = useSafeAreaInsets();
   const toggle = () => {
     const next = mode === 'light' ? 'dark' : 'light';
@@ -45,16 +43,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         {children}
-        {!employee?.kioskMode && (
+        {!employee && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Activar tema ${mode === 'light' ? 'oscuro' : 'claro'}`}
             onPress={toggle}
             style={({ pressed }) => ({
               position: 'absolute',
-              ...(bottom
-                ? { top: insets.top + 10, left: insets.left + 12 }
-                : { bottom: insets.bottom + 24, right: insets.right + 24 }),
+              bottom: insets.bottom + 24,
+              right: insets.right + 24,
               width: 48,
               height: 48,
               borderRadius: 24,

@@ -6,7 +6,7 @@ import { Image } from 'expo-image';
  */
 import { Link, Redirect } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useApp } from '../../providers/AppProvider';
 import { useSocial } from '../../providers/social-context';
 import { ApiError } from '../../data/api-client';
@@ -15,7 +15,7 @@ import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
 import { PasswordField } from '../../components/ui/PasswordField';
 import { Feedback } from '../../components/ui/Feedback';
-import { Screen } from '../../components/ui/Screen';
+import { LoginLayout } from './LoginLayout';
 import { useTheme } from '../../components/ui/theme';
 
 interface AuthResult {
@@ -26,7 +26,7 @@ interface AuthResult {
 
 // Coordina acceso local, registro, confirmación de correo e identidad externa.
 export function LoginScreen() {
-  const { styles } = useTheme();
+  const { styles, colors } = useTheme();
   const { employee, loading, login, repository, acceptSession } = useApp();
   const social = useSocial();
   const [mode, setMode] = useState<AuthMode>('login');
@@ -153,20 +153,14 @@ export function LoginScreen() {
   if (employee) return <Redirect href="/home" />;
   const creating = mode === 'register';
   return (
-    <Screen compact title="Foto Ya">
-      <Image
-        source={require('../../../assets/images/main-icon.jpg')}
-        accessibilityLabel="FotoYa!"
-        style={{
-          width: 112,
-          height: 112,
-          borderRadius: 24,
-          alignSelf: 'center',
-          marginBottom: 8,
-        }}
-      />
-
-      <Text style={styles.heading}>
+    <LoginLayout>
+      <Text
+        accessibilityRole="header"
+        style={[
+          styles.title,
+          { fontSize: 30, lineHeight: 38, marginBottom: 4 },
+        ]}
+      >
         {mode === 'verify'
           ? 'Confirmá tu correo'
           : creating
@@ -236,9 +230,15 @@ export function LoginScreen() {
             accessibilityRole="link"
             disabled={locked}
             accessibilityState={{ disabled: locked }}
-            style={{ alignSelf: 'flex-start', paddingVertical: 8 }}
+            style={({ pressed }) => ({
+              alignSelf: 'flex-end',
+              minHeight: 44,
+              justifyContent: 'center',
+              marginTop: -8,
+              opacity: locked ? 0.5 : pressed ? 0.7 : 1,
+            })}
           >
-            <Text style={[styles.muted, { textDecorationLine: 'underline' }]}>
+            <Text style={[styles.muted, { color: colors.primary }]}>
               Olvidé mi contraseña
             </Text>
           </Pressable>
@@ -302,46 +302,117 @@ export function LoginScreen() {
           }}
         />
       )}
-      <Button
-        title={mode === 'login' ? 'Crear cuenta' : 'Volver'}
-        secondary
-        disabled={locked}
-        onPress={() => {
-          setMode(mode === 'login' ? 'register' : 'login');
-          clearErrors();
-          setNotice('');
-          setPassword('');
-          setConfirmation('');
-          setVerificationToken('');
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'center',
+          columnGap: 6,
         }}
-      />
+      >
+        {mode !== 'verify' && (
+          <Text style={styles.muted}>
+            {creating ? '¿Ya tenés cuenta?' : '¿Todavía no tenés cuenta?'}
+          </Text>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          disabled={locked}
+          accessibilityState={{ disabled: locked }}
+          style={({ pressed }) => ({
+            minHeight: 44,
+            justifyContent: 'center',
+            opacity: locked ? 0.5 : pressed ? 0.7 : 1,
+          })}
+          onPress={() => {
+            setMode(mode === 'login' ? 'register' : 'login');
+            clearErrors();
+            setNotice('');
+            setPassword('');
+            setConfirmation('');
+            setVerificationToken('');
+          }}
+        >
+          <Text
+            style={[styles.muted, { color: colors.primary, fontWeight: '600' }]}
+          >
+            {mode === 'login'
+              ? 'Crear cuenta'
+              : creating
+                ? 'Iniciar sesión'
+                : 'Volver a iniciar sesión'}
+          </Text>
+        </Pressable>
+      </View>
       {(mode === 'login' || mode === 'register') && (
         <>
-          <Text style={styles.heading}>Continuar con</Text>
-          {(
-            [
-              ['Google', 'google-oauth2'],
-              ['Apple', 'apple'],
-              ['Amazon', 'amazon'],
-            ] as const
-          ).map(([label, connection]) => (
-            <Button
-              key={connection}
-              title={label}
-              secondary
-              disabled={locked || !social.enabled}
-              onPress={() => {
-                void run(async () => {
-                  const token = await social.signIn(connection);
-                  await result(
-                    await repository.api.post<AuthResult>('auth/social', {
-                      idToken: token,
-                    }),
-                  );
-                });
-              }}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            <View
+              style={{ flex: 1, height: 1, backgroundColor: colors.border }}
             />
-          ))}
+            <Text style={styles.muted}>O continuá con</Text>
+            <View
+              style={{ flex: 1, height: 1, backgroundColor: colors.border }}
+            />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {(
+              [
+                [
+                  'Google',
+                  'google-oauth2',
+                  require('../../../assets/images/ui-svg/google.svg'),
+                ],
+                [
+                  'Apple',
+                  'apple',
+                  require('../../../assets/images/ui-svg/apple.svg'),
+                ],
+                [
+                  'Amazon',
+                  'amazon',
+                  require('../../../assets/images/ui-svg/amazon.svg'),
+                ],
+              ] as const
+            ).map(([label, connection, logo]) => (
+              <Pressable
+                key={connection}
+                accessibilityRole="button"
+                accessibilityLabel={`Continuar con ${label}`}
+                accessibilityState={{ disabled: locked || !social.enabled }}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minWidth: 44,
+                  minHeight: 48,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: '#ffffff',
+                  opacity: locked || !social.enabled ? 0.5 : pressed ? 0.75 : 1,
+                })}
+                disabled={locked || !social.enabled}
+                onPress={() => {
+                  void run(async () => {
+                    const token = await social.signIn(connection);
+                    await result(
+                      await repository.api.post<AuthResult>('auth/social', {
+                        idToken: token,
+                      }),
+                    );
+                  });
+                }}
+              >
+                <Image
+                  source={logo}
+                  contentFit="contain"
+                  style={{ width: 24, height: 24 }}
+                />
+              </Pressable>
+            ))}
+          </View>
           {!social.enabled && (
             <Text style={styles.muted}>
               El acceso con servicios externos no está disponible por el
@@ -350,6 +421,6 @@ export function LoginScreen() {
           )}
         </>
       )}
-    </Screen>
+    </LoginLayout>
   );
 }

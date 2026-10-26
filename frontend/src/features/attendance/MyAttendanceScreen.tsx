@@ -43,9 +43,11 @@ export function MyAttendanceScreen() {
         <SortControl ascending={ascending} onChange={setAscending} />
       </PeriodFilters>
       <Feedback error={error || refreshError} />
-      <Text style={styles.muted}>
-        {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}
-      </Text>
+      {(loading || refreshing) && (
+        <Text accessibilityLiveRegion="polite" style={styles.muted}>
+          {loading ? 'Cargando…' : 'Actualizando…'}
+        </Text>
+      )}
       {!loading && !error && !records.length && (
         <EmptyState message="No hay horarios en este período." />
       )}

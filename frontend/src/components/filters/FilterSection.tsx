@@ -30,20 +30,36 @@ export function FilterSection({
           setLocalOpen(!open);
           onOpenChange?.(!open);
         }}
-        style={[styles.row, { minHeight: 44, justifyContent: 'space-between' }]}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          minHeight: 44,
+        }}
       >
-        <View style={styles.row}>
+        <View
+          style={[styles.row, { flex: 1, minWidth: 0, flexWrap: 'nowrap' }]}
+        >
           <Icon name="filtrar" />
-          <Text style={styles.label}>Filtros</Text>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.label}>Filtros</Text>
+            {!!summary && <Text style={styles.muted}>{summary}</Text>}
+          </View>
         </View>
-        {!!summary && (
-          <Text style={[styles.muted, { flexShrink: 1 }]}>{summary}</Text>
-        )}
         <Text style={{ color: colors.primary, fontWeight: '600' }}>
           {open ? 'Cerrar' : 'Editar'}
         </Text>
       </Pressable>
-      {open && children}
+      {open && (
+        <View
+          style={[
+            styles.stack,
+            { borderTopWidth: 1, borderColor: colors.border, paddingTop: 16 },
+          ]}
+        >
+          {children}
+        </View>
+      )}
     </View>
   );
 }

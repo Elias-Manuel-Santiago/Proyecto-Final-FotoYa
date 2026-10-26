@@ -44,6 +44,7 @@ const managed = (actor, callback) => transaction(async connection => {
 const assignment = async (actor, input, connection) => {
   const role = await userRepository.role(input.roleId, connection);
   if (!role) throw new ApiError(422, 'El rol no existe.');
+  if (role === 'secretario') input.stationId = null;
   const previous = input.userId ? await userRepository.find(input.userId, connection) : null;
   if (role === 'checkin' || previous?.role === 'checkin')
     throw new ApiError(422, 'Check-in se activa desde una sesión del encargado.');

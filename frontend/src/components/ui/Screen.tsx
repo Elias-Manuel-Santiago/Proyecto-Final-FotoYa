@@ -3,16 +3,22 @@
  * Proporciona área segura, teclado, scroll y actualización por gesto. La pantalla decide
  * cuándo habilitar refresco durante operaciones.
  */
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
   Text,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from './theme';
+
+export const ScreenLayoutContext = createContext({
+  embedded: false,
+  bottomNavigation: false,
+});
 
 // Organiza encabezado y contenido en el contenedor compartido de las pantallas.
 export function Screen({
@@ -31,8 +37,18 @@ export function Screen({
   compact?: boolean;
 }) {
   const { colors, styles } = useTheme();
+  const { embedded, bottomNavigation } = useContext(ScreenLayoutContext);
+  const { width } = useWindowDimensions();
   return (
-    <SafeAreaView style={styles.page} edges={['left', 'right', 'bottom']}>
+    <SafeAreaView
+      style={styles.page}
+      edges={[
+        ...(!embedded || bottomNavigation ? (['left'] as const) : []),
+        'right',
+        ...(!embedded ? (['top'] as const) : []),
+        ...(!bottomNavigation ? (['bottom'] as const) : []),
+      ]}
+    >
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -41,8 +57,13 @@ export function Screen({
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
             styles.content,
-            { flexGrow: 1 },
-            compact && { maxWidth: 640, paddingTop: 76 },
+            {
+              flexGrow: 1,
+              padding: width >= 900 ? 28 : 16,
+              paddingTop: width >= 900 ? 28 : 20,
+              paddingBottom: embedded ? 32 : 88,
+            },
+            compact && { maxWidth: 720 },
           ]}
           alwaysBounceVertical={!!onRefresh && refreshEnabled}
           refreshControl={

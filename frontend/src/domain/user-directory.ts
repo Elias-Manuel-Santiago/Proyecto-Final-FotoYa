@@ -1,3 +1,5 @@
+import { fullName } from './format';
+import { hasStationAccess } from './permissions';
 import type { Auth0User, Employee } from './models';
 
 const labels: Record<string, string> = {
@@ -64,4 +66,23 @@ export function userDirectory(
     });
   }
   return rows;
+}
+
+export function filterUserDirectory(
+  rows: DirectoryEntry[],
+  actor: Employee,
+  filters: { role: string; stationId: string; status: string; search: string },
+) {
+  return rows.filter(
+    (row) =>
+      row.localUser?.id !== actor.id &&
+      (!filters.role || row.localUser?.roleId === filters.role) &&
+      (!filters.stationId || row.stationId === filters.stationId) &&
+      hasStationAccess(actor, row.stationId) &&
+      (filters.status === 'all' ||
+        (filters.status === 'active') === row.active) &&
+      `${fullName(row)} ${row.email} ${row.dni}`
+        .toLowerCase()
+        .includes(filters.search.trim().toLowerCase()),
+  );
 }

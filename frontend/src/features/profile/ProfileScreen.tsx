@@ -4,9 +4,10 @@
  * del estado de acceso.
  */
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Switch, Text, View } from 'react-native';
 import { Button } from '../../components/ui/Button';
-import { Field } from '../../components/ui/Field';
+import { PasswordField } from '../../components/ui/PasswordField';
+import { Icon } from '../../components/ui/Icon';
 import { Feedback } from '../../components/ui/Feedback';
 import { Screen } from '../../components/ui/Screen';
 import { useTheme } from '../../components/ui/theme';
@@ -17,7 +18,7 @@ import { useWorkspace } from '../../providers/AppProvider';
 
 // Gestiona datos propios, sesiones, contraseña y actualización del estado de trabajo.
 export function ProfileScreen() {
-  const { styles } = useTheme();
+  const { styles, colors, mode, toggle } = useTheme();
   const { data, employee, logout, repository, refresh } = useWorkspace();
   const action = useAction();
   const [currentPassword, setCurrentPassword] = useState('');
@@ -55,34 +56,50 @@ export function ProfileScreen() {
           </Text>
         )}
       </View>
+      <View
+        style={[
+          styles.card,
+          {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          },
+        ]}
+      >
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={styles.heading}>Apariencia</Text>
+          <Text style={styles.muted}>Tema oscuro</Text>
+        </View>
+        <Icon
+          name={mode === 'dark' ? 'tema-oscuro' : 'tema-claro'}
+          color={colors.primary}
+        />
+        <Switch
+          accessibilityLabel="Tema oscuro"
+          value={mode === 'dark'}
+          onValueChange={toggle}
+          trackColor={{ false: colors.border, true: colors.primary }}
+        />
+      </View>
       <Feedback error={action.error} success={action.success} />
-      <Button
-        title="Cerrar sesión"
-        secondary
-        busy={action.busy}
-        onPress={() => {
-          void action.run(logout);
-        }}
-      />
       <View style={styles.card}>
         <Text style={styles.heading}>Cambiar contraseña</Text>
-        <Field
+        <PasswordField
           label="Contraseña actual"
           value={currentPassword}
           onChangeText={setCurrentPassword}
-          secureTextEntry
           autoCapitalize="none"
           editable={!action.busy}
         />
-        <Field
-          label="Nueva contraseña (12 a 128 caracteres)"
+        <PasswordField
+          label="Nueva contraseña"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
           autoCapitalize="none"
           maxLength={128}
           editable={!action.busy}
         />
+        <Text style={styles.muted}>Usá entre 12 y 128 caracteres.</Text>
         <Text style={styles.muted}>
           El cambio cierra todas tus sesiones. Después, ingresá con la nueva
           contraseña.
@@ -102,6 +119,14 @@ export function ProfileScreen() {
           }}
         />
       </View>
+      <Button
+        title="Cerrar sesión"
+        danger
+        busy={action.busy}
+        onPress={() => {
+          void action.run(logout);
+        }}
+      />
     </Screen>
   );
 }

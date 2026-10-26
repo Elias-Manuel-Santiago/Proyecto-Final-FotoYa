@@ -6,7 +6,10 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './theme';
 import { Icon } from './Icon';
 export interface Option {
@@ -27,6 +30,7 @@ export function Select({
   disabled?: boolean;
 }) {
   const { colors, styles } = useTheme();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const matches = options.filter((option) =>
@@ -58,7 +62,9 @@ export function Select({
         <Text style={[styles.text, { flexShrink: 1 }]}>
           {options.find((o) => o.value === value)?.label ?? 'Seleccionar'}
         </Text>
-        <Icon name="filtrar" size={20} />
+        <View style={{ transform: [{ rotate: '90deg' }] }}>
+          <Icon name="flecha-der" size={20} color={colors.muted} />
+        </View>
       </Pressable>
       <Modal
         visible={open}
@@ -66,12 +72,16 @@ export function Select({
         animationType="fade"
         onRequestClose={() => setOpen(false)}
       >
-        <View
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{
             flex: 1,
             backgroundColor: '#00000080',
             justifyContent: 'center',
-            padding: 24,
+            paddingTop: insets.top + 24,
+            paddingBottom: insets.bottom + 24,
+            paddingLeft: insets.left + 16,
+            paddingRight: insets.right + 16,
           }}
         >
           <Pressable
@@ -146,7 +156,7 @@ export function Select({
               )}
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

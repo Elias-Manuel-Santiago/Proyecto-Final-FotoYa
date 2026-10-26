@@ -5,11 +5,10 @@
  */
 import { Guard } from '../../components/navigation/Guard';
 import { StationsScreen } from '../../features/stations/StationsScreen';
-
-// Exige stations.manage mediante Guard antes de montar la pantalla de esta ruta.
+// Exige catalog.read y alcance global mediante Guard antes de montar la pantalla de esta ruta.
 export default function StationsRoute() {
   return (
-    <Guard permission="stations.manage">
+    <Guard permission="catalog.read" roles={['owner', 'secretary']}>
       <StationsScreen />
     </Guard>
   );

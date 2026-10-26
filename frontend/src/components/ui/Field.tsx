@@ -3,7 +3,7 @@
  * Compone etiqueta, entrada y error reutilizables. Propaga propiedades de edición y
  * accesibilidad del formulario.
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Text, TextInput, View, type TextInputProps } from 'react-native';
 import { useTheme } from './theme';
 
@@ -19,6 +19,7 @@ export function Field({
   error?: string;
 }) {
   const { colors, styles } = useTheme();
+  const [focused, setFocused] = useState(false);
   return (
     <View style={{ gap: 6 }}>
       <Text style={styles.label}>{label}</Text>
@@ -27,9 +28,19 @@ export function Field({
           accessibilityLabel={label}
           placeholderTextColor={colors.muted}
           {...props}
+          onFocus={(event) => {
+            setFocused(true);
+            props.onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setFocused(false);
+            props.onBlur?.(event);
+          }}
           accessibilityHint={error || props.accessibilityHint}
           style={[
             styles.input,
+            focused ? { borderColor: colors.primary } : undefined,
+            props.editable === false ? { opacity: 0.6 } : undefined,
             props.style,
             rightAccessory ? { paddingRight: 52 } : undefined,
             error ? { borderColor: colors.error, borderWidth: 2 } : undefined,

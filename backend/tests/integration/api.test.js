@@ -84,7 +84,7 @@ before(async () => {
   await db.query("INSERT INTO ciudad (nombre) VALUES ('Ciudad')");
   await db.query("INSERT INTO puesto (nombre, direccion, id_ciudad) VALUES ('Uno','A',1),('Dos','B',1),('Sin registros','C',1)");
   for (const [key, role, station] of [['dueno', 'dueno', null], ['encargado', 'encargado', '1'], ['otroEncargado', 'encargado', '2'],
-    ['secretario', 'secretario', '1'], ['vendedor', 'vendedor', '1'], ['editor', 'editor', '1'], ['camarografo', 'camarografo', '1'], ['cliente', 'cliente', null], ['otroCliente', 'cliente', null]]) {
+    ['secretario', 'secretario', null], ['vendedor', 'vendedor', '1'], ['editor', 'editor', '1'], ['camarografo', 'camarografo', '1'], ['cliente', 'cliente', null], ['otroCliente', 'cliente', null]]) {
     const [[r]] = await db.execute('SELECT id_rol FROM rol WHERE nombre = ?', [role]);
     const dni = String(10000000 + Object.keys(users).length), email = `${key.toLowerCase()}@example.com`;
     const [result] = await db.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, password, id_rol, id_puesto)
@@ -952,6 +952,39 @@ integration('fallo al enviar correo revierte el registro y permite reintentar', 
   const [[row]] = await db.execute('SELECT COUNT(*) AS count FROM usuarios WHERE email = ?', [input.email]);
   assert.equal(Number(row.count), 0);
   assert.equal((await call('auth/register', input, 'anon')).status, 200);
+});
+
+integration('secretario sin puesto: migración, altas, jornada y check-in en cualquier puesto', async () => {
+  await db.execute('UPDATE usuarios SET id_puesto=1 WHERE id_usuario=?', [users.secretario]);
+  const [history] = await db.execute('SELECT * FROM horarios WHERE id_usuario=?', [users.secretario]);
+  await migrate(db, env);
+  const [[migrated]] = await db.execute('SELECT id_puesto FROM usuarios WHERE id_usuario=?', [users.secretario]);
+  assert.equal(migrated.id_puesto, null);
+  const [preserved] = await db.execute('SELECT * FROM horarios WHERE id_usuario=?', [users.secretario]);
+  assert.deepEqual(preserved, history);
+  const [[role]] = await db.query("SELECT id_rol AS id FROM rol WHERE nombre='secretario'");
+  const created = await call('users/create', { firstName: 'Nueva', lastName: 'Secretaria', email: 'secretaria-global@example.com', dni: '98765432', roleId: role.id, stationId: '1', password: 'Test-password-1234' });
+  assert.equal(created.status, 200);
+  assert.equal(created.data.data.stationId, null);
+  const id = created.data.data.id;
+  const session = newToken();
+  await db.execute('INSERT INTO sesiones_usuario (id_usuario,token,expires_at) VALUES (?,?,TIMESTAMPADD(HOUR,2,UTC_TIMESTAMP(6)))', [id, session]);
+  for (const station of ['1', '2']) {
+    await kioskCall(station, true);
+    const headers = { Authorization: `Bearer ${kioskTokens[station]}` };
+    const directory = await http.post('/api/attendance/kiosk/employees', {}, { headers });
+    assert.equal(directory.status, 200);
+    assert(directory.data.data.some(row => row.id === id));
+    const credentials = { userId: id, email: 'secretaria-global@example.com', password: 'Test-password-1234' };
+    const checkedIn = await http.post('/api/attendance/kiosk/mark', { ...credentials, action: 'check-in', attendanceId: null }, { headers });
+    assert.equal(checkedIn.status, 200);
+    const listed = await http.post('/api/attendance/kiosk/employees', {}, { headers });
+    const current = listed.data.data.find(row => row.id === id);
+    assert.equal(current.working, true);
+    assert.equal((await authRepository.actor(session)).working, true);
+    const checkedOut = await http.post('/api/attendance/kiosk/mark', { ...credentials, action: 'check-out', attendanceId: current.attendanceId }, { headers });
+    assert.equal(checkedOut.status, 200);
+  }
 });
 
 integration('convierte el esquema anterior, descifra datos y elimina tablas auxiliares sin recrearlas', async () => {

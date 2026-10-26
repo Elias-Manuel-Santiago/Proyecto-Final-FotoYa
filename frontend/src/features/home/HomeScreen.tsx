@@ -2,13 +2,14 @@
  * @file
  * Presenta inicio con accesos y métricas permitidos. Coordina la actualización de datos.
  */
-import { Link } from 'expo-router';
 import { Text, View } from 'react-native';
 import { Metrics } from '../../components/metrics/Metrics';
+import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
+import { NavigationCard } from '../../components/ui/NavigationCard';
 import { Screen } from '../../components/ui/Screen';
 import { useTheme } from '../../components/ui/theme';
 import { businessDate, displayDate } from '../../domain/dates';
-import { can, roleLabels } from '../../domain/permissions';
+import { can } from '../../domain/permissions';
 import { reportRows, totalMetrics } from '../../domain/metrics';
 import { useWorkspace } from '../../providers/AppProvider';
 import { usePeriodData } from '../../hooks/usePeriodData';
@@ -18,7 +19,7 @@ import { useAction } from '../../hooks/useAction';
 
 // Reúne indicadores y accesos operativos según permisos.
 export function HomeScreen() {
-  const { colors, styles } = useTheme();
+  const { styles } = useTheme();
   const { employee, enterCheckIn } = useWorkspace();
   const checkInAction = useAction();
   const today = businessDate();
@@ -27,12 +28,11 @@ export function HomeScreen() {
     usePeriodData(period);
   const rows = reportRows(data, employee, period);
   return (
-    <Screen
-      title={roleLabels[employee.roleId]}
-      refreshing={refreshing}
-      onRefresh={reload}
-    >
-      <Text style={styles.heading}>{displayDate(today)}</Text>
+    <Screen title="Inicio" refreshing={refreshing} onRefresh={reload}>
+      <View style={{ gap: 4 }}>
+        <Text style={styles.heading}>Hola, {employee.firstName}</Text>
+        <Text style={styles.muted}>{displayDate(today)}</Text>
+      </View>
       {employee.roleId === 'manager' && !employee.checkInActive && (
         <ConfirmAction
           title="Activar vista de check-in"
@@ -43,9 +43,11 @@ export function HomeScreen() {
       )}
       <Feedback error={checkInAction.error} />
       <Feedback error={error || refreshError} />
-      <Text style={styles.muted}>
-        {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}
-      </Text>
+      {(loading || refreshing) && (
+        <Text accessibilityLiveRegion="polite" style={styles.muted}>
+          {loading ? 'Cargando…' : 'Actualizando…'}
+        </Text>
+      )}
       {!error && !loading && employee.permissions?.includes('counts.read') && (
         <>
           <Metrics
@@ -65,93 +67,67 @@ export function HomeScreen() {
           )}
         </>
       )}
-      <View style={[styles.row, { alignItems: 'stretch' }]}>
+      <Text style={styles.heading}>Accesos rápidos</Text>
+      <ResponsiveGrid minWidth={280}>
+        {['owner', 'secretary'].includes(employee.roleId) &&
+          can(employee, 'catalog.read') && (
+            <>
+              <NavigationCard
+                href="/cities"
+                icon="ciudades"
+                title="Ciudades"
+                description="Explorá los eventos de cada ciudad."
+              />
+              <NavigationCard
+                href="/events"
+                icon="eventos"
+                title="Eventos"
+                description="Consultá los eventos y sus puestos."
+              />
+            </>
+          )}
+
         {can(employee, 'photos.read') && (
-          <Link
+          <NavigationCard
             href="/photos"
-            style={[
-              styles.card,
-              {
-                color: colors.text,
-                flexGrow: 1,
-                flexBasis: 260,
-                maxWidth: 440,
-                minHeight: 88,
-              },
-            ]}
-          >
-            {employee.roleId === 'client' ? 'Ver mis fotos' : 'Consultar fotos'}
-          </Link>
+            icon="fotos-galeria"
+            title={employee.roleId === 'client' ? 'Mis fotos' : 'Fotos'}
+            description="Buscá y revisá las fotografías disponibles."
+          />
         )}
         {can(employee, 'attendance.self') && (
-          <Link
+          <NavigationCard
             href="/my-attendance"
-            style={[
-              styles.card,
-              {
-                color: colors.text,
-                flexGrow: 1,
-                flexBasis: 260,
-                maxWidth: 440,
-                minHeight: 88,
-              },
-            ]}
-          >
-            Consultar mi asistencia
-          </Link>
+            icon="asistencia"
+            title="Mi asistencia"
+            description="Consultá tus jornadas y registros de asistencia."
+          />
         )}
         {can(employee, 'sales.read') && (
-          <Link
+          <NavigationCard
             href="/sales"
-            style={[
-              styles.card,
-              {
-                color: colors.text,
-                flexGrow: 1,
-                flexBasis: 260,
-                maxWidth: 440,
-                minHeight: 88,
-              },
-            ]}
-          >
-            Consultar ventas
-          </Link>
+            icon="ventas"
+            title="Ventas"
+            description="Revisá las operaciones y sus importes."
+          />
         )}
         {can(employee, 'employees.manage') && (
-          <Link
+          <NavigationCard
             href="/employees/new"
-            style={[
-              styles.card,
-              {
-                color: colors.text,
-                flexGrow: 1,
-                flexBasis: 260,
-                maxWidth: 440,
-                minHeight: 88,
-              },
-            ]}
-          >
-            Alta de usuario
-          </Link>
+            icon="añadir"
+            title="Alta de usuario"
+            description="Registrá una nueva cuenta en el sistema."
+          />
         )}
         {can(employee, 'reports.read') && (
-          <Link
+          <NavigationCard
             href="/reports"
-            style={[
-              styles.card,
-              {
-                color: colors.text,
-                flexGrow: 1,
-                flexBasis: 260,
-                maxWidth: 440,
-                minHeight: 88,
-              },
-            ]}
-          >
-            Consultar estadísticas e ingresos
-          </Link>
+            icon="estadisticas"
+            title="Estadísticas"
+            description="Consultá la actividad y los ingresos por período."
+          />
         )}
-      </View>
+      </ResponsiveGrid>
     </Screen>
   );
 }

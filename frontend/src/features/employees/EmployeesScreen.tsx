@@ -17,22 +17,23 @@ import { errorMessage, fullName } from '../../domain/format';
 import type { Auth0User } from '../../domain/models';
 import {
   authenticationLabel,
+  filterUserDirectory,
   userDirectory,
 } from '../../domain/user-directory';
-import { can, hasStationAccess, roleLabels } from '../../domain/permissions';
+import { can, roleLabels } from '../../domain/permissions';
 import { useWorkspace } from '../../providers/AppProvider';
-
 // Filtra empleados visibles y ofrece acceso a detalle y alta según permisos.
 export function EmployeesScreen() {
   const { employee } = useWorkspace();
   return <EmployeeDirectory key={`${employee.id}:${employee.roleId}`} />;
 }
-
 function EmployeeDirectory() {
   const { styles } = useTheme();
   const { data, employee, repository } = useWorkspace();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
+  const [role, setRole] = useState('');
+  const [stationId, setStationId] = useState('');
   const [auth0Users, setAuth0Users] = useState<Auth0User[]>([]);
   const [directoryError, setDirectoryError] = useState('');
   const [directoryLoading, setDirectoryLoading] = useState(
@@ -71,13 +72,10 @@ function EmployeeDirectory() {
       clearTimeout(timer);
     };
   }, [employee.id, isOwner, repository, reload]);
-  const rows = userDirectory(data.employees, isOwner ? auth0Users : []).filter(
-    (row) =>
-      hasStationAccess(employee, row.stationId) &&
-      (status === 'all' || (status === 'active') === row.active) &&
-      `${fullName(row)} ${row.email} ${row.dni}`
-        .toLowerCase()
-        .includes(search.trim().toLowerCase()),
+  const rows = filterUserDirectory(
+    userDirectory(data.employees, isOwner ? auth0Users : []),
+    employee,
+    { role, stationId, status, search },
   );
   return (
     <Screen title="Usuarios">
@@ -111,6 +109,30 @@ function EmployeeDirectory() {
           label="Buscar por nombre, email o DNI"
           value={search}
           onChangeText={setSearch}
+        />
+        <Select
+          label="Rol"
+          value={role}
+          onChange={setRole}
+          options={[
+            { value: '', label: 'Todos' },
+            ...Object.entries(roleLabels).map(([value, label]) => ({
+              value,
+              label,
+            })),
+          ]}
+        />
+        <Select
+          label="Puesto"
+          value={stationId}
+          onChange={setStationId}
+          options={[
+            { value: '', label: 'Todos' },
+            ...data.stations.map((station) => ({
+              value: station.id,
+              label: station.name,
+            })),
+          ]}
         />
         <Select
           label="Estado"

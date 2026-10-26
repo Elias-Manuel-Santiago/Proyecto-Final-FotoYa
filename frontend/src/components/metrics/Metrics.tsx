@@ -3,7 +3,9 @@
  * Presenta indicadores comerciales compartidos. Distingue métricas no disponibles de valores
  * cero.
  */
-import { DataTable } from '../ui/DataTable';
+import { Text, View } from 'react-native';
+import { ResponsiveGrid } from '../ui/ResponsiveGrid';
+import { useTheme } from '../ui/theme';
 import { money } from '../../domain/format';
 
 export interface MetricValues {
@@ -22,6 +24,7 @@ export function Metrics({
   values: MetricValues;
   showMoney?: boolean;
 }) {
+  const { colors, styles } = useTheme();
   const metrics = [
     [
       'Familias fotografiadas',
@@ -41,10 +44,35 @@ export function Metrics({
     ...(showMoney ? [['Ingresos por ventas', money(values.earnings)]] : []),
   ];
   return (
-    <DataTable
-      label="Resumen de estadísticas"
-      columns={metrics.map(([label]) => label)}
-      rows={[{ key: 'summary', cells: metrics.map(([, value]) => value) }]}
-    />
+    <View accessibilityLabel="Resumen de estadísticas">
+      <ResponsiveGrid minWidth={150}>
+        {metrics.map(([label, value]) => (
+          <View
+            key={label}
+            style={[
+              styles.card,
+              {
+                gap: 8,
+                minHeight: 116,
+                borderTopWidth: 3,
+                borderTopColor: colors.brand,
+              },
+            ]}
+          >
+            <Text style={styles.muted}>{label}</Text>
+            <Text
+              style={{
+                color: colors.text,
+                fontSize: /\d/.test(value) ? 26 : 18,
+                lineHeight: 34,
+                fontWeight: '700',
+              }}
+            >
+              {value}
+            </Text>
+          </View>
+        ))}
+      </ResponsiveGrid>
+    </View>
   );
 }

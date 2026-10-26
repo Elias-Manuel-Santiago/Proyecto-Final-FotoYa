@@ -302,3 +302,12 @@ Quedan pendientes ganancias netas, correcciones/auditoría de operaciones y admi
 La verificación de correo usa `tokens_autenticacion` con `tipo = 'email_verification'`: `token` contiene el digest del desafío, `code_hash` el digest del código vinculado al desafío, y `sent_at`/`attempts` controlan reenvíos e intentos. Se conserva una fila por usuario para este tipo; los demás tipos admiten varias. La confirmación marca `used_at` y el reenvío reemplaza el desafío. `db:migrate` copia las verificaciones de la antigua `client_verifications`, conserva códigos, fechas e intentos y elimina esa tabla después de confirmar la copia. Ejecutar con la API detenida y respaldo previo.
 
 Check-in se activa desde Inicio del encargado. La vista queda restringida hasta cerrar sesión con su contraseña. La pantalla permite abrir/cerrar ventas y bloquea entradas y salidas mientras estén cerradas. El menú permite cerrar sesión y cambiar el tema; el puesto es el asignado al encargado. Las rutas de cuentas dedicadas y consulta de contraseñas fueron retiradas. Las cuentas antiguas ya no pueden iniciar sesión ni aparecen en Usuarios o catálogos. La migración conserva esas filas y cualquier columna `checkin_password` heredada sin leerla ni escribirla; una instalación nueva no crea esa columna. No se requiere una migración destructiva para usar el nuevo flujo.
+
+
+### Ciudades, eventos y secretarios sin puesto fijo
+
+Antes de desplegar estos cambios, ejecutar `npm run db:migrate`. La migración elimina el puesto asignado de los secretarios existentes y conserva sus jornadas históricas. Las altas y ediciones de secretarios guardan `id_puesto = NULL`, aunque el cliente envíe un puesto. Pueden registrar entrada/salida desde el Check-in de cualquier puesto; una jornada abierta habilita su acceso global y sigue impidiendo abrir dos jornadas a la vez.
+
+Dueño y Secretario pueden navegar Ciudades → Eventos → Puestos con filtros por ID. Secretario consulta puestos sin acciones de administración. Usuarios oculta la cuenta propia y permite combinar filtros de rol, puesto, estado y búsqueda. El alta de usuarios usa contraseña visible mediante el botón del ojo y confirmación de contraseña.
+
+La migración existente convierte el antiguo rol `camarografo` a `editor` antes de crear el nuevo `camarografo`. El nuevo rol mantiene los permisos de consulta del vendedor sin `sales.create`.

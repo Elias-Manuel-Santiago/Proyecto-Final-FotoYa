@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import type { Auth0User, Employee } from '../src/domain/models';
 import {
   authenticationLabel,
+  filterUserDirectory,
   userDirectory,
 } from '../src/domain/user-directory';
 
@@ -72,4 +73,36 @@ test('cuentas externas bloqueadas y sin correo conservan su estado, las locales 
     authenticationLabel(rows[0].authenticationProviders),
     'Correo y contraseña (Foto Ya)',
   );
+});
+
+test('oculta la cuenta propia después de vincular Auth0 y combina filtros de rol y puesto', () => {
+  for (const roleId of ['owner', 'secretary', 'manager'] as const) {
+    const actor = { ...employee, roleId, stationId: '1', working: true };
+    const other = {
+      ...employee,
+      id: '2',
+      roleId: 'seller' as const,
+      stationId: '1',
+      auth0Subject: null,
+    };
+    const elsewhere = { ...other, id: '3', stationId: '2' };
+    const rows = userDirectory([actor, other, elsewhere], [external]);
+    const filters = { role: '', stationId: '', status: 'all', search: '' };
+    const visible = filterUserDirectory(rows, actor, filters);
+    assert(
+      !visible.some((row) => row.localUser?.id === actor.id || !row.localUser),
+    );
+    assert.deepEqual(
+      filterUserDirectory(rows, actor, {
+        ...filters,
+        role: 'seller',
+        stationId: '1',
+      }).map((row) => row.localUser?.id),
+      ['2'],
+    );
+    assert.equal(
+      filterUserDirectory(rows, actor, { ...filters, role: 'editor' }).length,
+      0,
+    );
+  }
 });

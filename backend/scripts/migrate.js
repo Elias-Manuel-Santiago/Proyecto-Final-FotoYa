@@ -100,6 +100,9 @@ export async function migrate(db, env, { init = false } = {}) {
     if (!await hasIndex('fotos', 'ix_fotos_puesto_cliente')) await connection.query('CREATE INDEX ix_fotos_puesto_cliente ON fotos (id_puesto, id_cliente, id_fotos)');
     await connection.beginTransaction();
     await migrateEmployeeRoles(connection);
+    // Secretario tiene alcance global; la asistencia conserva su puesto histórico.
+    await connection.execute(`UPDATE usuarios u JOIN rol r ON r.id_rol = u.id_rol
+      SET u.id_puesto = NULL WHERE r.nombre = 'secretario' AND u.id_puesto IS NOT NULL`);
     // Check-in pertenece a la sesión del encargado. Una migración nunca libera un kiosco.
     for (const name of ['clients.read', 'clients.manage']) {
       const [inserted] = await connection.execute('INSERT IGNORE INTO permisos (tipo_de_permiso) VALUES (?)', [name]);

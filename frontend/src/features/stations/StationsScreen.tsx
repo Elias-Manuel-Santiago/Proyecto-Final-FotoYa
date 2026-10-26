@@ -5,6 +5,8 @@ import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
  * tarifas según permiso.
  */
 import { useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import { can } from '../../domain/permissions';
 import { Text, View } from 'react-native';
 import { Button } from '../../components/ui/Button';
 import { ConfirmAction } from '../../components/ui/ConfirmAction';
@@ -20,18 +22,34 @@ import { useTheme } from '../../components/ui/theme';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
 import { StationPrices } from './StationPrices';
-
 const empty = { name: '', address: '', city: '', event: '' };
-
 // Filtra puestos y coordina alta, disponibilidad y consulta de tarifas.
 export function StationsScreen() {
+  const { city = '', event = '' } = useLocalSearchParams<{
+    city?: string;
+    event?: string;
+  }>();
+  return (
+    <StationDirectory
+      key={JSON.stringify([city, event])}
+      city={city}
+      event={event}
+    />
+  );
+}
+
+function StationDirectory({ city, event }: { city: string; event: string }) {
   const { styles } = useTheme();
-  const { data, repository, refresh } = useWorkspace();
+  const { data, employee, repository, refresh } = useWorkspace();
+  const manage = can(employee, 'stations.manage');
   const [input, setInput] = useState(empty);
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
-  const [scopeIds, setScopeIds] = useState<string[]>([]);
+  const [scopeIds, setScopeIds] = useState<string[]>(() => [
+    ...(city ? [`city:${city}`] : []),
+    ...(event ? [`event:${event}`] : []),
+  ]);
   const selectedIds = periodScopePatch(data.stations, scopeIds).stationIds;
   const [pricing, setPricing] = useState('');
   const action = useAction();
@@ -54,20 +72,21 @@ export function StationsScreen() {
         ? 'Puesto reactivado.'
         : 'Puesto dado de baja. Se conserva su historial.',
     );
-
   return (
     <Screen title="Puestos">
       <Feedback error={action.error} success={action.success} />
-      <Button
-        title={creating ? 'Cancelar alta' : 'Alta de puesto'}
-        secondary={creating}
-        disabled={action.busy}
-        onPress={() => {
-          setCreating(!creating);
-          action.clear();
-        }}
-      />
-      {creating && (
+      {manage && (
+        <Button
+          title={creating ? 'Cancelar alta' : 'Alta de puesto'}
+          secondary={creating}
+          disabled={action.busy}
+          onPress={() => {
+            setCreating(!creating);
+            action.clear();
+          }}
+        />
+      )}
+      {manage && creating && (
         <View style={styles.card}>
           <Text style={styles.heading}>Nuevo puesto</Text>
           {(['name', 'address', 'city', 'event'] as const).map((key) => (
@@ -148,7 +167,7 @@ export function StationsScreen() {
             <Text style={styles.muted}>
               {station.active === false ? 'Inactivo' : 'Activo'}
             </Text>
-            {station.active !== false && (
+            {can(employee, 'prices.manage') && station.active !== false && (
               <Button
                 title="Precios del puesto"
                 secondary
@@ -157,25 +176,28 @@ export function StationsScreen() {
                 }
               />
             )}
-            {pricing === station.id && station.active !== false && (
-              <StationPrices stationId={station.id} />
-            )}
-            {station.active === false ? (
-              <Button
-                title={`Reactivar ${station.name}`}
-                busy={action.busy}
-                onPress={() => {
-                  void changeAvailability(station.id, true);
-                }}
-              />
-            ) : (
-              <ConfirmAction
-                title={`Dar de baja ${station.name}`}
-                question={`¿Dar de baja ${station.name}? Se conservarán los usuarios asignados, fotos, ventas y horarios. No se admitirán nuevas cargas de fotos ni nuevas asignaciones a este puesto hasta reactivarlo.`}
-                busy={action.busy}
-                onConfirm={() => changeAvailability(station.id, false)}
-              />
-            )}
+            {can(employee, 'prices.manage') &&
+              pricing === station.id &&
+              station.active !== false && (
+                <StationPrices stationId={station.id} />
+              )}
+            {manage &&
+              (station.active === false ? (
+                <Button
+                  title={`Reactivar ${station.name}`}
+                  busy={action.busy}
+                  onPress={() => {
+                    void changeAvailability(station.id, true);
+                  }}
+                />
+              ) : (
+                <ConfirmAction
+                  title={`Dar de baja ${station.name}`}
+                  question={`¿Dar de baja ${station.name}? Se conservarán los usuarios asignados, fotos, ventas y horarios. No se admitirán nuevas cargas de fotos ni nuevas asignaciones a este puesto hasta reactivarlo.`}
+                  busy={action.busy}
+                  onConfirm={() => changeAvailability(station.id, false)}
+                />
+              ))}
           </View>
         ))}
       </ResponsiveGrid>

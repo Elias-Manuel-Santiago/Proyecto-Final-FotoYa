@@ -79,9 +79,11 @@ export function PhotosScreen() {
         <SortControl ascending={ascending} onChange={setAscending} />
       </PeriodFilters>
       <Feedback error={error || refreshError} />
-      <Text style={styles.muted}>
-        {loading ? 'Cargando…' : refreshing ? 'Actualizando…' : ' '}
-      </Text>
+      {(loading || refreshing) && (
+        <Text accessibilityLiveRegion="polite" style={styles.muted}>
+          {loading ? 'Cargando…' : 'Actualizando…'}
+        </Text>
+      )}
       {!error && !loading && (
         <>
           {employee.permissions?.includes('counts.read') && (

@@ -38,12 +38,17 @@ export function Button({
       disabled={disabled || busy}
       onPress={onPress}
       style={({ pressed }) => ({
-        minHeight: 46,
+        minHeight: 48,
+        maxWidth: '100%',
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: danger ? colors.error : colors.border,
+        borderColor: danger
+          ? colors.error
+          : secondary
+            ? colors.border
+            : colors.brand,
         backgroundColor: secondary || danger ? colors.surface : colors.brand,
         opacity: disabled || busy ? 0.5 : pressed ? 0.75 : 1,
         flexDirection: 'row',
@@ -53,7 +58,16 @@ export function Button({
       })}
     >
       {busy && <ActivityIndicator color={foreground} />}
-      <Text style={{ fontSize: 16, fontWeight: '600', color: foreground }}>
+      <Text
+        style={{
+          fontSize: 15,
+          lineHeight: 22,
+          fontWeight: '600',
+          color: foreground,
+          flexShrink: 1,
+          textAlign: 'center',
+        }}
+      >
         {title}
       </Text>
     </Pressable>

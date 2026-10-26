@@ -1,138 +1,108 @@
-import { Link, usePathname, type Href } from 'expo-router';
+import { Link, usePathname } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  can,
-  canWork,
-  roleLabels,
-  type Permission,
-} from '../../domain/permissions';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { roleLabels } from '../../domain/permissions';
 import { useWorkspace } from '../../providers/AppProvider';
 import { useNavigationMode } from '../../hooks/useNavigationMode';
-import { Icon, type IconName } from '../ui/Icon';
+import { Icon } from '../ui/Icon';
+import { ScreenLayoutContext } from '../ui/Screen';
 import { useTheme } from '../ui/theme';
-const links: {
-  href: Href;
-  label: string;
-  permission?: Permission;
-  icon: IconName;
-}[] = [
-  { href: '/home', icon: 'inicio', label: 'Inicio' },
-  {
-    href: '/reports',
-    icon: 'estadisticas',
-    label: 'Estadísticas',
-    permission: 'reports.read',
-  },
-  {
-    href: '/employees',
-    icon: 'usuarios',
-    label: 'Usuarios',
-    permission: 'employees.read',
-  },
-  {
-    href: '/clients',
-    icon: 'usuarios',
-    label: 'Clientes',
-    permission: 'clients.read',
-  },
-  {
-    href: '/stations',
-    icon: 'puestos',
-    label: 'Puestos',
-    permission: 'stations.manage',
-  },
-  {
-    href: '/prices',
-    icon: 'precios',
-    label: 'Precios',
-    permission: 'prices.manage',
-  },
-  {
-    href: '/attendance',
-    icon: 'horarios',
-    label: 'Horarios',
-    permission: 'attendance.read',
-  },
-  {
-    href: '/photos',
-    icon: 'fotos-galeria',
-    label: 'Fotos',
-    permission: 'photos.read',
-  },
-  { href: '/sales', icon: 'ventas', label: 'Ventas', permission: 'sales.read' },
-  {
-    href: '/my-attendance',
-    icon: 'asistencia',
-    label: 'Mi asistencia',
-    permission: 'attendance.self',
-  },
-  { href: '/profile', icon: 'mi-usuario', label: 'Mi usuario' },
-];
+import {
+  isNavigationActive,
+  navigationFor,
+  type NavigationItem,
+} from './workspace-navigation';
+
+function NavigationLink({
+  item,
+  placement,
+  expanded = true,
+}: {
+  item: NavigationItem;
+  placement: 'rail' | 'tab';
+  expanded?: boolean;
+}) {
+  const { colors } = useTheme();
+  const pathname = usePathname();
+  const active = isNavigationActive(pathname, item.href);
+  const tab = placement === 'tab';
+  const showLabel = tab || expanded;
+  return (
+    <Link href={item.href} asChild>
+      <Pressable
+        accessibilityRole={tab ? 'tab' : 'link'}
+        accessibilityLabel={item.label}
+        accessibilityState={{ selected: active }}
+        style={{
+          minWidth: tab ? 104 : 0,
+          flexShrink: 0,
+          flexDirection: tab ? 'column' : 'row',
+          alignItems: 'center',
+          justifyContent: showLabel && !tab ? 'flex-start' : 'center',
+          gap: tab ? 8 : 12,
+          paddingHorizontal: tab || expanded ? 16 : 12,
+          paddingVertical: 12,
+          minHeight: tab ? 76 : 56,
+          borderRadius: tab ? 14 : 12,
+          backgroundColor: active
+            ? tab
+              ? colors.lavender
+              : colors.accent
+            : 'transparent',
+        }}
+      >
+        <View
+          style={{
+            width: 28,
+            height: 28,
+            flexShrink: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Icon
+            name={item.icon}
+            selected={active}
+            size={28}
+            color={active ? colors.primary : colors.muted}
+          />
+        </View>
+        {showLabel && (
+          <Text
+            style={{
+              flexShrink: 1,
+              color: active ? colors.primary : colors.text,
+              fontSize: tab ? 12 : 15,
+              lineHeight: tab ? 18 : 22,
+              fontWeight: active ? '700' : '500',
+              textAlign: tab ? 'center' : 'left',
+            }}
+          >
+            {item.label}
+          </Text>
+        )}
+      </Pressable>
+    </Link>
+  );
+}
 
 export function WorkspaceHeader({ children }: { children: ReactNode }) {
   const { colors, styles } = useTheme();
   const { employee, data } = useWorkspace();
-  const pathname = usePathname();
-  const { bottom } = useNavigationMode();
+  const { bottom, width } = useNavigationMode();
+  const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState(true);
   const station = data.stations.find((row) => row.id === employee.stationId);
   const showStation = !['owner', 'client'].includes(employee.roleId);
-  const navigation = links.filter((link) =>
-    canWork(employee)
-      ? !link.permission || can(employee, link.permission)
-      : link.href === '/profile',
-  );
-  const items = navigation.map((link) => {
-    const active =
-      pathname === link.href || pathname.startsWith(`${link.href}/`);
-    return (
-      <Link key={String(link.href)} href={link.href} asChild>
-        <Pressable
-          accessibilityRole="tab"
-          accessibilityLabel={link.label}
-          accessibilityState={{ selected: active }}
-          style={{
-            flexDirection: bottom ? 'column' : 'row',
-            alignItems: 'center',
-            justifyContent: bottom || !expanded ? 'center' : 'flex-start',
-            gap: 8,
-            padding: 12,
-            minHeight: 50,
-            minWidth: bottom ? 84 : 48,
-            borderRadius: 14,
-            backgroundColor: active ? colors.lavender : 'transparent',
-            borderLeftWidth: !bottom && active ? 3 : 0,
-            borderColor: colors.primary,
-          }}
-        >
-          <Icon
-            name={link.icon}
-            selected={active}
-            color={active ? colors.primary : colors.text}
-          />
-          {(bottom || expanded) && (
-            <Text
-              style={{
-                color: active ? colors.primary : colors.text,
-                fontSize: bottom ? 11 : 14,
-                fontWeight: active ? '700' : '500',
-              }}
-            >
-              {link.label}
-            </Text>
-          )}
-        </Pressable>
-      </Link>
-    );
-  });
-  const brand = (
+  const navigation = navigationFor(employee);
+  const brand = (compact: boolean) => (
     <Image
-      source={require('../../../assets/images/main-icon.jpg')}
-      accessibilityLabel="FotoYa"
-      style={{ width: 48, height: 48, borderRadius: 14 }}
+      source={require('../../../assets/images/ui-svg/foto-ya-logo-texto.png')}
+      accessibilityLabel="Foto Ya"
+      contentFit="contain"
+      style={{ width: compact ? 48 : bottom ? 100 : 140, height: 44 }}
     />
   );
   return (
@@ -144,22 +114,28 @@ export function WorkspaceHeader({ children }: { children: ReactNode }) {
       }}
     >
       {!bottom && (
-        <SafeAreaView
-          edges={['top', 'bottom', 'left']}
+        <View
           style={{
-            width: expanded ? 232 : 80,
+            width: (expanded ? 248 : 80) + insets.left,
+            paddingTop: insets.top + 16,
+            paddingBottom: Math.max(insets.bottom, 16),
+            paddingLeft: insets.left + 12,
+            paddingRight: 12,
+            gap: 20,
             backgroundColor: colors.surface,
             borderRightWidth: 1,
             borderColor: colors.border,
           }}
         >
-          <View style={{ padding: 14, gap: 16, flex: 1 }}>
-            <View
-              style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}
-            >
-              {brand}
-              {expanded && <Text style={styles.heading}>FotoYa!</Text>}
-            </View>
+          <View
+            style={{
+              flexDirection: expanded ? 'row' : 'column',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+            }}
+          >
+            {brand(!expanded)}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
@@ -167,62 +143,117 @@ export function WorkspaceHeader({ children }: { children: ReactNode }) {
               }
               accessibilityState={{ expanded }}
               onPress={() => setExpanded(!expanded)}
-              style={{
-                minHeight: 44,
+              style={({ pressed }) => ({
+                width: 44,
+                height: 44,
+                borderRadius: 12,
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: 12,
-                backgroundColor: colors.lavender,
-              }}
+                backgroundColor: pressed ? colors.accent : 'transparent',
+              })}
             >
-              <Icon name={expanded ? 'flecha-izq' : 'flecha-der'} />
+              <Icon
+                name={expanded ? 'flecha-izq' : 'flecha-der'}
+                size={20}
+                color={colors.muted}
+              />
             </Pressable>
-            <ScrollView contentContainerStyle={{ gap: 6 }}>{items}</ScrollView>
-            {expanded && (
-              <Text style={styles.muted}>{roleLabels[employee.roleId]}</Text>
-            )}
           </View>
-        </SafeAreaView>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 6 }}>
+            {navigation.map((item) => (
+              <NavigationLink
+                key={String(item.href)}
+                item={item}
+                placement="rail"
+                expanded={expanded}
+              />
+            ))}
+          </ScrollView>
+          {expanded && (
+            <Text style={[styles.muted, { paddingHorizontal: 12 }]}>
+              Foto Ya · {roleLabels[employee.roleId]}
+            </Text>
+          )}
+        </View>
       )}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <SafeAreaView
-          edges={['top', 'right', 'left']}
-          style={{ backgroundColor: colors.surface }}
+        <View
+          style={{
+            paddingTop: insets.top,
+            paddingLeft: bottom ? insets.left : 0,
+            paddingRight: insets.right,
+            backgroundColor: colors.surface,
+            borderBottomWidth: 1,
+            borderColor: colors.border,
+          }}
         >
           <View
             style={{
-              minHeight: 76,
-              padding: 12,
-              paddingLeft: bottom ? 76 : 24,
+              minHeight: 64,
+              paddingHorizontal: bottom ? 16 : 28,
+              paddingVertical: 8,
               flexDirection: 'row',
               alignItems: 'center',
-              gap: 12,
-              borderBottomWidth: 1,
-              borderColor: colors.border,
+              gap: 16,
             }}
           >
-            {bottom && brand}
-            <View style={{ flex: 1 }}>
-              <Text style={styles.label}>
-                {bottom ? 'FotoYa!' : roleLabels[employee.roleId]}
+            {bottom && brand(false)}
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Text numberOfLines={1} style={styles.label}>
+                {showStation
+                  ? (station?.name ??
+                    employee.stationName ??
+                    'Sin puesto asignado')
+                  : roleLabels[employee.roleId]}
               </Text>
               {showStation && (
-                <Text style={styles.muted}>
-                  {station?.name ??
-                    employee.stationName ??
-                    'Sin puesto asignado'}
+                <Text numberOfLines={1} style={styles.muted}>
+                  {roleLabels[employee.roleId]}
                 </Text>
               )}
             </View>
-            <Text style={styles.muted}>{employee.firstName}</Text>
+            <Link href="/profile" asChild>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel={`Mi usuario: ${employee.firstName}`}
+                style={({ pressed }) => ({
+                  minHeight: 44,
+                  minWidth: 44,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  paddingHorizontal: 10,
+                  borderRadius: 12,
+                  backgroundColor: pressed ? colors.accent : 'transparent',
+                  maxWidth: bottom ? 132 : 220,
+                })}
+              >
+                <Icon name="mi-usuario" size={22} color={colors.primary} />
+                {(!bottom || width >= 420) && (
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.label, { flexShrink: 1 }]}
+                  >
+                    {employee.firstName}
+                  </Text>
+                )}
+              </Pressable>
+            </Link>
           </View>
-        </SafeAreaView>
-        {children}
+        </View>
+        <ScreenLayoutContext.Provider
+          value={{ embedded: true, bottomNavigation: bottom }}
+        >
+          {children}
+        </ScreenLayoutContext.Provider>
       </View>
       {bottom && (
-        <SafeAreaView
-          edges={['bottom', 'left', 'right']}
+        <View
           style={{
+            paddingBottom: insets.bottom,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
             backgroundColor: colors.surface,
             borderTopWidth: 1,
             borderColor: colors.border,
@@ -231,11 +262,17 @@ export function WorkspaceHeader({ children }: { children: ReactNode }) {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator
-            contentContainerStyle={{ padding: 8, gap: 4 }}
+            contentContainerStyle={{ padding: 12, gap: 12 }}
           >
-            {items}
+            {navigation.map((item) => (
+              <NavigationLink
+                key={String(item.href)}
+                item={item}
+                placement="tab"
+              />
+            ))}
           </ScrollView>
-        </SafeAreaView>
+        </View>
       )}
     </View>
   );

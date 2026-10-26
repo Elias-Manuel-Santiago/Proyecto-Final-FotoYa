@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button } from '../../../components/ui/Button';
+import { PasswordField } from '../../../components/ui/PasswordField';
 import { Field } from '../../../components/ui/Field';
 import { Feedback } from '../../../components/ui/Feedback';
 import { Select } from '../../../components/ui/Select';
@@ -15,7 +16,6 @@ import { visibleStations } from '../../../domain/metrics';
 import { assignableRoles, roleLabels } from '../../../domain/permissions';
 import { useAction } from '../../../hooks/useAction';
 import { useWorkspace } from '../../../providers/AppProvider';
-
 // Mantiene datos y asignación para reutilizar el flujo en alta y edición.
 export function EmployeeForm({
   existing,
@@ -35,24 +35,28 @@ export function EmployeeForm({
     roleId: existing?.roleId ?? 'editor',
     stationId: existing?.stationId ?? employee.stationId,
   }));
+  const [confirmPassword, setConfirmPassword] = useState('');
   const action = useAction();
   // Aplica cambios parciales y limpia el resultado de la operación anterior.
   const update = (patch: Partial<EmployeeInput>) => {
     setInput((current) => ({ ...current, ...patch }));
     action.clear();
   };
-
   // Guarda y refresca; si se editó la propia cuenta, cierra su sesión revocada.
   function save() {
     void action.run(async () => {
-      await repository.saveEmployee(input);
+      if (!existing && input.password !== confirmPassword)
+        throw new Error('Las contraseñas no coinciden.');
+      await repository.saveEmployee({
+        ...input,
+        stationId: input.roleId === 'secretary' ? '' : input.stationId,
+      });
       if (input.id === employee.id) {
         await logout().catch(() => undefined);
       } else await refresh();
       onSaved?.();
     }, 'Usuario guardado.');
   }
-
   return (
     <View style={styles.stack}>
       <Select
@@ -64,10 +68,14 @@ export function EmployeeForm({
           value,
           label: roleLabels[value],
         }))}
-        onChange={(value) => update({ roleId: value as RoleId })}
+        onChange={(value) =>
+          update({
+            roleId: value as RoleId,
+            stationId: value === 'secretary' ? '' : input.stationId,
+          })
+        }
         disabled={action.busy || existing?.id === employee.id}
       />
-
       <Field
         label="Nombre"
         value={input.firstName}
@@ -97,15 +105,27 @@ export function EmployeeForm({
         editable={!action.busy}
       />
       {!existing && (
-        <Field
-          label="Contraseña inicial (12 a 128 caracteres)"
-          value={input.password ?? ''}
-          onChangeText={(password) => update({ password })}
-          secureTextEntry
-          autoCapitalize="none"
-          editable={!action.busy}
-          maxLength={128}
-        />
+        <>
+          <PasswordField
+            label="Contraseña inicial (12 a 128 caracteres)"
+            value={input.password ?? ''}
+            onChangeText={(password) => update({ password })}
+            autoCapitalize="none"
+            editable={!action.busy}
+            maxLength={128}
+          />
+          <PasswordField
+            label="Confirmar contraseña"
+            value={confirmPassword}
+            onChangeText={(value) => {
+              setConfirmPassword(value);
+              action.clear();
+            }}
+            autoCapitalize="none"
+            editable={!action.busy}
+            maxLength={128}
+          />
+        </>
       )}
       {employee.roleId === 'manager' && (
         <Text style={styles.muted}>
@@ -115,7 +135,7 @@ export function EmployeeForm({
             'Tu puesto'}
         </Text>
       )}
-      {employee.roleId !== 'manager' && (
+      {employee.roleId !== 'manager' && input.roleId !== 'secretary' && (
         <Select
           label="Puesto asignado"
           value={input.stationId}
