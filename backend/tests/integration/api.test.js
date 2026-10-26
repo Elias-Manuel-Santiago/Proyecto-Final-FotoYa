@@ -354,6 +354,37 @@ integration('puestos: alta, baja reversible, permisos e historial', async () => 
   await db.execute('DELETE FROM puesto WHERE id_puesto=?', [id]);
 });
 
+integration('ciudades y eventos independientes, edición de asociaciones y restricciones de borrado', async () => {
+  const first = await call('catalog/cities/save', { name: 'Ciudad gestión A' });
+  const second = await call('catalog/cities/save', { name: 'Ciudad gestión B' });
+  assert.equal(first.status, 200); assert.equal(second.status, 200);
+  const cityId = first.data.data.id, otherCityId = second.data.data.id;
+  const created = await call('catalog/events/save', { name: 'Evento gestión', cityId, stationIds: [] });
+  assert.equal(created.status, 200);
+  const eventId = created.data.data.id;
+  assert((await call('catalog/query', { resource: 'events' })).data.data.some(row => String(row.id) === eventId));
+  assert.equal((await call('catalog/locations/delete', { kind: 'city', id: cityId })).status, 409);
+  assert.equal((await call('catalog/events/save', { name: 'Sin ciudad', stationIds: [] })).status, 422);
+  assert.equal((await call('catalog/cities/save', { name: 'Prohibida' }, 'secretario')).status, 403);
+  const station = await call('catalog/stations/create', { name: 'Puesto gestión', address: 'A', city: 'Ciudad gestión A', event: 'Evento gestión' });
+  assert.equal(station.status, 200);
+  const stationId = station.data.data.id;
+  assert.equal((await call('catalog/stations/availability', { stationId, active: false })).status, 200);
+  assert.equal((await call('catalog/locations/delete', { kind: 'event', id: eventId })).status, 409);
+  assert.equal((await call('catalog/events/save', { id: eventId, name: 'Evento modificado', cityId: otherCityId, stationIds: [stationId] })).status, 200);
+  const [[moved]] = await db.execute('SELECT id_ciudad, id_evento FROM puesto WHERE id_puesto=?', [stationId]);
+  assert.equal(String(moved.id_ciudad), otherCityId); assert.equal(String(moved.id_evento), eventId);
+  await assert.rejects(db.execute('UPDATE puesto SET id_ciudad=? WHERE id_puesto=?', [cityId, stationId]), { code: 'ER_NO_REFERENCED_ROW_2' });
+  assert.equal((await call('catalog/cities/save', { id: cityId, name: 'Ciudad renombrada', eventCities: [{ eventId, cityId }] })).status, 200);
+  const [[cascade]] = await db.execute('SELECT id_ciudad FROM puesto WHERE id_puesto=?', [stationId]);
+  assert.equal(String(cascade.id_ciudad), cityId);
+  assert.equal((await call('catalog/stations/update', { stationId, name: 'Puesto modificado', address: 'B', cityId: otherCityId, eventId: null, employeeStations: [] })).status, 200);
+  assert.equal((await call('catalog/locations/delete', { kind: 'event', id: eventId })).status, 200);
+  assert.equal((await call('catalog/locations/delete', { kind: 'city', id: cityId })).status, 200);
+  await db.execute('DELETE FROM puesto WHERE id_puesto=?', [stationId]);
+  assert.equal((await call('catalog/locations/delete', { kind: 'city', id: otherCityId })).status, 200);
+});
+
 integration('login real guarda el token de sesión sin hash y rechaza contraseñas erróneas', async () => {
   const response = await call('auth/login', { email: 'dueno@example.com', password: 'Test-password-1234' });
   assert.equal(response.status, 200); const token = response.data.data.token;

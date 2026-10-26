@@ -8,7 +8,7 @@ import { transaction } from '../../shared/transaction.js';
 import { assertPermission } from '../../security/access.js';
 
 // Revalida al dueño y su sesión dentro de la transacción que administra el puesto.
-const managed = (actor, callback) => {
+export const managed = (actor, callback) => {
   assertPermission(actor, 'stations.manage');
   if (actor.role !== 'dueno') throw new ApiError(403, 'Solo el administrador puede gestionar puestos.');
   return transaction(async connection => {
@@ -20,7 +20,7 @@ const managed = (actor, callback) => {
       JOIN sesiones_usuario s ON s.id_usuario = u.id_usuario
       WHERE u.id_usuario = ? AND u.disponible = 1 AND r.nombre = 'dueno'
       AND p.tipo_de_permiso = 'stations.manage' AND s.id_sesiones_usuario = ?
-      AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6)`, [actor.id, actor.sessionId]);
+      AND s.check_in_mode = FALSE AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6)`, [actor.id, actor.sessionId]);
     if (!authorized) throw new ApiError(403, 'La autorización cambió. Volvé a iniciar sesión.');
     return callback(connection);
   });
@@ -37,7 +37,16 @@ export const stations = {
   create(actor, input) {
     return managed(actor, async connection => {
       const cityId = await reference(connection, 'ciudad', 'id_ciudad', input.city);
-      const eventId = input.event ? await reference(connection, 'evento', 'id_evento', input.event) : null;
+      let eventId = null;
+      if (input.event) {
+        const [[existing]] = await connection.execute('SELECT id_evento AS id, id_ciudad AS cityId FROM evento WHERE nombre = ? ORDER BY id_evento LIMIT 1 FOR UPDATE', [input.event]);
+        if (existing && String(existing.cityId) !== String(cityId)) throw new ApiError(409, 'El evento pertenece a otra ciudad.');
+        if (existing) eventId = existing.id;
+        else {
+          const [created] = await connection.execute('INSERT INTO evento (nombre, id_ciudad) VALUES (?, ?)', [input.event, cityId]);
+          eventId = created.insertId;
+        }
+      }
       const [[duplicate]] = await connection.execute(`SELECT id_puesto FROM puesto
         WHERE nombre = ? AND direccion = ? AND id_ciudad = ? AND id_evento <=> ? LIMIT 1`,
       [input.name, input.address, cityId, eventId]);

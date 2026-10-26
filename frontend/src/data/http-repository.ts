@@ -21,6 +21,11 @@ import type {
   SalePhoto,
   CheckInEmployee,
   Auth0DirectoryResult,
+  City,
+  LocationEvent,
+  CityInput,
+  LocationEventInput,
+  StationUpdateInput,
 } from '../domain/models';
 import { canWork } from '../domain/permissions';
 import { businessDate, periodError, utcInstant } from '../domain/dates';
@@ -334,6 +339,12 @@ export class HttpFotoYaRepository {
         eventId: row.eventId == null ? undefined : String(row.eventId),
         event: row.event ?? '',
       }));
+    const [cities, events] = has('catalog.read')
+      ? await Promise.all([
+          this.api.all<City>('catalog/query', { resource: 'cities' }),
+          this.api.all<LocationEvent>('catalog/query', { resource: 'events' }),
+        ])
+      : [[], []];
     const reportBody = {
       ...body,
       ...(actor.roleId !== 'manager' && period.city
@@ -410,6 +421,12 @@ export class HttpFotoYaRepository {
         actor,
       ],
       stations: normalizedStations,
+      cities: cities.map((row) => ({ ...row, id: String(row.id) })),
+      events: events.map((row) => ({
+        ...row,
+        id: String(row.id),
+        cityId: String(row.cityId),
+      })),
       roles: roleRows.map((row) => ({
         id: String(row.id),
         roleId: roles[row.name],
@@ -471,6 +488,19 @@ export class HttpFotoYaRepository {
   // Envía el alta del puesto para que la pantalla refresque los datos tras confirmarse.
   async createStation(input: StationInput) {
     await this.api.post('catalog/stations/create', input);
+  }
+
+  async saveCity(input: CityInput) {
+    await this.api.post('catalog/cities/save', input);
+  }
+  async saveEvent(input: LocationEventInput) {
+    await this.api.post('catalog/events/save', input);
+  }
+  async deleteLocation(kind: 'city' | 'event', id: string) {
+    await this.api.post('catalog/locations/delete', { kind, id });
+  }
+  async updateStation(input: StationUpdateInput) {
+    await this.api.post('catalog/stations/update', input);
   }
 
   // Solicita baja o reactivación del puesto por su identificador.

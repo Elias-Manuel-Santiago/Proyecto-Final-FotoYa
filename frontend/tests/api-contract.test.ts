@@ -120,6 +120,8 @@ function fixture(
     'auth/login': { token: 't'.repeat(43) },
     'auth/me': actor(role, permissions),
     'catalog/stations': [station],
+    'catalog/cities': [{ id: 2, name: 'Ciudad' }],
+    'catalog/events': [{ id: 3, name: 'Evento', cityId: 2 }],
     'catalog/roles': [
       { id: 3, name: 'vendedor' },
       { id: 6, name: 'cliente' },
@@ -254,6 +256,51 @@ test('login, POST, Bearer, IDs de catálogo, importes y resumen del servidor', a
         (row) => row.path.endsWith('/query') && row.path !== 'catalog/query',
       )
       .every((row) => row.body.limit === 100 && row.body.offset === 0),
+  );
+});
+
+test('ciudades y eventos vacíos se cargan desde catálogos independientes', async () => {
+  const { repo } = fixture('dueno', {
+    'catalog/stations': [],
+    'catalog/cities': [{ id: 12, name: 'Ciudad sin puestos' }],
+    'catalog/events': [{ id: 34, name: 'Evento sin puestos', cityId: 12 }],
+  });
+  const data = await repo.snapshot(period);
+  assert.deepEqual(data.stations, []);
+  assert.deepEqual(data.cities, [{ id: '12', name: 'Ciudad sin puestos' }]);
+  assert.deepEqual(data.events, [
+    { id: '34', name: 'Evento sin puestos', cityId: '12' },
+  ]);
+});
+
+test('gestión de ubicaciones envía IDs y asociaciones por las rutas correspondientes', async () => {
+  const { repo, requests } = fixture();
+  const city = {
+    id: '12',
+    name: 'Ciudad',
+    eventCities: [{ eventId: '34', cityId: '12' }],
+  };
+  const event = { id: '34', name: 'Evento', cityId: '12', stationIds: ['56'] };
+  const station = {
+    stationId: '56',
+    name: 'Puesto',
+    address: 'A',
+    cityId: '12',
+    eventId: '34',
+    employeeStations: [{ employeeId: '78', stationId: '56' }],
+  };
+  await repo.saveCity(city);
+  await repo.saveEvent(event);
+  await repo.updateStation(station);
+  await repo.deleteLocation('event', '34');
+  assert.deepEqual(
+    requests.map(({ path, body }) => ({ path, body })),
+    [
+      { path: 'catalog/cities/save', body: city },
+      { path: 'catalog/events/save', body: event },
+      { path: 'catalog/stations/update', body: station },
+      { path: 'catalog/locations/delete', body: { kind: 'event', id: '34' } },
+    ],
   );
 });
 

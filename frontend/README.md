@@ -1,5 +1,19 @@
 # Foto Ya · Frontend
 
+## Ciudades, eventos y puestos
+
+El dueño puede crear, modificar y eliminar ciudades y eventos. Los catálogos incluyen registros sin puestos. En una ciudad se puede cambiar la ciudad asignada a cada evento; sus puestos se trasladan junto con él. Cada evento requiere una ciudad y permite seleccionar sus puestos. Un puesto seleccionado se traslada desde su evento anterior; al desmarcarlo queda sin evento y conserva su ciudad. No se elimina una ciudad con eventos o puestos, ni un evento con puestos, incluidos los inactivos.
+
+En **Puestos → Modificar puesto** se cambia nombre, dirección, evento y empleados. El evento determina la ciudad; sin evento se elige una ciudad. Cada empleado conserva una única asignación: para quitarlo se selecciona otro puesto activo. Debe cerrar su jornada antes de trasladarse y luego volver a iniciar sesión.
+
+Antes de usar estas funciones, aplicar `npm run db:migrate` desde `backend`. La actualización requiere resolver explícitamente los eventos heredados sin ciudad o compartidos entre varias ciudades.
+
+## Cambiar la barra de navegación y sus íconos
+
+- `src/components/navigation/workspace-navigation.ts`: `workspaceLinks` define ruta, texto, permisos e **icon** de cada sección.
+- `src/components/ui/Icon.tsx`: `outlines` contiene el SVG de cada ícono; `filled` permite una variante para la sección seleccionada. Reemplazar el SVG bajo la misma clave cambia su aspecto en toda la aplicación. Los archivos de `assets/images/ui-svg/` no se cargan automáticamente.
+- `src/components/navigation/WorkspaceHeader.tsx`: dibuja la barra lateral y las pestañas móviles; controla tamaños, distribución y estado seleccionado.
+
 Aplicación Expo SDK 58 con TypeScript y Expo Router, conectada a la API Express existente.
 
 ## Ejecutar

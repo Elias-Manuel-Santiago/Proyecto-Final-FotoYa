@@ -22,6 +22,7 @@ import { useTheme } from '../../components/ui/theme';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
 import { StationPrices } from './StationPrices';
+import { StationEditor } from './StationEditor';
 const empty = { name: '', address: '', city: '', event: '' };
 // Filtra puestos y coordina alta, disponibilidad y consulta de tarifas.
 export function StationsScreen() {
@@ -52,6 +53,7 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
   ]);
   const selectedIds = periodScopePatch(data.stations, scopeIds).stationIds;
   const [pricing, setPricing] = useState('');
+  const [editing, setEditing] = useState('');
   const action = useAction();
   const rows = data.stations.filter(
     (row) =>
@@ -167,6 +169,19 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
             <Text style={styles.muted}>
               {station.active === false ? 'Inactivo' : 'Activo'}
             </Text>
+            {manage && (
+              <Button
+                title="Modificar puesto"
+                secondary
+                disabled={action.busy}
+                onPress={() =>
+                  setEditing(editing === station.id ? '' : station.id)
+                }
+              />
+            )}
+            {manage && editing === station.id && (
+              <StationEditor station={station} onClose={() => setEditing('')} />
+            )}
             {can(employee, 'prices.manage') && station.active !== false && (
               <Button
                 title="Precios del puesto"

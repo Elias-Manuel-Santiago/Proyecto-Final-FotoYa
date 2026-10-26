@@ -1,5 +1,11 @@
 # Backend Foto Ya
 
+## Gestión de ciudades, eventos y puestos
+
+Aplicar `npm run db:migrate` antes de iniciar esta versión. Agrega `evento.id_ciudad` y una clave foránea compuesta que mantiene coherentes la ciudad del evento y la de sus puestos. Para datos heredados se toma la ciudad existente de los puestos solamente si todos coinciden. Si hay eventos sin puestos o compartidos entre ciudades, la migración se detiene: se deben resolver sus asociaciones explícitamente y volver a ejecutar. No asigna ciudades arbitrarias ni divide eventos automáticamente.
+
+Las nuevas rutas POST `catalog/cities/save`, `catalog/events/save`, `catalog/locations/delete` y `catalog/stations/update` requieren dueño y `stations.manage`. Los cambios se confirman juntos y se serializan con la gestión de usuarios. No se borra una ciudad con eventos o puestos ni un evento con puestos, incluidos los inactivos. Los traslados de empleados requieren un puesto activo y la jornada cerrada; revocan sus sesiones. La cuenta de ejecución de la API necesita también DELETE sobre ciudad y evento.
+
 Node.js 22+, Express 5, MySQL 8.0.16+ (InnoDB) y Supabase Storage. Supabase Storage utiliza su cliente oficial; MySQL utiliza su protocolo nativo con `mysql2`. Todas las rutas de la API reciben `POST`: JSON, excepto la carga de fotos que utiliza `multipart/form-data`.
 
 ## Inicio

@@ -28,7 +28,7 @@ export const catalogRepository = {
     if (['cities', 'events'].includes(input.resource)) {
       const station = stationScope(actor, input.stationId);
       const [table, key] = input.resource === 'cities' ? ['ciudad', 'id_ciudad'] : ['evento', 'id_evento'];
-      const [rows] = await db.execute(`SELECT DISTINCT c.${key} AS id, c.nombre AS name FROM ${table} c
+      const [rows] = await db.execute(`SELECT DISTINCT c.${key} AS id, c.nombre AS name ${input.resource === 'events' ? ', c.id_ciudad AS cityId' : ''} FROM ${table} c
         ${station ? `JOIN puesto p ON p.${key} = c.${key} WHERE p.id_puesto = ?` : ''}
         ORDER BY c.${key} LIMIT ? OFFSET ?`, [...(station ? [station] : []), String(input.limit), String(input.offset)]);
       return rows;

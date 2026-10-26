@@ -82,6 +82,35 @@ export interface StationInput {
   event: string;
 }
 
+export interface City {
+  id: string;
+  name: string;
+}
+export interface LocationEvent {
+  id: string;
+  name: string;
+  cityId: string;
+}
+export interface CityInput {
+  id?: string;
+  name: string;
+  eventCities: { eventId: string; cityId: string | null }[];
+}
+export interface LocationEventInput {
+  id?: string;
+  name: string;
+  cityId: string;
+  stationIds: string[];
+}
+export interface StationUpdateInput {
+  stationId: string;
+  name: string;
+  address: string;
+  cityId: string;
+  eventId: string | null;
+  employeeStations: { employeeId: string; stationId: string }[];
+}
+
 // Metadatos de una foto/familia; la URL privada se solicita aparte y puede vencer.
 export interface Photo {
   id: string;
@@ -187,6 +216,8 @@ export interface CheckInEmployee {
 
 // Snapshot compartido que reúne catálogos y colecciones autorizadas para las pantallas.
 export interface AppData {
+  cities?: City[];
+  events?: LocationEvent[];
   employees: Employee[];
   stations: Station[];
   counts: DayCount[];
