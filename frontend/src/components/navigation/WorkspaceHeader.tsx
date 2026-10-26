@@ -97,156 +97,156 @@ export function WorkspaceHeader({ children }: { children: ReactNode }) {
   const station = data.stations.find((row) => row.id === employee.stationId);
   const showStation = !['owner', 'client'].includes(employee.roleId);
   const navigation = navigationFor(employee);
-  const brand = (compact: boolean) => (
+  const brand = (
     <Image
       source={require('../../../assets/images/ui-svg/foto-ya-logo-texto.png')}
       accessibilityLabel="Foto Ya"
       contentFit="contain"
-      style={{ width: compact ? 48 : bottom ? 100 : 140, height: 44 }}
+      style={{ width: bottom ? 100 : 140, height: 44, flexShrink: 0 }}
     />
   );
   return (
     <View
       style={{
         flex: 1,
-        flexDirection: bottom ? 'column' : 'row',
         backgroundColor: colors.background,
       }}
     >
-      {!bottom && (
+      <View
+        style={{
+          paddingTop: insets.top,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+          backgroundColor: colors.surface,
+          borderBottomWidth: 1,
+          borderColor: colors.border,
+        }}
+      >
         <View
           style={{
-            width: (expanded ? 248 : 80) + insets.left,
-            paddingTop: insets.top + 16,
-            paddingBottom: Math.max(insets.bottom, 16),
-            paddingLeft: insets.left + 12,
-            paddingRight: 12,
-            gap: 20,
-            backgroundColor: colors.surface,
-            borderRightWidth: 1,
-            borderColor: colors.border,
+            minHeight: 64,
+            paddingHorizontal: bottom ? 16 : 28,
+            paddingVertical: 8,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 16,
           }}
         >
-          <View
-            style={{
-              flexDirection: expanded ? 'row' : 'column',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-            }}
-          >
-            {brand(!expanded)}
+          {brand}
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Text numberOfLines={1} style={styles.label}>
+              {showStation
+                ? (station?.name ??
+                  employee.stationName ??
+                  'Sin puesto asignado')
+                : roleLabels[employee.roleId]}
+            </Text>
+            {showStation && (
+              <Text numberOfLines={1} style={styles.muted}>
+                {roleLabels[employee.roleId]}
+              </Text>
+            )}
+          </View>
+          <Link href="/profile" asChild>
             <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                expanded ? 'Contraer navegación' : 'Expandir navegación'
-              }
-              accessibilityState={{ expanded }}
-              onPress={() => setExpanded(!expanded)}
+              accessibilityRole="link"
+              accessibilityLabel={`Mi usuario: ${employee.firstName}`}
               style={({ pressed }) => ({
-                width: 44,
-                height: 44,
-                borderRadius: 12,
+                minHeight: 44,
+                minWidth: 44,
+                flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
+                gap: 8,
+                paddingHorizontal: 10,
+                borderRadius: 12,
                 backgroundColor: pressed ? colors.accent : 'transparent',
+                maxWidth: bottom ? 132 : 220,
               })}
             >
-              <Icon
-                name={expanded ? 'flecha-izq' : 'flecha-der'}
-                size={20}
-                color={colors.muted}
-              />
-            </Pressable>
-          </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 6 }}>
-            {navigation.map((item) => (
-              <NavigationLink
-                key={String(item.href)}
-                item={item}
-                placement="rail"
-                expanded={expanded}
-              />
-            ))}
-          </ScrollView>
-          {expanded && (
-            <Text style={[styles.muted, { paddingHorizontal: 12 }]}>
-              Foto Ya · {roleLabels[employee.roleId]}
-            </Text>
-          )}
-        </View>
-      )}
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <View
-          style={{
-            paddingTop: insets.top,
-            paddingLeft: bottom ? insets.left : 0,
-            paddingRight: insets.right,
-            backgroundColor: colors.surface,
-            borderBottomWidth: 1,
-            borderColor: colors.border,
-          }}
-        >
-          <View
-            style={{
-              minHeight: 64,
-              paddingHorizontal: bottom ? 16 : 28,
-              paddingVertical: 8,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 16,
-            }}
-          >
-            {bottom && brand(false)}
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Text numberOfLines={1} style={styles.label}>
-                {showStation
-                  ? (station?.name ??
-                    employee.stationName ??
-                    'Sin puesto asignado')
-                  : roleLabels[employee.roleId]}
-              </Text>
-              {showStation && (
-                <Text numberOfLines={1} style={styles.muted}>
-                  {roleLabels[employee.roleId]}
+              <Icon name="mi-usuario" size={22} color={colors.primary} />
+              {(!bottom || width >= 420) && (
+                <Text
+                  numberOfLines={1}
+                  style={[styles.label, { flexShrink: 1 }]}
+                >
+                  {employee.firstName}
                 </Text>
               )}
-            </View>
-            <Link href="/profile" asChild>
+            </Pressable>
+          </Link>
+        </View>
+      </View>
+      <View style={{ flex: 1, minHeight: 0, flexDirection: 'row' }}>
+        {!bottom && (
+          <View
+            style={{
+              width: (expanded ? 248 : 80) + insets.left,
+              paddingTop: 16,
+              paddingBottom: Math.max(insets.bottom, 16),
+              paddingLeft: insets.left + 12,
+              paddingRight: 12,
+              gap: 20,
+              backgroundColor: colors.surface,
+              borderRightWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 6 }}>
+              {navigation.map((item) => (
+                <NavigationLink
+                  key={String(item.href)}
+                  item={item}
+                  placement="rail"
+                  expanded={expanded}
+                />
+              ))}
+            </ScrollView>
+            {expanded && (
+              <Text style={[styles.muted, { paddingHorizontal: 12 }]}>
+                Foto Ya · {roleLabels[employee.roleId]}
+              </Text>
+            )}
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: expanded ? 'flex-end' : 'center',
+                gap: 8,
+              }}
+            >
               <Pressable
-                accessibilityRole="link"
-                accessibilityLabel={`Mi usuario: ${employee.firstName}`}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  expanded ? 'Contraer navegación' : 'Expandir navegación'
+                }
+                accessibilityState={{ expanded }}
+                onPress={() => setExpanded(!expanded)}
                 style={({ pressed }) => ({
-                  minHeight: 44,
-                  minWidth: 44,
-                  flexDirection: 'row',
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 8,
-                  paddingHorizontal: 10,
-                  borderRadius: 12,
                   backgroundColor: pressed ? colors.accent : 'transparent',
-                  maxWidth: bottom ? 132 : 220,
                 })}
               >
-                <Icon name="mi-usuario" size={22} color={colors.primary} />
-                {(!bottom || width >= 420) && (
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.label, { flexShrink: 1 }]}
-                  >
-                    {employee.firstName}
-                  </Text>
-                )}
+                <Icon
+                  name={expanded ? 'flecha-izq' : 'flecha-der'}
+                  size={20}
+                  color={colors.muted}
+                />
               </Pressable>
-            </Link>
+            </View>
           </View>
+        )}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <ScreenLayoutContext.Provider
+            value={{ embedded: true, bottomNavigation: bottom }}
+          >
+            {children}
+          </ScreenLayoutContext.Provider>
         </View>
-        <ScreenLayoutContext.Provider
-          value={{ embedded: true, bottomNavigation: bottom }}
-        >
-          {children}
-        </ScreenLayoutContext.Provider>
       </View>
       {bottom && (
         <View
