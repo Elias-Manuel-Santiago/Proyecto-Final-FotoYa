@@ -8,7 +8,6 @@ const stations: Station[] = [
   {
     id: '1',
     name: 'Uno',
-    address: '',
     city: 'Centro',
     cityId: '10',
     event: 'Feria',
@@ -17,7 +16,6 @@ const stations: Station[] = [
   {
     id: '2',
     name: 'Dos',
-    address: '',
     city: 'Centro',
     cityId: '10',
     event: 'Feria',
@@ -27,7 +25,6 @@ const stations: Station[] = [
   {
     id: '3',
     name: 'Tres',
-    address: '',
     city: 'Centro',
     cityId: '11',
     event: 'Feria',
@@ -36,7 +33,6 @@ const stations: Station[] = [
   {
     id: '4',
     name: 'Cuatro',
-    address: '',
     city: 'Centro',
     cityId: '10',
     event: '',

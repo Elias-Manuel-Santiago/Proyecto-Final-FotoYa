@@ -45,13 +45,13 @@ export const locations = {
       let eventId = input.id;
       if (eventId) {
         await exists(connection, 'evento', 'id_evento', eventId);
-        await connection.execute('UPDATE evento SET nombre = ? WHERE id_evento = ?', [input.name, eventId]);
+        await connection.execute('UPDATE evento SET nombre = ?, direccion = ? WHERE id_evento = ?', [input.name, input.directions, eventId]);
         await moveEvent(connection, eventId, input.cityId);
         const [current] = await connection.execute('SELECT id_puesto AS id FROM puesto WHERE id_evento = ? FOR UPDATE', [eventId]);
         for (const row of current) if (!input.stationIds.includes(String(row.id)))
           await connection.execute('UPDATE puesto SET id_evento = NULL WHERE id_puesto = ?', [row.id]);
       } else {
-        const [created] = await connection.execute('INSERT INTO evento (nombre, id_ciudad) VALUES (?, ?)', [input.name, input.cityId]);
+        const [created] = await connection.execute('INSERT INTO evento (nombre, direccion, id_ciudad) VALUES (?, ?, ?)', [input.name, input.directions, input.cityId]);
         eventId = String(created.insertId);
       }
       await attachStations(connection, eventId, input.cityId, input.stationIds);
@@ -82,8 +82,8 @@ export const locations = {
         cityId = String(event.cityId);
       }
       await exists(connection, 'ciudad', 'id_ciudad', cityId);
-      await connection.execute('UPDATE puesto SET nombre = ?, direccion = ?, id_ciudad = ?, id_evento = ? WHERE id_puesto = ?',
-        [input.name, input.address, cityId, input.eventId, input.stationId]);
+      await connection.execute('UPDATE puesto SET nombre = ?, id_ciudad = ?, id_evento = ? WHERE id_puesto = ?',
+        [input.name, cityId, input.eventId, input.stationId]);
       for (const assignment of input.employeeStations) {
         const [[employee]] = await connection.execute(`SELECT u.id_puesto AS stationId, r.nombre AS role FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol WHERE u.id_usuario = ? FOR UPDATE`, [assignment.employeeId]);
         if (!employee || !['encargado', 'editor', 'camarografo', 'vendedor'].includes(employee.role)) throw new ApiError(422, 'Seleccioná un empleado de puesto.');

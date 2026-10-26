@@ -21,7 +21,6 @@ const stations: Station[] = [
     cityId: '10',
     event: 'Feria',
     eventId: '20',
-    address: '',
   },
   {
     id: '2',
@@ -30,7 +29,6 @@ const stations: Station[] = [
     cityId: '11',
     event: 'Feria',
     eventId: '21',
-    address: '',
   },
 ];
 const empty: GraphicsData = {

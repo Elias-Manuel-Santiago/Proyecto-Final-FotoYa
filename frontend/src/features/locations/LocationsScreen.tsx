@@ -38,6 +38,7 @@ function LocationDirectory({
   const [city, setCity] = useState(initialCity);
   const [editing, setEditing] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const [directions, setDirections] = useState('');
   const [eventCity, setEventCity] = useState(initialCity);
   const [stationIds, setStationIds] = useState<string[]>([]);
   const [eventCities, setEventCities] = useState<Record<string, string>>({});
@@ -57,6 +58,7 @@ function LocationDirectory({
       (kind === 'city' ? cities : events).find((row) => row.id === id)?.name ??
         '',
     );
+    setDirections(events.find((row) => row.id === id)?.directions ?? '');
     setEventCity(events.find((row) => row.id === id)?.cityId ?? initialCity);
     setStationIds(
       data.stations.filter((row) => row.eventId === id).map((row) => row.id),
@@ -91,6 +93,13 @@ function LocationDirectory({
           />
           {kind === 'event' ? (
             <>
+              <Field
+                label="Dirección"
+                value={directions}
+                maxLength={255}
+                editable={!action.busy}
+                onChangeText={setDirections}
+              />
               <Select
                 label="Ciudad del evento"
                 value={eventCity}
@@ -178,6 +187,7 @@ function LocationDirectory({
                   await repository.saveEvent({
                     ...(editing ? { id: editing } : {}),
                     name,
+                    directions,
                     cityId: eventCity,
                     stationIds,
                   });
@@ -234,6 +244,11 @@ function LocationDirectory({
               {kind === 'event' && (
                 <Text style={styles.text}>
                   {cities.find((value) => value.id === cityId)?.name}
+                </Text>
+              )}
+              {kind === 'event' && (
+                <Text style={styles.text}>
+                  {events.find((event) => event.id === row.id)?.directions}
                 </Text>
               )}
               <Text style={styles.muted}>

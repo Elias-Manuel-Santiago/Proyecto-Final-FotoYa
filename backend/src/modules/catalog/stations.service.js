@@ -48,11 +48,11 @@ export const stations = {
         }
       }
       const [[duplicate]] = await connection.execute(`SELECT id_puesto FROM puesto
-        WHERE nombre = ? AND direccion = ? AND id_ciudad = ? AND id_evento <=> ? LIMIT 1`,
-      [input.name, input.address, cityId, eventId]);
+        WHERE nombre = ? AND id_ciudad = ? AND id_evento <=> ? LIMIT 1`,
+      [input.name, cityId, eventId]);
       if (duplicate) throw new ApiError(409, 'El puesto ya existe. Si está inactivo, reactivalo.');
-      const [result] = await connection.execute(`INSERT INTO puesto (nombre, direccion, id_ciudad, id_evento)
-        VALUES (?, ?, ?, ?)`, [input.name, input.address, cityId, eventId]);
+      const [result] = await connection.execute(`INSERT INTO puesto (nombre, id_ciudad, id_evento)
+        VALUES (?, ?, ?)`, [input.name, cityId, eventId]);
       return { id: String(result.insertId), active: true };
     });
   },

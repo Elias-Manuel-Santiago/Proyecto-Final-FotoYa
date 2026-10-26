@@ -20,7 +20,6 @@ export function StationEditor({
   const { styles } = useTheme();
   const action = useAction();
   const [name, setName] = useState(station.name);
-  const [address, setAddress] = useState(station.address);
   const [cityId, setCityId] = useState(station.cityId ?? '');
   const [eventId, setEventId] = useState(station.eventId ?? '');
   const [assignments, setAssignments] = useState<Record<string, string>>({});
@@ -37,13 +36,6 @@ export function StationEditor({
         maxLength={150}
         editable={!action.busy}
         onChangeText={setName}
-      />
-      <Field
-        label="Dirección"
-        value={address}
-        maxLength={255}
-        editable={!action.busy}
-        onChangeText={setAddress}
       />
       <Select
         label="Evento"
@@ -100,12 +92,11 @@ export function StationEditor({
         busy={action.busy}
         onPress={() => {
           void action.run(async () => {
-            if (!name.trim() || !address.trim() || !cityId)
-              throw new Error('Completá nombre, dirección y ciudad.');
+            if (!name.trim() || !cityId)
+              throw new Error('Completá nombre y ciudad.');
             await repository.updateStation({
               stationId: station.id,
               name,
-              address,
               cityId,
               eventId: eventId || null,
               employeeStations: workers

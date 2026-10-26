@@ -9,6 +9,7 @@ import { protectUsers } from './lib/protect-users.js';
 import { migrateVerifications } from './lib/migrate-verifications.js';
 import { migrateEmployeeRoles } from './lib/migrate-employee-roles.js';
 import { migrateLocations } from './lib/migrate-locations.js';
+import { migrateDirections } from './lib/migrate-directions.js';
 
 // Inspeccionar el esquema permite repetir la actualización sin tablas auxiliares.
 export async function migrate(db, env, { init = false } = {}) {
@@ -59,6 +60,7 @@ export async function migrate(db, env, { init = false } = {}) {
     }
     if (!await hasColumn('puesto', 'disponible')) await connection.query('ALTER TABLE puesto ADD disponible BOOLEAN NOT NULL DEFAULT TRUE');
     await migrateLocations(connection, { hasColumn, hasIndex });
+    await migrateDirections(connection, { hasColumn });
     if (!await hasColumn('sesiones_usuario', 'check_in_mode')) await connection.query('ALTER TABLE sesiones_usuario ADD check_in_mode BOOLEAN NOT NULL DEFAULT FALSE');
     // Cierre administrativo por falta de check-out; nunca inventa una hora de salida.
     if (!await hasColumn('horarios', 'closed_at')) await connection.query(`ALTER TABLE horarios ADD closed_at DATETIME(6) NULL,

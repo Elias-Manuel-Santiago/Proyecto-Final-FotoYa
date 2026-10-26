@@ -82,7 +82,7 @@ before(async () => {
   passwordHash = await hashPassword('Test-password-1234');
   await migrate(db, env, { init: true });
   await db.query("INSERT INTO ciudad (nombre) VALUES ('Ciudad')");
-  await db.query("INSERT INTO puesto (nombre, direccion, id_ciudad) VALUES ('Uno','A',1),('Dos','B',1),('Sin registros','C',1)");
+  await db.query("INSERT INTO puesto (nombre, id_ciudad) VALUES ('Uno',1),('Dos',1),('Sin registros',1)");
   for (const [key, role, station] of [['dueno', 'dueno', null], ['encargado', 'encargado', '1'], ['otroEncargado', 'encargado', '2'],
     ['secretario', 'secretario', null], ['vendedor', 'vendedor', '1'], ['editor', 'editor', '1'], ['camarografo', 'camarografo', '1'], ['cliente', 'cliente', null], ['otroCliente', 'cliente', null]]) {
     const [[r]] = await db.execute('SELECT id_rol FROM rol WHERE nombre = ?', [role]);
@@ -313,7 +313,7 @@ integration('puestos: alta, baja reversible, permisos e historial', async () => 
   await migrate(db, env);
   const [[existing]] = await db.query('SELECT MIN(disponible) AS active FROM puesto');
   assert.equal(Number(existing.active), 1);
-  const input = { name: 'Nuevo puesto', address: 'Calle 123', city: 'Ciudad', event: 'Nuevo evento' };
+  const input = { name: 'Nuevo puesto', city: 'Ciudad', event: 'Nuevo evento' };
   for (const role of ['encargado', 'secretario', 'vendedor', 'editor', 'camarografo', 'cliente']) {
     assert.equal((await call('catalog/stations/create', input, role)).status, 403);
     assert.equal((await call('catalog/stations/availability', { stationId: '1', active: false }, role)).status, 403);
@@ -359,26 +359,28 @@ integration('ciudades y eventos independientes, edición de asociaciones y restr
   const second = await call('catalog/cities/save', { name: 'Ciudad gestión B' });
   assert.equal(first.status, 200); assert.equal(second.status, 200);
   const cityId = first.data.data.id, otherCityId = second.data.data.id;
-  const created = await call('catalog/events/save', { name: 'Evento gestión', cityId, stationIds: [] });
+  const created = await call('catalog/events/save', { name: 'Evento gestión', directions: 'Calle 123', cityId, stationIds: [] });
   assert.equal(created.status, 200);
   const eventId = created.data.data.id;
   assert((await call('catalog/query', { resource: 'events' })).data.data.some(row => String(row.id) === eventId));
   assert.equal((await call('catalog/locations/delete', { kind: 'city', id: cityId })).status, 409);
   assert.equal((await call('catalog/events/save', { name: 'Sin ciudad', stationIds: [] })).status, 422);
   assert.equal((await call('catalog/cities/save', { name: 'Prohibida' }, 'secretario')).status, 403);
-  const station = await call('catalog/stations/create', { name: 'Puesto gestión', address: 'A', city: 'Ciudad gestión A', event: 'Evento gestión' });
+  const station = await call('catalog/stations/create', { name: 'Puesto gestión', city: 'Ciudad gestión A', event: 'Evento gestión' });
   assert.equal(station.status, 200);
   const stationId = station.data.data.id;
   assert.equal((await call('catalog/stations/availability', { stationId, active: false })).status, 200);
   assert.equal((await call('catalog/locations/delete', { kind: 'event', id: eventId })).status, 409);
-  assert.equal((await call('catalog/events/save', { id: eventId, name: 'Evento modificado', cityId: otherCityId, stationIds: [stationId] })).status, 200);
+  assert.equal((await call('catalog/events/save', { id: eventId, name: 'Evento modificado', directions: 'Calle 456', cityId: otherCityId, stationIds: [stationId] })).status, 200);
+  const eventRows = await call('catalog/query', { resource: 'events' });
+  assert.equal(eventRows.data.data.find(row => String(row.id) === eventId).directions, 'Calle 456');
   const [[moved]] = await db.execute('SELECT id_ciudad, id_evento FROM puesto WHERE id_puesto=?', [stationId]);
   assert.equal(String(moved.id_ciudad), otherCityId); assert.equal(String(moved.id_evento), eventId);
   await assert.rejects(db.execute('UPDATE puesto SET id_ciudad=? WHERE id_puesto=?', [cityId, stationId]), { code: 'ER_NO_REFERENCED_ROW_2' });
   assert.equal((await call('catalog/cities/save', { id: cityId, name: 'Ciudad renombrada', eventCities: [{ eventId, cityId }] })).status, 200);
   const [[cascade]] = await db.execute('SELECT id_ciudad FROM puesto WHERE id_puesto=?', [stationId]);
   assert.equal(String(cascade.id_ciudad), cityId);
-  assert.equal((await call('catalog/stations/update', { stationId, name: 'Puesto modificado', address: 'B', cityId: otherCityId, eventId: null, employeeStations: [] })).status, 200);
+  assert.equal((await call('catalog/stations/update', { stationId, name: 'Puesto modificado', cityId: otherCityId, eventId: null, employeeStations: [] })).status, 200);
   assert.equal((await call('catalog/locations/delete', { kind: 'event', id: eventId })).status, 200);
   assert.equal((await call('catalog/locations/delete', { kind: 'city', id: cityId })).status, 200);
   await db.execute('DELETE FROM puesto WHERE id_puesto=?', [stationId]);
@@ -718,7 +720,7 @@ integration('encargado administra precios de su puesto y conserva tarifas histó
   assert.equal(Number(all.find(row => row.id === priceId).active), 0);
   assert(!(await call('catalog/query', { resource: 'prices' }, 'vendedor')).data.data.some(row => row.id === priceId));
   assert.equal((await call('catalog/prices/availability', { stationId: '1', priceId, active: true }, 'encargado')).status, 200);
-  assert.equal((await call('catalog/stations/create', { name: 'No', address: 'No', city: 'No' }, 'encargado')).status, 403);
+  assert.equal((await call('catalog/stations/create', { name: 'No', city: 'No' }, 'encargado')).status, 403);
   const [[historic]] = await db.query(`SELECT pv.id_venta AS saleId, pv.id_precio AS priceId, pv.precio_unitario_aplicado AS amount
     FROM precios_venta pv JOIN venta v ON v.id_venta=pv.id_venta WHERE v.operation_id IS NOT NULL LIMIT 1`);
   await call('catalog/prices/update', { ...input, priceId: historic.priceId, amount: '99.99' }, 'encargado');

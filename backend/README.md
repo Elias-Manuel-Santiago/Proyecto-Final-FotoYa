@@ -115,7 +115,7 @@ Referencias: [pool de mysql2](https://sidorares.github.io/node-mysql2/docs/examp
 
 Después de actualizar, ejecutar `npm run db:migrate`: agrega `puesto.disponible` (los puestos existentes quedan activos) y el permiso `stations.manage` al dueño. La sección **Puestos** permite crear, dar de baja y reactivar puestos. La baja conserva usuarios asignados, fotos, ventas y horarios; bloquea nuevas cargas y nuevas asignaciones de usuarios al puesto. Los registros históricos siguen disponibles en las consultas y filtros.
 
-- `POST /api/catalog/stations/create`: `{ name, address, city, event }`. Evento opcional; ciudad y evento se reutilizan por nombre o se crean si faltan. Rechaza duplicados del mismo nombre, dirección, ciudad y evento, incluso inactivos.
+- `POST /api/catalog/stations/create`: `{ name, city, event }`. Evento opcional; ciudad y evento se reutilizan por nombre o se crean si faltan. Rechaza duplicados del mismo nombre, ciudad y evento, incluso inactivos.
 - `POST /api/catalog/stations/availability`: `{ stationId, active }`. Reversible e idempotente. Requiere dueño y permiso `stations.manage`, revalidados dentro de la transacción.
 - `POST /api/catalog/query` con `resource: 'stations'` incluye `active` y conserva los puestos inactivos para consulta histórica.
 
@@ -317,3 +317,5 @@ Antes de desplegar estos cambios, ejecutar `npm run db:migrate`. La migración e
 Dueño y Secretario pueden navegar Ciudades → Eventos → Puestos con filtros por ID. Secretario consulta puestos sin acciones de administración. Usuarios oculta la cuenta propia y permite combinar filtros de rol, puesto, estado y búsqueda. El alta de usuarios usa contraseña visible mediante el botón del ojo y confirmación de contraseña.
 
 La migración existente convierte el antiguo rol `camarografo` a `editor` antes de crear el nuevo `camarografo`. El nuevo rol mantiene los permisos de consulta del vendedor sin `sales.create`.
+
+Los eventos incluyen `directions` (dirección, hasta 255 caracteres) en `catalog/query` y `catalog/events/save`. Los puestos ya no reciben `address`. Ejecutar `npm run db:migrate` antes de iniciar la versión actualizada. La migración copia la dirección de los puestos al evento cuando es única; conserva la columna histórica de puestos como opcional para no perder direcciones sin evento o en conflicto. Esos eventos se completan desde su formulario.

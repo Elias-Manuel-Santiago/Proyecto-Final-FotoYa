@@ -10,7 +10,6 @@ test('solo el dueño administra puestos y la baja conserva el historial', async 
   const repo = repository();
   const input = {
     name: 'Nuevo',
-    address: 'Calle 1',
     city: 'Ciudad',
     event: '',
   };

@@ -25,22 +25,20 @@ export function createStation(
   authorize(actor);
   const fields = {
     name: input.name.trim(),
-    address: input.address.trim(),
     city: input.city.trim(),
     event: input.event.trim(),
   };
-  if (!fields.name || !fields.address || !fields.city)
-    throw new Error('Completá nombre, dirección y ciudad.');
+  if (!fields.name || !fields.city)
+    throw new Error('Completá nombre y ciudad.');
   if (
     fields.name.length > 150 ||
-    fields.address.length > 255 ||
     fields.city.length > 120 ||
     fields.event.length > 150
   )
     throw new Error('Los datos del puesto superan el largo permitido.');
   if (
     data.stations.some((row) =>
-      (['name', 'address', 'city', 'event'] as const).every(
+      (['name', 'city', 'event'] as const).every(
         (key) => row[key].toLowerCase() === fields[key].toLowerCase(),
       ),
     )

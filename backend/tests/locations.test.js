@@ -4,10 +4,40 @@ import { db } from '../src/config/database.js';
 import { locations } from '../src/modules/catalog/locations.service.js';
 import { stations } from '../src/modules/catalog/stations.service.js';
 import { migrateLocations } from '../scripts/lib/migrate-locations.js';
+import { migrateDirections } from '../scripts/lib/migrate-directions.js';
 
 afterEach(() => mock.restoreAll());
 after(() => db.end());
 const owner = { id: '1', sessionId: '1', role: 'dueno', permissions: ['stations.manage'] };
+
+test('event creation and editing persist directions', async () => {
+  for (const id of [undefined, '4']) {
+    const state = connectionFor(sql => {
+      if (sql.includes('WHERE nombre =') || sql.startsWith('SELECT id_puesto AS id')) return [[]];
+      if (sql.startsWith('SELECT')) return [[{ id: 1 }]];
+      return [{ insertId: 4, affectedRows: 1 }];
+    });
+    await locations.saveEvent(owner, { id, name: 'Evento', directions: 'Calle 123', cityId: '2', stationIds: [] });
+    assert.equal(state.committed, true);
+    const saved = state.writes.find(row => row.sql.includes('direccion'));
+    assert.deepEqual(saved.values, ['Evento', 'Calle 123', id ?? '2']);
+  }
+});
+
+test('directions migration preserves legacy addresses and can run again', async () => {
+  const queries = [];
+  const connection = { query: async sql => { queries.push(sql); return [[]]; } };
+  await migrateDirections(connection, { hasColumn: async (table) => table === 'puesto' });
+  assert.match(queries[0], /ALTER TABLE evento ADD direccion/);
+  assert.match(queries[1], /HAVING COUNT\(DISTINCT TRIM\(direccion\)\) = 1/);
+  assert.match(queries[2], /NULL DEFAULT NULL/);
+  queries.length = 0;
+  await migrateDirections(connection, { hasColumn: async () => true });
+  assert.equal(queries.length, 2);
+  queries.length = 0;
+  await migrateDirections(connection, { hasColumn: async table => table === 'evento' });
+  assert.equal(queries.length, 0);
+});
 function connectionFor(respond) {
   const writes = [];
   let committed = false, rolledBack = false;
@@ -60,7 +90,7 @@ test('station creation cannot reuse an event from another city', async () => {
     if (sql.includes('FROM evento')) return [[{ id: 2, cityId: 9 }]];
     assert.fail(sql);
   });
-  await assert.rejects(stations.create(owner, { name: 'Puesto', address: 'A', city: 'Ciudad', event: 'Evento' }), { status: 409 });
+  await assert.rejects(stations.create(owner, { name: 'Puesto', city: 'Ciudad', event: 'Evento' }), { status: 409 });
   assert.equal(state.writes.length, 0);
   assert.equal(state.rolledBack, true);
 });
@@ -73,7 +103,7 @@ test('employee transfer updates one assignment and revokes sessions atomically',
     if (sql.startsWith('SELECT')) return [[{ id: 1 }]];
     return [{ affectedRows: 1 }];
   });
-  await locations.updateStation(owner, { stationId: '1', name: 'Puesto', address: 'A', cityId: '3', eventId: null,
+  await locations.updateStation(owner, { stationId: '1', name: 'Puesto', cityId: '3', eventId: null,
     employeeStations: [{ employeeId: '8', stationId: '1' }] });
   assert.equal(state.committed, true);
   assert.deepEqual(state.writes.find(row => row.sql.startsWith('UPDATE usuarios')).values, ['1', '8']);
@@ -87,7 +117,7 @@ test('an employee with an open shift cannot be transferred; the station edit rol
     if (sql.startsWith('SELECT')) return [[{ id: 1 }]];
     return [{ affectedRows: 1 }];
   });
-  await assert.rejects(locations.updateStation(owner, { stationId: '1', name: 'Puesto', address: 'A', cityId: '3', eventId: null,
+  await assert.rejects(locations.updateStation(owner, { stationId: '1', name: 'Puesto', cityId: '3', eventId: null,
     employeeStations: [{ employeeId: '8', stationId: '1' }] }), { status: 409 });
   assert.equal(state.committed, false);
   assert.equal(state.rolledBack, true);

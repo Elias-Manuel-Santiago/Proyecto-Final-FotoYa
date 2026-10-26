@@ -21,7 +21,7 @@ before(async () => {
   ({ graphicsRepository: repository } = await import('../../src/modules/reports/graphics.repository.js'));
   ({ graphicsQuery: schema } = await import('../../src/modules/reports/reports.routes.js'));
   await db.query("INSERT INTO ciudad(nombre) VALUES ('Ciudad')");
-  await db.query("INSERT INTO puesto(nombre,direccion,id_ciudad) VALUES ('Uno','A',1),('Dos','B',1)");
+  await db.query("INSERT INTO puesto(nombre,id_ciudad) VALUES ('Uno',1),('Dos',1)");
   await db.query(`INSERT INTO usuarios(nombre,apellido,email,dni,password,id_rol,id_puesto)
     SELECT 'Vendedor','Uno','seller@example.com','100','unused',id_rol,1 FROM rol WHERE nombre='vendedor'`);
   await db.query(`INSERT INTO usuarios(nombre,apellido,email,dni,password,id_rol,id_puesto)

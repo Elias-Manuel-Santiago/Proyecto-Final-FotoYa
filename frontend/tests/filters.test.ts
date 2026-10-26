@@ -18,7 +18,6 @@ const stations: Station[] = [
     cityId: '10',
     event: 'Feria',
     eventId: '20',
-    address: '',
   },
   {
     id: '2',
@@ -27,7 +26,6 @@ const stations: Station[] = [
     cityId: '11',
     event: 'Feria',
     eventId: '21',
-    address: '',
   },
   {
     id: '3',
@@ -36,7 +34,6 @@ const stations: Station[] = [
     cityId: '10',
     event: 'Feria',
     eventId: '21',
-    address: '',
   },
 ];
 const period: Period = { from: '2026-10-01', to: '2026-10-25', stationId: '' };

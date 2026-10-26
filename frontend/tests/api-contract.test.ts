@@ -75,7 +75,7 @@ const actor = (role: string, permissions = backendPermissions[role]) => ({
 const station = {
   id: 1,
   name: 'Puesto',
-  address: 'Calle',
+
   cityId: 2,
   city: 'Ciudad',
   eventId: 3,
@@ -263,13 +263,25 @@ test('ciudades y eventos vacíos se cargan desde catálogos independientes', asy
   const { repo } = fixture('dueno', {
     'catalog/stations': [],
     'catalog/cities': [{ id: 12, name: 'Ciudad sin puestos' }],
-    'catalog/events': [{ id: 34, name: 'Evento sin puestos', cityId: 12 }],
+    'catalog/events': [
+      {
+        id: 34,
+        name: 'Evento sin puestos',
+        directions: 'Calle 123',
+        cityId: 12,
+      },
+    ],
   });
   const data = await repo.snapshot(period);
   assert.deepEqual(data.stations, []);
   assert.deepEqual(data.cities, [{ id: '12', name: 'Ciudad sin puestos' }]);
   assert.deepEqual(data.events, [
-    { id: '34', name: 'Evento sin puestos', cityId: '12' },
+    {
+      id: '34',
+      name: 'Evento sin puestos',
+      directions: 'Calle 123',
+      cityId: '12',
+    },
   ]);
 });
 
@@ -280,11 +292,16 @@ test('gestión de ubicaciones envía IDs y asociaciones por las rutas correspond
     name: 'Ciudad',
     eventCities: [{ eventId: '34', cityId: '12' }],
   };
-  const event = { id: '34', name: 'Evento', cityId: '12', stationIds: ['56'] };
+  const event = {
+    directions: 'Calle 123',
+    id: '34',
+    name: 'Evento',
+    cityId: '12',
+    stationIds: ['56'],
+  };
   const station = {
     stationId: '56',
     name: 'Puesto',
-    address: 'A',
     cityId: '12',
     eventId: '34',
     employeeStations: [{ employeeId: '78', stationId: '56' }],

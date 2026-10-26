@@ -66,7 +66,6 @@ export type EmployeeInput = Omit<
 export interface Station {
   id: string;
   name: string;
-  address: string;
   city: string;
   event: string;
   cityId?: string;
@@ -77,7 +76,6 @@ export interface Station {
 // Campos del formulario de alta de puesto; el servidor resuelve ciudad y evento.
 export interface StationInput {
   name: string;
-  address: string;
   city: string;
   event: string;
 }
@@ -87,6 +85,7 @@ export interface City {
   name: string;
 }
 export interface LocationEvent {
+  directions: string;
   id: string;
   name: string;
   cityId: string;
@@ -97,6 +96,7 @@ export interface CityInput {
   eventCities: { eventId: string; cityId: string | null }[];
 }
 export interface LocationEventInput {
+  directions: string;
   id?: string;
   name: string;
   cityId: string;
@@ -105,7 +105,6 @@ export interface LocationEventInput {
 export interface StationUpdateInput {
   stationId: string;
   name: string;
-  address: string;
   cityId: string;
   eventId: string | null;
   employeeStations: { employeeId: string; stationId: string }[];

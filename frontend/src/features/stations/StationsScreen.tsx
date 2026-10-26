@@ -23,7 +23,7 @@ import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
 import { StationPrices } from './StationPrices';
 import { StationEditor } from './StationEditor';
-const empty = { name: '', address: '', city: '', event: '' };
+const empty = { name: '', city: '', event: '' };
 // Filtra puestos y coordina alta, disponibilidad y consulta de tarifas.
 export function StationsScreen() {
   const { city = '', event = '' } = useLocalSearchParams<{
@@ -59,7 +59,7 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
     (row) =>
       (selectedIds === undefined || selectedIds.includes(row.id)) &&
       (status === 'all' || (status === 'active') === (row.active !== false)) &&
-      `${row.name} ${row.address} ${row.city} ${row.event}`
+      `${row.name} ${row.city} ${row.event}`
         .toLowerCase()
         .includes(search.trim().toLowerCase()),
   );
@@ -91,19 +91,18 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
       {manage && creating && (
         <View style={styles.card}>
           <Text style={styles.heading}>Nuevo puesto</Text>
-          {(['name', 'address', 'city', 'event'] as const).map((key) => (
+          {(['name', 'city', 'event'] as const).map((key) => (
             <Field
               key={key}
               label={
                 {
                   name: 'Nombre del puesto',
-                  address: 'Dirección',
                   city: 'Ciudad',
                   event: 'Evento (opcional)',
                 }[key]
               }
               value={input[key]}
-              maxLength={key === 'address' ? 255 : key === 'city' ? 120 : 150}
+              maxLength={key === 'city' ? 120 : 150}
               editable={!action.busy}
               onChangeText={(value) =>
                 setInput((current) => ({ ...current, [key]: value }))
@@ -118,12 +117,8 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
             busy={action.busy}
             onPress={() => {
               void action.run(async () => {
-                if (
-                  !input.name.trim() ||
-                  !input.address.trim() ||
-                  !input.city.trim()
-                )
-                  throw new Error('Completá nombre, dirección y ciudad.');
+                if (!input.name.trim() || !input.city.trim())
+                  throw new Error('Completá nombre y ciudad.');
                 await repository.createStation(input);
                 setInput(empty);
                 setCreating(false);
@@ -140,7 +135,7 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
           onChange={setScopeIds}
         />
         <Field
-          label="Buscar puesto, dirección, ciudad o evento"
+          label="Buscar puesto, ciudad o evento"
           value={search}
           onChangeText={setSearch}
         />
@@ -160,9 +155,7 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
         {rows.map((station) => (
           <View key={station.id} style={styles.card}>
             <Text style={styles.heading}>{station.name}</Text>
-            <Text style={styles.text}>
-              {station.address} · {station.city}
-            </Text>
+            <Text style={styles.text}>{station.city}</Text>
             {!!station.event && (
               <Text style={styles.text}>Evento: {station.event}</Text>
             )}

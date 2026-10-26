@@ -76,21 +76,18 @@ export function createSeed(): AppData {
       {
         id: 'centro',
         name: 'Centro',
-        address: 'San Martín 100',
         city: 'Buenos Aires',
         event: 'Recorrido urbano',
       },
       {
         id: 'parque',
         name: 'Parque',
-        address: 'Av. del Parque 200',
         city: 'La Plata',
         event: 'Feria',
       },
       {
         id: 'costanera',
         name: 'Costanera',
-        address: 'Av. Costanera 300',
         city: 'Buenos Aires',
         event: 'Recorrido urbano',
       },
