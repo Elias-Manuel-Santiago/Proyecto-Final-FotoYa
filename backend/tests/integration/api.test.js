@@ -332,18 +332,20 @@ integration('puestos: alta, baja reversible, permisos e historial', async () => 
   const [[city]] = await db.query("SELECT id_ciudad AS id FROM ciudad WHERE nombre='Ciudad'");
   const event = await call('catalog/events/save', { name: 'Nuevo evento', cityId: String(city.id), stationIds: [] });
   assert.equal(event.status, 200);
-  const input = { eventId: event.data.data.id };
+  const input = { name: '  Entrada principal  ', eventId: event.data.data.id };
   for (const role of ['encargado', 'secretario', 'vendedor', 'editor', 'camarografo', 'cliente']) {
     assert.equal((await call('catalog/stations/create', input, role)).status, 403);
     assert.equal((await call('catalog/stations/availability', { stationId: '1', active: false }, role)).status, 403);
   }
   assert.equal((await call('catalog/stations/create', { ...input, name: ' ' })).status, 422);
-  assert.equal((await call('catalog/stations/create', { eventId: '999999' })).status, 404);
+  assert.equal((await call('catalog/stations/create', { eventId: input.eventId })).status, 422);
+  assert.equal((await call('catalog/stations/create', { ...input, name: 'x'.repeat(151) })).status, 422);
+  assert.equal((await call('catalog/stations/create', { name: 'Entrada', eventId: '999999' })).status, 404);
   assert.equal((await call('catalog/stations/create', { name: 'Libre', city: 'Libre', event: 'Libre' })).status, 422);
   const created = await call('catalog/stations/create', input);
   assert.equal(created.status, 200); const id = created.data.data.id;
   const [[saved]] = await db.execute('SELECT nombre, id_ciudad, id_evento FROM puesto WHERE id_puesto=?', [id]);
-  assert.equal(saved.nombre, 'Nuevo evento');
+  assert.equal(saved.nombre, 'Entrada principal');
   assert.equal(String(saved.id_ciudad), String(city.id));
   assert.equal(String(saved.id_evento), input.eventId);
   assert.equal((await call('catalog/stations/create', input)).status, 409);

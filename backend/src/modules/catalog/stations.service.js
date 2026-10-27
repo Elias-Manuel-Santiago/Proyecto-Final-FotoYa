@@ -26,12 +26,13 @@ export const managed = (actor, callback) => {
   });
 };
 export const stations = {
-  // El evento define nombre y ciudad; el alta nunca crea ubicaciones nuevas.
+  // El evento define la ciudad; el alta nunca crea ubicaciones nuevas.
   create(actor, input) {
     return managed(actor, async connection => {
       const [[event]] = await connection.execute('SELECT id_evento AS id, nombre AS name, id_ciudad AS cityId FROM evento WHERE id_evento = ? FOR UPDATE', [input.eventId]);
       if (!event) throw new ApiError(404, 'El evento no existe.');
-      const { name, cityId, id: eventId } = event;
+      const { cityId, id: eventId } = event;
+      const name = input.name.trim();
       const [[duplicate]] = await connection.execute(`SELECT id_puesto FROM puesto
         WHERE nombre = ? AND id_ciudad = ? AND id_evento <=> ? LIMIT 1`,
       [name, cityId, eventId]);

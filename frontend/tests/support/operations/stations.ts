@@ -28,7 +28,7 @@ export function createStation(
   const city = data.cities?.find((row) => row.id === event.cityId);
   if (!city) throw new Error('La ciudad no existe.');
   const fields = {
-    name: event.name,
+    name: input.name.trim(),
     city: city.name,
     event: event.name,
     cityId: city.id,

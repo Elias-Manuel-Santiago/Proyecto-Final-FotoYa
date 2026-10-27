@@ -40,7 +40,7 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-const RESTORE_PERSISTED_SESSION = true;
+const RESTORE_PERSISTED_SESSION = false;
 
 // Comparte repositorio, sesión y datos; coordina restauración, refresco y cambios de identidad.
 export function AppProvider({ children }: { children: ReactNode }) {

@@ -19,6 +19,7 @@ import { SalePhotoCard } from './components/SalePhotoCard';
 import { SaleForm } from './components/SaleForm';
 import { PhotoAssignment } from '../photos/components/PhotoAssignment';
 import { Link, useLocalSearchParams } from 'expo-router';
+import { ResponsiveGrid } from '@/components/ui/ResponsiveGrid';
 
 // Usa el día comercial para reiniciar el flujo de venta al cambiar la fecha.
 export function NewSaleScreen() {
@@ -156,6 +157,7 @@ function DailySaleScreen({ today }: { today: string }) {
                   No hay fotos en esta página del evento.
                 </Text>
               )}
+              ResponsivePat
               {photos.map((photo) => (
                 <SalePhotoCard
                   key={photo.id}

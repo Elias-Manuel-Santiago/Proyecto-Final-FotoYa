@@ -16,6 +16,7 @@ test('solo el dueño administra puestos y la baja conserva el historial', async 
   ];
   const repo = new MockFotoYaRepository({ data });
   const input = {
+    name: '  Entrada principal  ',
     eventId: 'event',
   };
   await assert.rejects(repo.createStation('manager', input), /permiso/);
@@ -24,15 +25,17 @@ test('solo el dueño administra puestos y la baja conserva el historial', async 
     /permiso/,
   );
   await assert.rejects(
-    repo.createStation('owner', { eventId: 'missing' }),
+    repo.createStation('owner', { name: 'Entrada', eventId: 'missing' }),
     /evento no existe/,
   );
   await repo.createStation('owner', input);
   const created = (await repo.snapshot()).stations.at(-1)!;
-  assert.equal(created.name, 'Evento');
+  assert.equal(created.name, 'Entrada principal');
   assert.equal(created.cityId, 'city');
   assert.equal(created.eventId, 'event');
   await assert.rejects(repo.createStation('owner', input), /ya existe/);
+  await repo.createStation('owner', { name: 'Salida', eventId: 'event' });
+  assert.equal((await repo.snapshot()).stations.at(-1)!.name, 'Salida');
   const before = await repo.snapshot();
   await repo.setStationActive('owner', 'centro', false);
   const after = await repo.snapshot();

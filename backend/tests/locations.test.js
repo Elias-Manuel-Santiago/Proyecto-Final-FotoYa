@@ -84,7 +84,7 @@ test('an empty event can be deleted after its references are checked', async () 
   assert.equal(state.writes.length, 1);
 });
 
-test('station creation derives its name and city from an existing event', async () => {
+test('station creation saves its own name and derives the city from an existing event', async () => {
   const state = connectionFor((sql, values) => {
     if (sql.includes('FROM evento')) {
       assert.deepEqual(values, ['2']);
@@ -94,10 +94,10 @@ test('station creation derives its name and city from an existing event', async 
     if (sql.startsWith('INSERT INTO puesto')) return [{ insertId: 3 }];
     assert.fail(sql);
   });
-  assert.deepEqual(await stations.create(owner, { eventId: '2' }), { id: '3', active: true });
+  assert.deepEqual(await stations.create(owner, { name: '  Entrada principal  ', eventId: '2' }), { id: '3', active: true });
   assert.equal(state.committed, true);
   assert.equal(state.writes.length, 1);
-  assert.deepEqual(state.writes[0].values, ['Evento', 9, 2]);
+  assert.deepEqual(state.writes[0].values, ['Entrada principal', 9, 2]);
 });
 
 test('station creation rejects missing events without creating locations', async () => {
@@ -105,7 +105,7 @@ test('station creation rejects missing events without creating locations', async
     if (sql.includes('FROM evento')) return [[]];
     assert.fail(sql);
   });
-  await assert.rejects(stations.create(owner, { eventId: '999' }), { status: 404 });
+  await assert.rejects(stations.create(owner, { name: 'Entrada', eventId: '999' }), { status: 404 });
   assert.equal(state.writes.length, 0);
   assert.equal(state.rolledBack, true);
 });
@@ -116,7 +116,7 @@ test('station creation rejects duplicates including inactive stations', async ()
     if (sql.startsWith('SELECT id_puesto')) return [[{ id_puesto: 3 }]];
     assert.fail(sql);
   });
-  await assert.rejects(stations.create(owner, { eventId: '2' }), { status: 409 });
+  await assert.rejects(stations.create(owner, { name: '  Entrada principal  ', eventId: '2' }), { status: 409 });
   assert.equal(state.writes.length, 0);
   assert.equal(state.rolledBack, true);
 });

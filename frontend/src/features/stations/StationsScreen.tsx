@@ -43,10 +43,11 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
   const { data, employee, repository, refresh } = useWorkspace();
   const manage = can(employee, 'stations.manage');
   const [eventId, setEventId] = useState('');
+  const [name, setName] = useState('');
   const events = data.events ?? [];
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('all');
+  const [showInactive, setShowInactive] = useState(false);
   const [scopeIds, setScopeIds] = useState<string[]>(() => [
     ...(city ? [`city:${city}`] : []),
     ...(event ? [`event:${event}`] : []),
@@ -58,7 +59,6 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
   const rows = data.stations.filter(
     (row) =>
       (selectedIds === undefined || selectedIds.includes(row.id)) &&
-      (status === 'all' || (status === 'active') === (row.active !== false)) &&
       `${row.name} ${row.city} ${row.event}`
         .toLowerCase()
         .includes(search.trim().toLowerCase()),
@@ -91,6 +91,13 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
       {manage && creating && (
         <View style={styles.card}>
           <Text style={styles.heading}>Nuevo puesto</Text>
+          <Field
+            label="Nombre del puesto"
+            value={name}
+            maxLength={150}
+            editable={!action.busy}
+            onChangeText={setName}
+          />
           <Select
             label="Evento"
             value={eventId}
@@ -103,18 +110,21 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
           />
           <Text style={styles.muted}>
             {events.length
-              ? 'El puesto toma el nombre y la ciudad del evento seleccionado.'
+              ? 'El puesto toma la ciudad del evento seleccionado.'
               : 'Primero creá un evento para poder dar de alta un puesto.'}
           </Text>
           <Button
             title="Guardar puesto"
             busy={action.busy}
-            disabled={!events.some((row) => row.id === eventId)}
+            disabled={!name.trim() || !events.some((row) => row.id === eventId)}
             onPress={() => {
               void action.run(async () => {
                 if (!events.some((row) => row.id === eventId))
                   throw new Error('Seleccioná un evento existente.');
-                await repository.createStation({ eventId });
+                if (!name.trim())
+                  throw new Error('Completá el nombre del puesto.');
+                await repository.createStation({ name: name.trim(), eventId });
+                setName('');
                 setEventId('');
                 setCreating(false);
                 await refresh();
@@ -134,74 +144,96 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
           value={search}
           onChangeText={setSearch}
         />
-        <Select
-          label="Estado"
-          value={status}
-          onChange={setStatus}
-          options={[
-            { value: 'all', label: 'Todos' },
-            { value: 'active', label: 'Activos' },
-            { value: 'inactive', label: 'Inactivos' },
-          ]}
+        <Button
+          title={
+            showInactive
+              ? 'Ocultar puestos inactivos'
+              : 'Mostrar puestos inactivos'
+          }
+          secondary
+          onPress={() => setShowInactive(!showInactive)}
         />
       </FilterSection>
-      {!rows.length && <EmptyState />}
-      <ResponsiveGrid>
-        {rows.map((station) => (
-          <View key={station.id} style={styles.card}>
-            <Text style={styles.heading}>{station.name}</Text>
-            <Text style={styles.text}>{station.city}</Text>
-            <Text style={styles.text}>{station.event}</Text>
-            <Text style={styles.muted}>
-              {station.active === false ? 'Inactivo' : 'Activo'}
-            </Text>
-            {manage && (
-              <Button
-                title="Modificar puesto"
-                secondary
-                disabled={action.busy}
-                onPress={() =>
-                  setEditing(editing === station.id ? '' : station.id)
-                }
-              />
-            )}
-            {manage && editing === station.id && (
-              <StationEditor station={station} onClose={() => setEditing('')} />
-            )}
-            {can(employee, 'prices.manage') && station.active !== false && (
-              <Button
-                title="Precios del puesto"
-                secondary
-                onPress={() =>
-                  setPricing(pricing === station.id ? '' : station.id)
-                }
-              />
-            )}
-            {can(employee, 'prices.manage') &&
-              pricing === station.id &&
-              station.active !== false && (
-                <StationPrices stationId={station.id} />
-              )}
-            {manage &&
-              (station.active === false ? (
-                <Button
-                  title={`Reactivar ${station.name}`}
-                  busy={action.busy}
-                  onPress={() => {
-                    void changeAvailability(station.id, true);
-                  }}
-                />
-              ) : (
-                <ConfirmAction
-                  title={`Dar de baja ${station.name}`}
-                  question={`¿Dar de baja ${station.name}? Se conservarán los usuarios asignados, fotos, ventas y horarios. No se admitirán nuevas cargas de fotos ni nuevas asignaciones a este puesto hasta reactivarlo.`}
-                  busy={action.busy}
-                  onConfirm={() => changeAvailability(station.id, false)}
-                />
-              ))}
-          </View>
-        ))}
-      </ResponsiveGrid>
+      {[
+        {
+          title: 'Puestos activos',
+          rows: rows.filter((row) => row.active !== false),
+        },
+        ...(showInactive
+          ? [
+              {
+                title: 'Puestos inactivos',
+                rows: rows.filter((row) => row.active === false),
+              },
+            ]
+          : []),
+      ].map((section) => (
+        <View key={section.title} style={{ gap: 12 }}>
+          <Text style={styles.heading}>
+            {section.title} ({section.rows.length})
+          </Text>
+          {!section.rows.length && <EmptyState />}
+          <ResponsiveGrid>
+            {section.rows.map((station) => (
+              <View key={station.id} style={styles.card}>
+                <Text style={styles.heading}>{station.name}</Text>
+                <Text style={styles.text}>{station.city}</Text>
+                <Text style={styles.text}>{station.event}</Text>
+                <Text style={styles.muted}>
+                  {station.active === false ? 'Inactivo' : 'Activo'}
+                </Text>
+                {manage && (
+                  <Button
+                    title="Modificar puesto"
+                    secondary
+                    disabled={action.busy}
+                    onPress={() =>
+                      setEditing(editing === station.id ? '' : station.id)
+                    }
+                  />
+                )}
+                {manage && editing === station.id && (
+                  <StationEditor
+                    station={station}
+                    onClose={() => setEditing('')}
+                  />
+                )}
+                {can(employee, 'prices.manage') && station.active !== false && (
+                  <Button
+                    title="Precios del puesto"
+                    secondary
+                    onPress={() =>
+                      setPricing(pricing === station.id ? '' : station.id)
+                    }
+                  />
+                )}
+                {can(employee, 'prices.manage') &&
+                  pricing === station.id &&
+                  station.active !== false && (
+                    <StationPrices stationId={station.id} />
+                  )}
+                {manage &&
+                  (station.active === false ? (
+                    <Button
+                      title={`Reactivar ${station.name}`}
+                      busy={action.busy}
+                      onPress={() => {
+                        void changeAvailability(station.id, true);
+                      }}
+                    />
+                  ) : (
+                    <ConfirmAction
+                      title={`Dar de baja ${station.name}`}
+                      question={`¿Dar de baja ${station.name}? Se conservarán los usuarios asignados, fotos, ventas y horarios. No se admitirán nuevas cargas de fotos ni nuevas asignaciones a este puesto hasta reactivarlo.`}
+                      busy={action.busy}
+                      onConfirm={() => changeAvailability(station.id, false)}
+                    />
+                  ))}
+              </View>
+            ))}
+          </ResponsiveGrid>
+        </View>
+      ))}
     </Screen>
   );
 }

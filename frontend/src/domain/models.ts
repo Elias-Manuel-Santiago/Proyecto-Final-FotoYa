@@ -73,8 +73,9 @@ export interface Station {
   active?: boolean;
 }
 
-// El alta usa un evento existente; el servidor deriva el nombre y la ciudad.
+// El alta usa un nombre propio y un evento existente que determina la ciudad.
 export interface StationInput {
+  name: string;
   eventId: string;
 }
 
