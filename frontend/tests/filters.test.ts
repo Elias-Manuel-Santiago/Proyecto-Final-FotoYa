@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { dateFromCalendar, dateToCalendar } from '../src/domain/filter-dates';
+import { periodError } from '../src/domain/dates';
 import {
   periodScopeIds,
   periodScopePatch,
@@ -37,6 +38,23 @@ const stations: Station[] = [
   },
 ];
 const period: Period = { from: '2026-10-01', to: '2026-10-25', stationId: '' };
+
+test('Siempre incluye fotos de cualquier fecha y conserva el alcance por puesto', () => {
+  const allTime = { ...period, allTime: true, stationId: '1' };
+  for (const date of ['2020-01-01', '2026-10-15', '2030-01-01']) {
+    assert.equal(matchesPeriod({ stationId: '1', date }, allTime), true);
+    assert.equal(matchesPeriod({ stationId: '2', date }, allTime), false);
+  }
+  assert.equal(
+    matchesPeriod(
+      { stationId: '1', date: '2020-01-01' },
+      { ...allTime, stationIds: [] },
+    ),
+    false,
+  );
+  assert.equal(periodError('', '', true), '');
+  assert.notEqual(periodError('', '', false), '');
+});
 
 test('las tres columnas distinguen IDs aunque ciudades y eventos compartan nombre', () => {
   const columns = scopeColumns(graphicScopes(stations));

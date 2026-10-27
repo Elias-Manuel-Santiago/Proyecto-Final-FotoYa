@@ -253,6 +253,7 @@ export interface StationReport extends ReportMetrics {
 export interface Period {
   from: string;
   to: string;
+  allTime?: boolean;
   stationId: string;
   city?: string;
   event?: string;

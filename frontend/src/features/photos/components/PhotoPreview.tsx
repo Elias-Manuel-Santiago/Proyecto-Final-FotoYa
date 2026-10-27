@@ -114,7 +114,7 @@ export function PhotoPreview({
         />
       )}
       {showOpenButton && (
-        <Button title={`Ver ${name}`} secondary busy={busy} onPress={open} />
+        <Button title="Ver foto" secondary busy={busy} onPress={open} />
       )}
       {!!error && <Text style={styles.error}>{error}</Text>}
       <Modal

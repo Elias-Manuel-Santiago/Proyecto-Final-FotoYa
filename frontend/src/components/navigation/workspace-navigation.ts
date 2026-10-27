@@ -10,7 +10,12 @@ export interface NavigationItem {
   roles?: readonly RoleId[];
 }
 export const workspaceLinks: NavigationItem[] = [
-  { href: '/home', icon: 'inicio', label: 'Inicio' },
+  {
+    href: '/home',
+    icon: 'inicio',
+    label: 'Inicio',
+    roles: ['owner', 'manager', 'secretary', 'editor', 'cameraman', 'seller'],
+  },
   {
     href: '/cities',
     icon: 'ciudades',
@@ -31,7 +36,7 @@ export const workspaceLinks: NavigationItem[] = [
     permission: 'catalog.read',
     roles: ['owner', 'secretary'],
   },
-    {
+  {
     href: '/stations',
     icon: 'puestos',
     label: 'Puestos',

@@ -73,7 +73,8 @@ export function validDate(value: string) {
 }
 
 // Comprueba el período y devuelve el mensaje que deben mostrar los filtros.
-export function periodError(from: string, to: string) {
+export function periodError(from: string, to: string, allTime = false) {
+  if (allTime) return '';
   if (!validDate(from) || !validDate(to))
     return 'Usá fechas válidas: AAAA-MM-DD.';
   if ((Date.parse(to) - Date.parse(from)) / 86400000 > 366)

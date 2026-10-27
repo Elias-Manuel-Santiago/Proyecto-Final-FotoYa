@@ -303,7 +303,7 @@ export class HttpFotoYaRepository {
     },
     attendanceSelf = false,
   ): Promise<AppData> {
-    const invalid = periodError(period.from, period.to);
+    const invalid = periodError(period.from, period.to, period.allTime);
     if (invalid) throw new Error(invalid);
     const actor = await this.profile();
     // Sin jornada o en kiosco basta el perfil: no se consultan recursos de trabajo bloqueados.
@@ -388,7 +388,14 @@ export class HttpFotoYaRepository {
       has('counts.read')
         ? this.api.all<DayRow>('reports/days/query', body)
         : [],
-      has('photos.read') ? this.api.all<PhotoRow>('photos/query', body) : [],
+      has('photos.read')
+        ? this.api.all<PhotoRow>(
+            'photos/query',
+            period.allTime
+              ? { allTime: true, ...(stationId ? { stationId } : {}) }
+              : body,
+          )
+        : [],
       has('sales.read')
         ? this.api.all<{
             id: string;

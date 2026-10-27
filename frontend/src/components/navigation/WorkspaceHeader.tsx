@@ -9,6 +9,7 @@ import { useNavigationMode } from '../../hooks/useNavigationMode';
 import { Icon } from '../ui/Icon';
 import { ScreenLayoutContext } from '../ui/Screen';
 import { useTheme } from '../ui/theme';
+import { ClientPrintContact } from './ClientPrintContact';
 import {
   isNavigationActive,
   navigationFor,
@@ -140,9 +141,9 @@ export function WorkspaceHeader({ children }: { children: ReactNode }) {
               </Text>
             )}
           </View>
- 
         </View>
       </View>
+      {employee.roleId === 'client' && bottom && <ClientPrintContact />}
       <View style={{ flex: 1, minHeight: 0, flexDirection: 'row' }}>
         {!bottom && (
           <View
@@ -214,6 +215,7 @@ export function WorkspaceHeader({ children }: { children: ReactNode }) {
           </ScreenLayoutContext.Provider>
         </View>
       </View>
+      {employee.roleId === 'client' && !bottom && <ClientPrintContact />}
       {bottom && (
         <View
           style={{

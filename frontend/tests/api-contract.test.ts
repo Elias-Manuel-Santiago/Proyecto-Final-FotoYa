@@ -231,6 +231,34 @@ test('la matriz de fallback coincide con los siete roles del backend', () => {
   }
 });
 
+test('Siempre consulta fotos sin fechas usando el contrato real del servidor', async () => {
+  const { repo, requests } = fixture('cliente', {
+    'photos/query': [
+      { id: '91', stationId: '1', clientId: '7', date: '2020-01-01' },
+    ],
+  });
+  const data = await repo.snapshot({ ...period, allTime: true });
+  assert.equal(data.photos[0].date, '2020-01-01');
+  assert.deepEqual(requests.find((row) => row.path === 'photos/query')?.body, {
+    allTime: true,
+    limit: 100,
+    offset: 0,
+  });
+  assert.deepEqual(
+    requests.map((row) => row.path),
+    ['auth/me', 'photos/query'],
+  );
+
+  requests.length = 0;
+  await repo.snapshot({ ...period, allTime: false });
+  assert.deepEqual(requests.find((row) => row.path === 'photos/query')?.body, {
+    from: period.from,
+    to: period.to,
+    limit: 100,
+    offset: 0,
+  });
+});
+
 test('login, POST, Bearer, IDs de catálogo, importes y resumen del servidor', async () => {
   const { repo, requests } = fixture();
   await repo.login(' persona@example.com ', 'contraseña');

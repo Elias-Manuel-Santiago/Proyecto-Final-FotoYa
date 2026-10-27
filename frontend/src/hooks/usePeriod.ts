@@ -32,5 +32,9 @@ export function usePeriod() {
   // Aplica cambios parciales conservando el resto de los filtros.
   const update = (patch: Partial<Period>) =>
     setPeriod((current) => ({ ...current, ...patch }));
-  return { period, update, error: periodError(period.from, period.to) };
+  return {
+    period,
+    update,
+    error: periodError(period.from, period.to, period.allTime),
+  };
 }

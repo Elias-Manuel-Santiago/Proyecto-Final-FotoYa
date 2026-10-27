@@ -21,6 +21,8 @@ export default function WorkspaceLayout() {
   if (!employee) return <Redirect href="/" />;
   if (!canWork(employee) && pathname !== '/profile')
     return <Redirect href="/profile" />;
+  if (employee.roleId === 'client' && pathname === '/home')
+    return <Redirect href="/photos" />;
   return (
     <WorkspaceHeader>
       {!!error && (

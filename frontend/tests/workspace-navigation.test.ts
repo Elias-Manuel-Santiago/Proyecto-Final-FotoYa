@@ -18,6 +18,16 @@ const employee = (roleId: RoleId): Employee => ({
   roleId,
 });
 
+test('el cliente accede a Fotos y Mi usuario sin vista Inicio', () => {
+  assert.deepEqual(
+    navigationFor(employee('client')).map((item) => item.href),
+    ['/photos', '/profile'],
+  );
+  assert(
+    navigationFor(employee('manager')).some((item) => item.href === '/home'),
+  );
+});
+
 test('la barra móvil conserva todas las secciones autorizadas de cada rol', () => {
   const roles: RoleId[] = [
     'owner',

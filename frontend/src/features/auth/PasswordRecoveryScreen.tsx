@@ -68,7 +68,10 @@ export function PasswordRecoveryScreen() {
     setChanged(true);
   }
 
-  if (employee) return <Redirect href="/home" />;
+  if (employee)
+    return (
+      <Redirect href={employee.roleId === 'client' ? '/photos' : '/home'} />
+    );
   return (
     <Screen compact title="Foto Ya">
       <Text style={styles.heading}>Recuperar contraseña</Text>

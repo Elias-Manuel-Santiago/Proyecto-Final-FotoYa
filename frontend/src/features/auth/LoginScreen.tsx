@@ -150,7 +150,10 @@ export function LoginScreen() {
       );
     }
   }
-  if (employee) return <Redirect href="/home" />;
+  if (employee)
+    return (
+      <Redirect href={employee.roleId === 'client' ? '/photos' : '/home'} />
+    );
   const creating = mode === 'register';
   return (
     <LoginLayout>

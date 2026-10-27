@@ -20,8 +20,7 @@ export function matchesPeriod(
   period: Period,
 ) {
   return (
-    row.date >= period.from &&
-    row.date <= period.to &&
+    (period.allTime || (row.date >= period.from && row.date <= period.to)) &&
     (period.stationIds === undefined ||
       period.stationIds.includes(row.stationId)) &&
     (!period.stationId || row.stationId === period.stationId)

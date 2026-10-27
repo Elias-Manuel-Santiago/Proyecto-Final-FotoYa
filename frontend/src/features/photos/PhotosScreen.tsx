@@ -85,6 +85,7 @@ export function PhotosScreen() {
     <Screen fullWidth title="Fotos" refreshing={refreshing} onRefresh={reload}>
       {can(employee, 'photos.upload') && <UploadQueue />}
       <PeriodFilters
+        allowAllTime={employee.roleId === 'client'}
         period={period}
         stations={visibleStations(data, employee)}
         onChange={update}
@@ -118,9 +119,6 @@ export function PhotosScreen() {
                 key={photo.id}
                 style={[styles.card, { padding: 8, gap: 6 }]}
               >
-                <Text style={styles.text} numberOfLines={1}>
-                  {photo.name}
-                </Text>
                 <Text style={styles.muted}>{displayDate(photo.date)}</Text>
                 {visibility.selectionControl(photo.id, photo.name, photo.sold)}
                 <PhotoPreview

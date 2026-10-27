@@ -37,7 +37,7 @@ export function usePeriodData(period: Period, attendanceSelf = false) {
   useEffect(() => {
     let active = true;
     const [requested, self] = JSON.parse(scope) as [Period, boolean];
-    if (periodError(requested.from, requested.to)) return;
+    if (periodError(requested.from, requested.to, requested.allTime)) return;
 
     const timer = setTimeout(() => {
       void repository
@@ -65,7 +65,7 @@ export function usePeriodData(period: Period, attendanceSelf = false) {
   }, [key, scope, repository, base]);
 
   const state = periodDataState(result, key, scope, base);
-  const invalid = periodError(period.from, period.to);
+  const invalid = periodError(period.from, period.to, period.allTime);
 
   // Mientras carga otro período se conserva el catálogo y se vacían las colecciones filtradas.
   const data = state.data ?? {

@@ -10,7 +10,8 @@ const columns = `f.id_fotos AS id, f.id_cliente AS clientId,
 export const photoRepository = {
   // Pagina metadatos por período, puesto y destinatario según el actor.
   async query(actor, input, station) {
-    const params = [input.from, input.to], where = ['d.fecha BETWEEN ? AND ?'];
+    const params = input.allTime ? [] : [input.from, input.to];
+    const where = input.allTime ? [] : ['d.fecha BETWEEN ? AND ?'];
     if (actor.role === 'cliente') { where.push('f.id_cliente = ?'); params.push(actor.id); }
     else {
       if (station) { where.push('f.id_puesto = ?'); params.push(station); }
@@ -18,7 +19,7 @@ export const photoRepository = {
       if (input.unassigned) where.push('f.id_cliente IS NULL');
     }
     const [rows] = await db.execute(`SELECT ${columns} FROM fotos f JOIN dias d ON d.id_dias = f.id_dia
-      WHERE ${where.join(' AND ')} ORDER BY f.id_fotos DESC LIMIT ? OFFSET ?`, [...params, String(input.limit), String(input.offset)]);
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY f.id_fotos DESC LIMIT ? OFFSET ?`, [...params, String(input.limit), String(input.offset)]);
     return rows;
   },
   // Busca metadatos y ruta privada con opción de conexión transaccional y bloqueo.

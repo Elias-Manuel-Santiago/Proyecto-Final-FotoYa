@@ -25,6 +25,7 @@ export function PeriodFilters({
   scopePicker,
   children,
   singleDay = false,
+  allowAllTime = false,
 }: {
   period: Period;
   stations: Station[];
@@ -34,6 +35,7 @@ export function PeriodFilters({
   scopePicker?: ReactNode;
   children?: ReactNode;
   singleDay?: boolean;
+  allowAllTime?: boolean;
 }) {
   const { employee } = useWorkspace();
   const allowScopeChange =
@@ -42,7 +44,7 @@ export function PeriodFilters({
   const today = useBusinessDate();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(period);
-  const error = periodError(draft.from, draft.to);
+  const error = periodError(draft.from, draft.to, draft.allTime);
   const change = (patch: Partial<Period>) =>
     setDraft((value) => ({ ...value, ...patch }));
   const presets = [
@@ -65,9 +67,11 @@ export function PeriodFilters({
       onOpenChange={setOpen}
       onOpen={() => setDraft(period)}
       summary={
-        singleDay
-          ? displayDate(period.from)
-          : `${displayDate(period.from)} — ${displayDate(period.to)}`
+        period.allTime
+          ? 'Siempre'
+          : singleDay
+            ? displayDate(period.from)
+            : `${displayDate(period.from)} — ${displayDate(period.to)}`
       }
     >
       {indicator}
@@ -78,30 +82,41 @@ export function PeriodFilters({
             key={preset.label}
             title={preset.label}
             secondary
-            onPress={() => change({ from: preset.from, to: today })}
-          />
-        ))}
-      </View>
-      <View style={[styles.row, { alignItems: 'flex-start' }]}>
-        <View style={{ flexGrow: 1, flexBasis: 220 }}>
-          <DateField
-            label={singleDay ? 'Día' : 'Desde'}
-            value={draft.from}
-            onChange={(from) =>
-              change(singleDay ? { from, to: from } : { from })
+            onPress={() =>
+              change({ from: preset.from, to: today, allTime: false })
             }
           />
-        </View>
-        {!singleDay && (
-          <View style={{ flexGrow: 1, flexBasis: 220 }}>
-            <DateField
-              label="Hasta"
-              value={draft.to}
-              onChange={(to) => change({ to })}
-            />
-          </View>
+        ))}
+        {allowAllTime && !singleDay && (
+          <Button
+            title="Siempre"
+            secondary={!draft.allTime}
+            onPress={() => change({ allTime: true })}
+          />
         )}
       </View>
+      {!draft.allTime && (
+        <View style={[styles.row, { alignItems: 'flex-start' }]}>
+          <View style={{ flexGrow: 1, flexBasis: 220 }}>
+            <DateField
+              label={singleDay ? 'Día' : 'Desde'}
+              value={draft.from}
+              onChange={(from) =>
+                change(singleDay ? { from, to: from } : { from })
+              }
+            />
+          </View>
+          {!singleDay && (
+            <View style={{ flexGrow: 1, flexBasis: 220 }}>
+              <DateField
+                label="Hasta"
+                value={draft.to}
+                onChange={(to) => change({ to })}
+              />
+            </View>
+          )}
+        </View>
+      )}
       {scopePicker ??
         (allowScopeChange && stations.length > 0 && (
           <View style={styles.stack}>
@@ -129,7 +144,9 @@ export function PeriodFilters({
           disabled={!!error}
           onPress={() => {
             onChange(
-              allowScopeChange ? draft : { from: draft.from, to: draft.to },
+              allowScopeChange
+                ? draft
+                : { from: draft.from, to: draft.to, allTime: draft.allTime },
             );
             setOpen(false);
           }}
@@ -142,6 +159,7 @@ export function PeriodFilters({
               ...period,
               from: today,
               to: today,
+              allTime: false,
               ...(allowScopeChange ? periodScopePatch(stations, []) : {}),
             })
           }
