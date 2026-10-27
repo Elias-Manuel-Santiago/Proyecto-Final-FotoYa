@@ -2,7 +2,10 @@
  * @file
  * Presenta inicio con accesos y métricas permitidos. Coordina la actualización de datos.
  */
+import { useState } from 'react';
 import { Text, View } from 'react-native';
+import { Button } from '../../components/ui/Button';
+import { PasswordField } from '../../components/ui/PasswordField';
 import { Metrics } from '../../components/metrics/Metrics';
 import { Screen } from '../../components/ui/Screen';
 import { useTheme } from '../../components/ui/theme';
@@ -39,6 +42,9 @@ export function HomeScreen() {
           onConfirm={() => checkInAction.run(enterCheckIn)}
         />
       )}
+      {employee.roleId === 'manager' && employee.checkInActive && (
+        <CheckInRecovery />
+      )}
       <Feedback error={checkInAction.error} />
       <Feedback error={error || refreshError} />
       {(loading || refreshing) && (
@@ -66,5 +72,58 @@ export function HomeScreen() {
         </>
       )}
     </Screen>
+  );
+}
+
+function CheckInRecovery() {
+  const { styles } = useTheme();
+  const { enterCheckIn } = useWorkspace();
+  const [confirming, setConfirming] = useState(false);
+  const [password, setPassword] = useState('');
+  const action = useAction();
+  if (!confirming)
+    return (
+      <Button
+        title="Recuperar vista de check-in"
+        secondary
+        onPress={() => setConfirming(true)}
+      />
+    );
+  return (
+    <View style={styles.card}>
+      <Text style={styles.text}>
+        Check-in figura abierto en otro dispositivo. Ingresá tu contraseña para
+        cerrar esa sesión y abrir Check-in acá. Se conservarán las ventas y las
+        asistencias.
+      </Text>
+      <PasswordField
+        label="Contraseña del encargado"
+        value={password}
+        onChangeText={setPassword}
+        editable={!action.busy}
+      />
+      <Feedback error={action.error} />
+      <Button
+        title="Recuperar check-in en este dispositivo"
+        busy={action.busy}
+        disabled={!password}
+        onPress={() => {
+          void action.run(async () => {
+            await enterCheckIn(password);
+            setPassword('');
+          });
+        }}
+      />
+      <Button
+        title="Cancelar"
+        secondary
+        disabled={action.busy}
+        onPress={() => {
+          setPassword('');
+          action.clear();
+          setConfirming(false);
+        }}
+      />
+    </View>
   );
 }

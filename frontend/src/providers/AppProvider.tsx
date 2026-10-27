@@ -34,13 +34,13 @@ interface AppContextValue {
   refresh: () => Promise<void>;
   restoreSession: () => Promise<void>;
   logoutCheckIn: (password: string) => Promise<void>;
-  enterCheckIn: () => Promise<void>;
+  enterCheckIn: (password?: string) => Promise<void>;
   repository: HttpFotoYaRepository;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-const RESTORE_PERSISTED_SESSION = false;
+const RESTORE_PERSISTED_SESSION = true;
 
 // Comparte repositorio, sesión y datos; coordina restauración, refresco y cambios de identidad.
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -177,9 +177,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [employee, repository, refresh]);
 
-  const enterCheckIn = async () => {
+  const enterCheckIn = async (password?: string) => {
     try {
-      await repository.enterCheckIn();
+      await repository.enterCheckIn(password);
     } finally {
       await refresh();
     }

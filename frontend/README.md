@@ -117,3 +117,5 @@ El dueño dispone de **Clientes**, con búsqueda por correo o DNI, páginas de 2
 La persistencia web requiere acceso a localStorage y comparte el alcance del origen del navegador; una vulnerabilidad XSS podría exponer el token. En móvil se debe regenerar la build de desarrollo para incorporar expo-secure-store. Las pruebas automatizadas cubren recuperación de los siete roles, check-in, revocación, cierre sin conexión y fallos temporales; no sustituyen una prueba en dispositivo.
 
 El Secretario usa la aplicación sin check-in/check-out y no tiene secciones de horarios ni asistencia. Tampoco figura en la nómina del kiosco. Ejecutar `npm run db:migrate` en `backend` para retirar los permisos anteriores; se conserva el historial existente.
+
+Las sesiones guardadas se restauran al reiniciar, incluido el modo Check-in. Si se perdió el token o el dispositivo, ingresar como encargado y elegir **Recuperar vista de check-in** en Inicio; confirmar su contraseña cierra la sesión de kiosco anterior y abre Check-in aquí, conservando ventas y asistencias. Luego se puede cerrar normalmente con la contraseña del encargado.

@@ -272,9 +272,25 @@ integration('check-in: una sesión de trabajo y una de kiosco, activación concu
     assert.equal((await normal('attendance/kiosk/enter')).status, 200);
     const nextKiosk = normal;
     normal = request((await call('auth/login', managerCredentials)).data.data.token);
+    // Token perdido: el login normal conserva el kiosco; recuperarlo exige contraseña.
+    assert.equal((await normal('attendance/kiosk/recover', { password: 'wrong' })).status, 401);
+    assert.equal((await nextKiosk('auth/me')).status, 200);
+    const [historyBeforeRecovery] = await db.execute('SELECT * FROM horarios WHERE id_usuario = ?', [employee]);
+    const eventBeforeRecovery = { ...eventCache.get('1') };
+    assert.equal((await normal('attendance/kiosk/recover', { password: managerCredentials.password })).status, 200);
+    assert.equal((await nextKiosk('auth/me')).status, 401);
+    assert.equal((await normal('auth/me')).data.data.kioskMode, true);
+    assert.equal((await normal('users/query')).data.error.code, 'KIOSK_LOCKED');
+    const [historyAfterRecovery] = await db.execute('SELECT * FROM horarios WHERE id_usuario = ?', [employee]);
+    assert.deepEqual(historyAfterRecovery, historyBeforeRecovery);
+    assert.deepEqual(eventCache.get('1'), eventBeforeRecovery);
+    assert.equal((await http.post('/api/auth/me', {}, { headers: { Authorization: `Bearer ${kioskTokens['1']}` } })).status, 200);
+    const recoveredKiosk = normal;
+    normal = request((await call('auth/login', managerCredentials)).data.data.token);
     const newPassword = 'Changed-manager-password-1234';
     assert.equal((await normal('auth/password/change', { currentPassword: managerCredentials.password, password: newPassword })).status, 200);
     assert.equal((await nextKiosk('auth/me')).status, 401);
+    assert.equal((await recoveredKiosk('auth/me')).status, 401);
     assert.equal((await normal('auth/me')).status, 401);
     assert.equal((await call('auth/login', { ...managerCredentials, password: newPassword })).status, 200);
   } finally {

@@ -54,6 +54,22 @@ export const kioskService = {
       return { kioskMode: true };
     });
   },
+  // Recupera un kiosco perdido sin reutilizar su token ni modificar jornadas o ventas.
+  async recover(actor, input) {
+    return managed(actor, async (connection, account) => {
+      if (actor.kioskMode) throw new ApiError(409, 'Esta sesión ya está en Check-in.', 'CHECK_IN_ACTIVE');
+      if (!await verifyPassword(input.password, account.password))
+        throw new ApiError(401, 'La contraseña del encargado es incorrecta.', 'INVALID_CREDENTIALS');
+      if (!actor.stationId) throw new ApiError(409, 'El encargado necesita un puesto asignado.', 'STATION_REQUIRED');
+      const [[station]] = await connection.execute('SELECT disponible FROM puesto WHERE id_puesto = ? LOCK IN SHARE MODE', [actor.stationId]);
+      if (!station?.disponible) throw new ApiError(409, 'El puesto está inactivo.', 'STATION_REQUIRED');
+      // El bloqueo del encargado serializa recuperación y activación en otros dispositivos.
+      await connection.execute(`UPDATE sesiones_usuario SET revoked_at = UTC_TIMESTAMP(6)
+        WHERE id_usuario = ? AND check_in_mode = TRUE AND revoked_at IS NULL`, [actor.id]);
+      await connection.execute('UPDATE sesiones_usuario SET check_in_mode = TRUE WHERE id_sesiones_usuario = ?', [actor.sessionId]);
+      return { kioskMode: true };
+    });
+  },
   async exit(actor, input) {
     requireKiosk(actor);
     return managed(actor, async (connection, account) => {

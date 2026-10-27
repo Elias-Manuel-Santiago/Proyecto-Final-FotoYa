@@ -271,3 +271,56 @@ test('web guarda únicamente el token, lo recupera y aísla distintas APIs', asy
     else Reflect.deleteProperty(globalThis, 'window');
   }
 });
+
+test('recupera un kiosco perdido con contraseña y restaura el nuevo kiosco tras reiniciar', async () => {
+  const saved = storage(token);
+  const repository = new HttpFotoYaRepository(new ApiClient(url), saved);
+  await repository.restoreSession();
+  let recovered = false;
+  mock.method(globalThis, 'fetch', async (input: string, init: RequestInit) => {
+    assert.equal(
+      (init.headers as Record<string, string>).Authorization,
+      `Bearer ${token}`,
+    );
+    if (input.endsWith('/attendance/kiosk/recover')) {
+      assert.deepEqual(JSON.parse(init.body as string), {
+        password: 'manager-password',
+      });
+      recovered = true;
+      return Response.json({ data: { kioskMode: true } });
+    }
+    assert.equal(input, `${url}/auth/me`);
+    return Response.json({
+      data: { ...actor('encargado', recovered), checkInActive: true },
+    });
+  });
+  assert.equal((await repository.profile()).kioskMode, false);
+  await repository.enterCheckIn('manager-password');
+  assert.equal((await repository.profile()).kioskMode, true);
+  assert.equal(await saved.read(), token);
+  const restarted = new HttpFotoYaRepository(new ApiClient(url), saved);
+  assert.equal(await restarted.restoreSession(), true);
+  assert.equal((await restarted.snapshot()).employees[0].kioskMode, true);
+});
+
+test('contraseña incorrecta al recuperar no elimina el token de trabajo', async () => {
+  const saved = storage(token);
+  const repository = new HttpFotoYaRepository(new ApiClient(url), saved);
+  await repository.restoreSession();
+  mock.method(globalThis, 'fetch', async () =>
+    Response.json(
+      {
+        error: {
+          code: 'INVALID_CREDENTIALS',
+          message: 'Contraseña incorrecta',
+        },
+      },
+      { status: 401 },
+    ),
+  );
+  await assert.rejects(repository.enterCheckIn('wrong'), {
+    code: 'INVALID_CREDENTIALS',
+  });
+  assert.equal(await saved.read(), token);
+  assert.equal(await repository.restoreSession(), true);
+});

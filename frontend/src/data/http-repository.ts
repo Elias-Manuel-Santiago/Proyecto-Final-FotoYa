@@ -239,8 +239,10 @@ export class HttpFotoYaRepository {
     return actor;
   }
 
-  async enterCheckIn() {
-    await this.api.post('attendance/kiosk/enter');
+  async enterCheckIn(password?: string) {
+    if (password !== undefined)
+      await this.api.post('attendance/kiosk/recover', { password });
+    else await this.api.post('attendance/kiosk/enter');
     this.profileRevision += 1;
   }
 
