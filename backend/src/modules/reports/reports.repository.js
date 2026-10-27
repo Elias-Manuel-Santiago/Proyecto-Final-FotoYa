@@ -6,20 +6,22 @@
 import { db } from '../../config/database.js';
 import { stationScope } from '../../security/access.js';
 import { salesByDay, stationReport } from './reports.queries.js';
+import { periodDateFilter } from '../../shared/validation.js';
 
 // Cada venta se agrega antes de vincularla con los conteos diarios.
 export const reportsRepository = {
   // Consulta conteos diarios y ventas del período dentro del alcance del actor.
   async days(actor, input) {
     const station = stationScope(actor, input.stationId);
+    const dates = periodDateFilter(input, 'd.fecha');
     const [rows] = await db.execute(`SELECT d.id_dias AS id, d.id_puesto AS stationId, d.fecha AS date, d.fotos AS taken,
       COALESCE(v.sold, 0) AS sold, COALESCE(v.revenue, 0) AS revenue,
       CASE WHEN COALESCE(v.sold, 0) <= d.fotos THEN d.fotos - COALESCE(v.sold, 0) END AS discarded,
       CASE WHEN d.fotos > 0 AND COALESCE(v.sold, 0) <= d.fotos THEN ROUND(COALESCE(v.sold, 0) / d.fotos * 100, 2) END AS percentage
       FROM dias d LEFT JOIN ${salesByDay} v ON v.id_dias = d.id_dias
-      WHERE d.fecha BETWEEN ? AND ? ${station ? 'AND d.id_puesto = ?' : ''}
+      WHERE ${dates.sql} ${station ? 'AND d.id_puesto = ?' : ''}
       ORDER BY d.fecha DESC, d.id_puesto LIMIT ? OFFSET ?`,
-    [input.from, input.to, ...(station ? [station] : []), String(input.limit), String(input.offset)]);
+    [...dates.params, ...(station ? [station] : []), String(input.limit), String(input.offset)]);
     return rows;
   },
   // Pagina el informe por puesto usando la consulta compartida de agregación.

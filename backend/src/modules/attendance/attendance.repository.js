@@ -16,8 +16,9 @@ export const attendanceRepository = {
   // Consulta turnos por período y alcance; la variante self restringe al propio usuario.
   async query(actor, input, self = false, allHistory = false) {
     const station = self && actor.role !== 'encargado' ? null : stationScope(actor, input.stationId);
-    const params = allHistory ? [] : [input.from, input.to];
-    const where = allHistory ? ['1 = 1'] : ['d.fecha BETWEEN ? AND ?'];
+    const unlimited = allHistory || input.allTime;
+    const params = unlimited ? [] : [input.from, input.to];
+    const where = unlimited ? ['1 = 1'] : ['d.fecha BETWEEN ? AND ?'];
     if (actor.role === 'secretario') where.push("r.nombre <> 'dueno'");
     if (station) { where.push('d.id_puesto = ?'); params.push(station); }
     if (self || input.userId) { where.push('h.id_usuario = ?'); params.push(self ? actor.id : input.userId); }

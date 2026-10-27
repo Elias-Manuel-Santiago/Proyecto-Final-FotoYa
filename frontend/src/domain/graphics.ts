@@ -1,4 +1,4 @@
-import type { Station } from './models';
+import type { Period, Station } from './models';
 import { sumAmounts } from './amounts';
 
 export type GraphicMetric =
@@ -141,6 +141,12 @@ export function periodDates(from: string, to: string) {
   )
     dates.push(new Date(time).toISOString().slice(0, 10));
   return dates;
+}
+
+export function graphicDates(data: GraphicsData, period: Period) {
+  return period.allTime
+    ? [...new Set(data.days.map((row) => row.date))].sort()
+    : periodDates(period.from, period.to);
 }
 
 export function dailyValues(

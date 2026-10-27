@@ -14,9 +14,7 @@ export function useGraphicsData(period: Period, day?: string) {
   const { employee, repository, data: base } = useWorkspace();
   const [revision, setRevision] = useState(0);
   const scope = JSON.stringify([
-    period.from,
-    period.to,
-    period.stationId,
+    period,
     day,
     employee.id,
     employee.roleId,
@@ -28,19 +26,17 @@ export function useGraphicsData(period: Period, day?: string) {
   ]);
   const key = JSON.stringify([scope, revision]);
   const [result, setResult] = useState<PeriodResult<GraphicsData>>();
-  const invalid = periodError(period.from, period.to);
+  const invalid = periodError(period.from, period.to, period.allTime);
   useEffect(() => {
     if (invalid) return;
     let active = true;
-    const [from, to, stationId, requestedDay] = JSON.parse(scope) as [
-      string,
-      string,
-      string,
+    const [requested, requestedDay] = JSON.parse(scope) as [
+      Period,
       string | undefined,
     ];
     const timer = setTimeout(() => {
       void repository
-        .graphics({ from, to, stationId }, requestedDay)
+        .graphics(requested, requestedDay)
         .then((data) => {
           if (active) setResult({ key, scope, base, data });
         })

@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { graphicsRepository } from './graphics.repository.js';
 
 export const graphicsQuery = period.safeExtend({ day: z.iso.date().optional() })
-  .refine(v => !v.day || (v.day >= v.from && v.day <= v.to), 'El día debe pertenecer al período.');
+  .refine(v => !v.day || (!v.allTime && v.day >= v.from && v.day <= v.to), 'El día debe pertenecer al período.');
 
 // Separa permisos de conteos e informes y valida filtros antes de consultar.
 export function reportsRoutes() {

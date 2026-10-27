@@ -85,7 +85,6 @@ export function PhotosScreen() {
     <Screen fullWidth title="Fotos" refreshing={refreshing} onRefresh={reload}>
       {can(employee, 'photos.upload') && <UploadQueue />}
       <PeriodFilters
-        allowAllTime={employee.roleId === 'client'}
         period={period}
         stations={visibleStations(data, employee)}
         onChange={update}

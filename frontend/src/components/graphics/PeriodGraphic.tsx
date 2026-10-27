@@ -2,7 +2,7 @@ import { displayDate } from '../../domain/dates';
 import {
   dailyValues,
   graphicValue,
-  periodDates,
+  graphicDates,
   type GraphicMetric,
   type GraphicScope,
   type GraphicsData,
@@ -23,7 +23,7 @@ export function PeriodGraphic({
   metric: GraphicMetric;
   onDay: (date: string) => void;
 }) {
-  const dates = periodDates(period.from, period.to);
+  const dates = graphicDates(data, period);
   return (
     <>
       <MetricChart
@@ -35,7 +35,11 @@ export function PeriodGraphic({
           scopes.map((scope, series) => ({
             id: `${date}:${scope.id}`,
             label:
-              series === 0 ? date.slice(5).split('-').reverse().join('/') : '',
+              series === 0
+                ? period.allTime
+                  ? displayDate(date)
+                  : date.slice(5).split('-').reverse().join('/')
+                : '',
             description: `${displayDate(date)} · ${scope.label}`,
             value: graphicValue(dailyValues(data, scope, date), metric),
             series,

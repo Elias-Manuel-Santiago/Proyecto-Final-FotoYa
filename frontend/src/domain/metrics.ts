@@ -41,13 +41,14 @@ export function stationMetrics(
   const sales = data.sales.filter(
     (row) => row.stationId === station.id && matchesPeriod(row, period),
   );
-  const expectedDays =
-    Math.round(
-      (Date.parse(`${period.to}T12:00:00Z`) -
-        Date.parse(`${period.from}T12:00:00Z`)) /
-        86400000,
-    ) + 1;
   const registeredDays = new Set(counts.map((row) => row.date)).size;
+  const expectedDays = period.allTime
+    ? registeredDays
+    : Math.round(
+        (Date.parse(`${period.to}T12:00:00Z`) -
+          Date.parse(`${period.from}T12:00:00Z`)) /
+          86400000,
+      ) + 1;
   const taken =
     registeredDays > 0 && registeredDays === expectedDays
       ? counts.reduce((sum, row) => sum + row.taken, 0)

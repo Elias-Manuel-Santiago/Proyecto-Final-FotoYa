@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   dailyValues,
+  graphicDates,
   graphicScopes,
   graphicValue,
   hourlyValues,
@@ -39,6 +40,25 @@ const empty: GraphicsData = {
   attendance: [],
 };
 const values = { earnings: 120, sales: 3, sold: 2, taken: 10 };
+
+test('Siempre grafica todo el historial sin truncar a 367 días ni depender de las fechas anteriores', () => {
+  const dates = Array.from({ length: 400 }, (_, index) =>
+    new Date(Date.parse('2020-01-01T12:00:00Z') + index * 86400000)
+      .toISOString()
+      .slice(0, 10),
+  );
+  const data = {
+    ...empty,
+    days: dates.toReversed().flatMap((date) => [
+      { ...values, date, stationId: '1' },
+      { ...values, date, stationId: '2' },
+    ]),
+  };
+  const period = { from: '2026-10-01', to: '2026-10-02', stationId: '' };
+  assert.deepEqual(graphicDates(data, { ...period, allTime: true }), dates);
+  assert.deepEqual(graphicDates(empty, { ...period, allTime: true }), []);
+  assert.deepEqual(graphicDates(data, period), ['2026-10-01', '2026-10-02']);
+});
 
 test('series independientes por ID y alcance: nombres iguales no mezclan ciudades; encargado solo tiene su puesto', () => {
   const scopes = graphicScopes(stations);

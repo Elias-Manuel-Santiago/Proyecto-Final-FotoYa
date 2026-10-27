@@ -128,6 +128,7 @@ export function ReportsScreen() {
                   day,
                   from: period.from,
                   to: period.to,
+                  allTime: period.allTime ? 'true' : undefined,
                   metric,
                   scopes: JSON.stringify(scopes.map((s) => s.id)),
                 },

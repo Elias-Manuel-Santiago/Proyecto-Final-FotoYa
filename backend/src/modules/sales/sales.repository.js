@@ -6,17 +6,19 @@
 import { db } from '../../config/database.js';
 import { stationScope } from '../../security/access.js';
 import { ApiError } from '../../shared/errors.js';
+import { periodDateFilter } from '../../shared/validation.js';
 
 export const salesRepository = {
   // Pagina ventas distinguiendo familias contadas, copias e importe histórico.
   async query(actor, input) {
     const station = stationScope(actor, input.stationId);
+    const dates = periodDateFilter(input, 'd.fecha');
     const [rows] = await db.execute(`SELECT v.id_venta AS id, v.id_dias AS dayId, d.fecha AS date, d.id_puesto AS stationId,
       IF(v.familia_contada,v.cantidad,0) AS quantity, v.precio_total AS total,
       v.copias AS copies, v.metodo_pago AS paymentMethod, v.created_at AS createdAt FROM venta v JOIN dias d ON d.id_dias = v.id_dias
-      WHERE d.fecha BETWEEN ? AND ? ${station ? 'AND d.id_puesto = ?' : ''}
+      WHERE ${dates.sql} ${station ? 'AND d.id_puesto = ?' : ''}
       ORDER BY d.fecha DESC, v.id_venta DESC LIMIT ? OFFSET ?`,
-    [input.from, input.to, ...(station ? [station] : []), String(input.limit), String(input.offset)]);
+    [...dates.params, ...(station ? [station] : []), String(input.limit), String(input.offset)]);
     return rows;
   },
   // Comprueba alcance y reúne la venta con tarifas aplicadas y fotos vinculadas.

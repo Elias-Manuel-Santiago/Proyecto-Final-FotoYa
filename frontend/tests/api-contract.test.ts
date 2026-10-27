@@ -259,6 +259,62 @@ test('Siempre consulta fotos sin fechas usando el contrato real del servidor', a
   });
 });
 
+test('Siempre se envía en conteos, ventas, fotos, asistencia e informes conservando el puesto del encargado', async () => {
+  const { repo, requests } = fixture('encargado');
+  await repo.snapshot({ ...period, allTime: true, stationId: '999' });
+  for (const path of [
+    'reports/days/query',
+    'sales/query',
+    'photos/query',
+    'attendance/query',
+    'reports/query',
+    'reports/summary',
+  ]) {
+    const request = requests.find((row) => row.path === path);
+    assert(request, `Falta la consulta ${path}`);
+    assert.equal(request.body.allTime, true);
+    assert.equal(request.body.stationId, '1');
+    assert.equal(request.body.from, undefined);
+    assert.equal(request.body.to, undefined);
+  }
+});
+
+test('Siempre conserva el historial personal sin imponer un puesto en attendance/mine', async () => {
+  const { repo, requests } = fixture('editor');
+  await repo.snapshot({ ...period, allTime: true }, true);
+  assert.deepEqual(
+    requests.find((row) => row.path === 'attendance/mine')?.body,
+    {
+      allTime: true,
+      limit: 100,
+      offset: 0,
+    },
+  );
+});
+
+test('Siempre consulta gráficos sin fechas ni día horario y conserva el alcance del encargado', async () => {
+  const { repo, requests } = fixture('encargado', {
+    'reports/graphics/query': {
+      days: [],
+      hours: [],
+      people: [],
+      workers: [],
+      attendance: [],
+    },
+  });
+  await repo.graphics(
+    { ...period, allTime: true, stationId: '999' },
+    period.from,
+  );
+  assert.deepEqual(
+    requests.find((row) => row.path === 'reports/graphics/query')?.body,
+    {
+      allTime: true,
+      stationId: '1',
+    },
+  );
+});
+
 test('login, POST, Bearer, IDs de catálogo, importes y resumen del servidor', async () => {
   const { repo, requests } = fixture();
   await repo.login(' persona@example.com ', 'contraseña');

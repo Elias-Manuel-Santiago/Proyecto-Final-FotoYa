@@ -8,7 +8,11 @@ import {
   scopeColumns,
 } from '../src/domain/filter-scopes';
 import { graphicScopes } from '../src/domain/graphics';
-import { matchesPeriod, reportRows } from '../src/domain/metrics';
+import {
+  matchesPeriod,
+  reportRows,
+  stationMetrics,
+} from '../src/domain/metrics';
 import type { Station, Period, AppData, Employee } from '../src/domain/models';
 
 const stations: Station[] = [
@@ -54,6 +58,40 @@ test('Siempre incluye fotos de cualquier fecha y conserva el alcance por puesto'
   );
   assert.equal(periodError('', '', true), '');
   assert.notEqual(periodError('', '', false), '');
+});
+
+test('Siempre suma los días registrados de distintos años sin inventar cobertura de un rango', () => {
+  const data = {
+    stations,
+    sales: [],
+    counts: [
+      {
+        stationId: '1',
+        date: '2020-01-01',
+        taken: 100,
+        sold: 60,
+        revenue: 300,
+      },
+      { stationId: '1', date: '2026-10-25', taken: 50, sold: 20, revenue: 200 },
+      {
+        stationId: '2',
+        date: '2020-01-01',
+        taken: 900,
+        sold: 800,
+        revenue: 900,
+      },
+    ],
+  } as unknown as AppData;
+  const allTime = { ...period, allTime: true };
+  const result = stationMetrics(data, stations[0], allTime);
+  assert.equal(result.taken, 150);
+  assert.equal(result.sold, 80);
+  assert.equal(result.earnings, 500);
+  assert.equal(result.discarded, 70);
+  assert.equal(result.expectedDays, 2);
+  assert.equal(stationMetrics(data, stations[2], allTime).taken, null);
+  data.counts[0].sold = 101;
+  assert.equal(stationMetrics(data, stations[0], allTime).discarded, null);
 });
 
 test('las tres columnas distinguen IDs aunque ciudades y eventos compartan nombre', () => {

@@ -2,6 +2,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { DailyGraphic } from '../../components/graphics/DailyGraphic';
+import { PeriodGraphic } from '../../components/graphics/PeriodGraphic';
 import { ScopePicker } from '../../components/graphics/ScopePicker';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
 import { Button } from '../../components/ui/Button';
@@ -26,6 +27,7 @@ export function DayReportScreen() {
     scopes?: string;
     from?: string;
     to?: string;
+    allTime?: string;
   }>();
   const { styles } = useTheme();
   const { employee, data: base } = useWorkspace();
@@ -33,6 +35,7 @@ export function DayReportScreen() {
   const [day, setDay] = useState(
     typeof params.day === 'string' && validDate(params.day) ? params.day : '',
   );
+  const [allTime, setAllTime] = useState(false);
   const [metric, setMetric] = useState<GraphicMetric>(
     graphicMetrics.find((m) => m.value === params.metric)?.value ?? 'earnings',
   );
@@ -51,9 +54,15 @@ export function DayReportScreen() {
   const scopes = own
     ? available
     : available.filter((s) => selected.includes(s.id));
+  const period = {
+    from: day,
+    to: day,
+    stationId: own ? employee.stationId : '',
+    allTime,
+  };
   const { data, loading, refreshing, error, reload } = useGraphicsData(
-    { from: day, to: day, stationId: own ? employee.stationId : '' },
-    day || undefined,
+    period,
+    allTime ? undefined : day || undefined,
   );
   const goBack = () => {
     if (router.canGoBack()) router.back();
@@ -61,12 +70,21 @@ export function DayReportScreen() {
   };
   return (
     <Screen
-      title={day ? `Detalle del ${displayDate(day)}` : 'Detalle diario'}
+      title={
+        allTime
+          ? 'Detalle de siempre'
+          : day
+            ? `Detalle del ${displayDate(day)}`
+            : 'Detalle diario'
+      }
       refreshing={refreshing}
       onRefresh={reload}
     >
       <Button secondary title="Volver al período" onPress={goBack} />
-      {day &&
+      {params.allTime === 'true' ? (
+        <Text style={styles.muted}>Período de origen: Siempre</Text>
+      ) : (
+        day &&
         typeof params.from === 'string' &&
         typeof params.to === 'string' &&
         !periodError(params.from, params.to) && (
@@ -74,7 +92,8 @@ export function DayReportScreen() {
             Período de origen: {displayDate(params.from)} —{' '}
             {displayDate(params.to)}
           </Text>
-        )}
+        )
+      )}
       {own && (
         <Text style={styles.heading}>
           Puesto: {stations[0]?.name ?? employee.stationName ?? 'Tu puesto'}
@@ -82,14 +101,11 @@ export function DayReportScreen() {
       )}
       <PeriodFilters
         singleDay
-        period={{
-          from: day,
-          to: day,
-          stationId: own ? employee.stationId : '',
-        }}
+        period={period}
         stations={stations}
         allowScopeChange={false}
         onChange={(value) => {
+          setAllTime(!!value.allTime);
           if (value.from) setDay(value.from);
         }}
         indicator={
@@ -120,15 +136,30 @@ export function DayReportScreen() {
       {!scopes.length && (
         <Text style={styles.muted}>Seleccioná al menos una serie.</Text>
       )}
-      {data && day && !!scopes.length && (
-        <DailyGraphic
-          data={data}
-          day={day}
-          scopes={scopes}
-          metric={metric}
-          stations={stations}
-        />
-      )}
+      {data &&
+        !!scopes.length &&
+        (allTime ? (
+          <PeriodGraphic
+            data={data}
+            period={period}
+            scopes={scopes}
+            metric={metric}
+            onDay={(date) => {
+              setDay(date);
+              setAllTime(false);
+            }}
+          />
+        ) : (
+          day && (
+            <DailyGraphic
+              data={data}
+              day={day}
+              scopes={scopes}
+              metric={metric}
+              stations={stations}
+            />
+          )
+        ))}
     </Screen>
   );
 }

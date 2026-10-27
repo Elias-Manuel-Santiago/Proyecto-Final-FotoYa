@@ -125,16 +125,17 @@ export class HttpFotoYaRepository {
   ) {}
 
   async graphics(period: Period, day?: string): Promise<GraphicsData> {
-    const invalid = periodError(period.from, period.to);
+    const invalid = periodError(period.from, period.to, period.allTime);
     if (invalid) throw new Error(invalid);
     const actor = await this.profile();
     const stationId =
       actor.roleId === 'manager' ? actor.stationId : period.stationId;
     const raw = await this.api.post<GraphicsData>('reports/graphics/query', {
-      from: period.from,
-      to: period.to,
+      ...(period.allTime
+        ? { allTime: true }
+        : { from: period.from, to: period.to }),
       ...(stationId ? { stationId } : {}),
-      ...(day ? { day } : {}),
+      ...(!period.allTime && day ? { day } : {}),
     });
     const values = (row: GraphicValues): GraphicValues => ({
       earnings: Number(row.earnings),
@@ -322,9 +323,11 @@ export class HttpFotoYaRepository {
       actor.roleId !== 'manager' || String(row.stationId) === actor.stationId;
     const stationId =
       actor.roleId === 'manager' ? actor.stationId : period.stationId;
+    const dateFilter = period.allTime
+      ? { allTime: true }
+      : { from: period.from, to: period.to };
     const body = {
-      from: period.from,
-      to: period.to,
+      ...dateFilter,
       ...(stationId ? { stationId } : {}),
     };
     const stations = has('catalog.read')
@@ -388,14 +391,7 @@ export class HttpFotoYaRepository {
       has('counts.read')
         ? this.api.all<DayRow>('reports/days/query', body)
         : [],
-      has('photos.read')
-        ? this.api.all<PhotoRow>(
-            'photos/query',
-            period.allTime
-              ? { allTime: true, ...(stationId ? { stationId } : {}) }
-              : body,
-          )
-        : [],
+      has('photos.read') ? this.api.all<PhotoRow>('photos/query', body) : [],
       has('sales.read')
         ? this.api.all<{
             id: string;
@@ -414,7 +410,7 @@ export class HttpFotoYaRepository {
         : has('attendance.self')
           ? this.api.all<Omit<Attendance, 'employeeId'> & { userId: string }>(
               'attendance/mine',
-              { from: period.from, to: period.to },
+              dateFilter,
             )
           : [],
       has('reports.read')

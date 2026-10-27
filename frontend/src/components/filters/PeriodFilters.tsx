@@ -25,7 +25,6 @@ export function PeriodFilters({
   scopePicker,
   children,
   singleDay = false,
-  allowAllTime = false,
 }: {
   period: Period;
   stations: Station[];
@@ -35,7 +34,6 @@ export function PeriodFilters({
   scopePicker?: ReactNode;
   children?: ReactNode;
   singleDay?: boolean;
-  allowAllTime?: boolean;
 }) {
   const { employee } = useWorkspace();
   const allowScopeChange =
@@ -87,13 +85,11 @@ export function PeriodFilters({
             }
           />
         ))}
-        {allowAllTime && !singleDay && (
-          <Button
-            title="Siempre"
-            secondary={!draft.allTime}
-            onPress={() => change({ allTime: true })}
-          />
-        )}
+        <Button
+          title="Siempre"
+          secondary={!draft.allTime}
+          onPress={() => change({ allTime: true })}
+        />
       </View>
       {!draft.allTime && (
         <View style={[styles.row, { alignItems: 'flex-start' }]}>
