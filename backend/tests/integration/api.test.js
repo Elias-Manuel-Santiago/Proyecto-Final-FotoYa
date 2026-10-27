@@ -965,8 +965,14 @@ integration('clientes se consultan de a veinte, con búsqueda parcial por correo
   assert.equal((await call('clients/query', { search: 'dueno@example.com' })).data.data.clients.length, 0);
 });
 
-integration('registro social verificado inicia sesión sin datos personales ni código y no vincula cuentas por correo', async () => {
-  assert.equal((await call('auth/social', { idToken: 'owner' }, 'anon')).data.error.code, 'ACCOUNT_EXISTS');
+integration('registro social verificado inicia sesión y reutiliza la cuenta existente por correo', async () => {
+  const owner = await call('auth/social', { idToken: 'owner' }, 'anon');
+  assert.equal(owner.status, 200);
+  tokens.socialOwner = owner.data.data.token;
+  const ownerProfile = await call('auth/me', {}, 'socialOwner');
+  assert.equal(String(ownerProfile.data.data.id), String(users.dueno));
+  assert.equal(ownerProfile.data.data.role, 'dueno');
+  assert.equal((await call('auth/login', { email: 'dueno@example.com', password: 'Test-password-1234' }, 'anon')).status, 200);
   const mailCount = verificationMail.length;
   const result = await call('auth/social', { idToken: 'social-test' }, 'anon');
   assert.equal(result.status, 200);

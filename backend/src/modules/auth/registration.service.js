@@ -32,6 +32,9 @@ const issueCode = async (connection, user) => {
 // Persiste una sesión propia y devuelve el Bearer con su tiempo de vida.
 const session = async (connection, user) => {
   const token = newToken();
+  // El acceso social respeta el mismo reemplazo del dispositivo de trabajo que el local.
+  if (user.role === 'encargado') await connection.execute(`UPDATE sesiones_usuario SET revoked_at = UTC_TIMESTAMP(6)
+    WHERE id_usuario = ? AND check_in_mode = FALSE AND revoked_at IS NULL`, [user.id_usuario]);
   await connection.execute(`INSERT INTO sesiones_usuario (id_usuario, token, expires_at)
     VALUES (?, ?, TIMESTAMPADD(HOUR, ?, UTC_TIMESTAMP(6)))`, [user.id_usuario, token, env.SESSION_HOURS]);
   return { token, tokenType: 'Bearer', expiresIn: env.SESSION_HOURS * 3600 };
@@ -97,10 +100,21 @@ export const registrationService = {
   async social(input) {
     const identity = await socialIdentity(input.idToken);
     const [[found]] = await db.execute('SELECT id_usuario FROM usuarios WHERE auth0_sub = ?', [identity.subject]);
-    if (found) return transaction(async connection => {
+    const [[existing]] = found ? [[null]] : await db.execute('SELECT id_usuario FROM usuarios WHERE email = ?', [identity.email]);
+    if (found || existing) return transaction(async connection => {
+      // Conserva el orden de bloqueo del login local y de la edición de roles.
+      await connection.query('SELECT id_rol FROM rol ORDER BY id_rol FOR UPDATE');
       const [[user]] = await connection.execute(`SELECT u.*, r.nombre AS role FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
-        WHERE u.id_usuario = ? FOR UPDATE`, [found.id_usuario]);
-      if (!user?.disponible || user.role !== 'cliente') throw new ApiError(403, 'La cuenta no está disponible.');
+        WHERE u.id_usuario = ? FOR UPDATE`, [(found ?? existing).id_usuario]);
+      if (!user?.disponible) throw new ApiError(403, 'La cuenta no está disponible.');
+      if (user.role === 'checkin') throw new ApiError(403, 'Ingresá con la cuenta del encargado.');
+      // Una identidad conocida tiene prioridad sobre el correo. Revalida bajo bloqueo.
+      if (found && user.auth0_sub !== identity.subject)
+        throw new ApiError(401, 'La identidad social cambió. Volvé a ingresar.', 'INVALID_SOCIAL_IDENTITY');
+      // El correo del token firmado debe estar verificado para acceder a otra cuenta.
+      // No cambia contraseña ni auth0_sub: conserva login local, recuperación y otros proveedores.
+      if (!found && (identity.emailVerified !== true || normalizeEmail(user.email) !== identity.email))
+        throw new ApiError(401, 'Verificá el correo en el proveedor o ingresá con tu método habitual.', 'SOCIAL_EMAIL_UNVERIFIED');
       // Retoma cuentas creadas antes de aceptar la verificación del proveedor.
       if (!user.email_verified && identity.emailVerified === true && normalizeEmail(user.email) === identity.email) {
         await connection.execute('UPDATE usuarios SET email_verified = TRUE WHERE id_usuario = ?', [user.id_usuario]);
@@ -109,9 +123,6 @@ export const registrationService = {
       }
       return user.email_verified ? session(connection, user) : issueCode(connection, user);
     });
-    // Un correo ya registrado no se vincula automáticamente a una identidad externa nueva.
-    const [[existing]] = await db.execute('SELECT id_usuario FROM usuarios WHERE email = ?', [identity.email]);
-    if (existing) throw new ApiError(409, 'Este correo ya tiene una cuenta. Ingresá con su método original.', 'ACCOUNT_EXISTS');
     return createClient({ firstName: identity.firstName ?? '', lastName: identity.lastName ?? '', dni: null }, identity);
   },
 };
