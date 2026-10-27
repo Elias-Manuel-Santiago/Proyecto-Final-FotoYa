@@ -67,7 +67,7 @@ test('Dueño y Secretario navegan ciudades, eventos y puestos; otros roles no ve
   }
 });
 
-test('Secretario opera sin jornada y no ve horarios ni asistencia, incluso con permisos anteriores', () => {
+test('Secretario opera sin jornada y consulta horarios globales sin asistencia propia', () => {
   for (const permissions of [
     undefined,
     ['reports.read', 'employees.read', 'attendance.read', 'attendance.self'],
@@ -79,7 +79,7 @@ test('Secretario opera sin jornada y no ve horarios ni asistencia, incluso con p
     }).map((link) => link.href);
     assert(links.includes('/reports'));
     assert(links.includes('/employees'));
-    assert(!links.includes('/attendance'));
+    assert(links.includes('/attendance'));
     assert(!links.includes('/my-attendance'));
   }
 });

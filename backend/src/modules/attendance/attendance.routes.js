@@ -24,6 +24,7 @@ export function attendanceRoutes() {
   router.post('/kiosk/employees', validate(paged), endpoint(req => kioskService.employees(req.actor, req.input)));
   router.post('/kiosk/mark', sensitive, validate(kiosk.mark), endpoint(req => kioskService.mark(req.actor, req.input)));
   router.post('/kiosk/exit', sensitive, validate(kiosk.exit), endpoint(req => kioskService.exit(req.actor, req.input)));
+  router.post('/employee', permit('attendance.read'), validate(paged.safeExtend({ userId: id })), endpoint(req => attendanceRepository.employeeHistory(req.actor, req.input)));
   router.post('/query', permit('attendance.read'), validate(period.safeExtend({ userId: id.optional() })), endpoint(req => attendanceRepository.query(req.actor, req.input)));
   router.post('/mine', permit('attendance.self'), validate(period), endpoint(req => attendanceRepository.query(req.actor, req.input, true)));
   return router;

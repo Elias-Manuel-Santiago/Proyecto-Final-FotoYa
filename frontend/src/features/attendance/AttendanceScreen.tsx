@@ -41,8 +41,7 @@ export function AttendanceScreen() {
   const [employeeId, setEmployeeId] = useState(initialId ?? '');
   const employees = data.employees.filter(
     (row) =>
-      !['client', 'secretary'].includes(row.roleId) &&
-      hasStationAccess(employee, row.stationId),
+      row.roleId !== 'client' && hasStationAccess(employee, row.stationId),
   );
   const records = error
     ? []

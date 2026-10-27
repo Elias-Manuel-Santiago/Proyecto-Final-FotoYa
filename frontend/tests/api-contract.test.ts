@@ -981,7 +981,7 @@ test('snapshot del encargado descarta catálogos ajenos y fija su puesto aunque 
   }
 });
 
-test('secretario sin jornada carga sus consultas y omite asistencia con permisos anteriores', async () => {
+test('secretario sin jornada consulta asistencia global y no asistencia propia', async () => {
   const { repo, requests } = fixture('secretario', {
     'auth/me': {
       ...actor('secretario', [
@@ -995,8 +995,9 @@ test('secretario sin jornada carga sus consultas y omite asistencia con permisos
   const data = await repo.snapshot();
   assert(requests.some((row) => row.path === 'reports/query'));
   assert(requests.some((row) => row.path === 'users/query'));
-  assert(!requests.some((row) => row.path.startsWith('attendance/')));
-  assert.deepEqual(data.attendance, []);
+  assert(requests.some((row) => row.path === 'attendance/query'));
+  assert(!requests.some((row) => row.path === 'attendance/mine'));
+  assert(data.attendance.length > 0);
 });
 
 test('shared photo visibility and dense sales pages match the backend contracts', async () => {
@@ -1032,4 +1033,46 @@ test('shared photo visibility and dense sales pages match the backend contracts'
       { stationId: '10', limit: 48, offset: 48, hidden: true },
     ],
   );
+});
+
+test('employee history paginates without period limits and normalizes IDs and UTC timestamps', async () => {
+  const { repo, requests } = fixture('secretario', {
+    'attendance/employee': [
+      {
+        id: 8,
+        userId: 7,
+        stationId: 2,
+        date: '2020-01-01',
+        checkIn: '2020-01-01 12:00:00',
+        checkOut: null,
+        closedAt: '2020-01-02 00:00:00',
+      },
+    ],
+  });
+  const records = await repo.employeeAttendance('7');
+  const request = requests.find((row) => row.path === 'attendance/employee')!;
+  assert.deepEqual(request.body, { userId: '7', limit: 100, offset: 0 });
+  assert.equal(records[0].employeeId, '7');
+  assert.equal(records[0].stationId, '2');
+  assert.equal(records[0].checkIn, '2020-01-01T12:00:00Z');
+  assert.equal(records[0].closedAt, '2020-01-02T00:00:00Z');
+});
+
+test('gallery metadata normalizes hidden and sold flags without hiding photos from other roles', async () => {
+  const { repo } = fixture('editor', {
+    'photos/query': [
+      {
+        id: '91',
+        stationId: '1',
+        clientId: null,
+        date: '2026-10-15',
+        hidden: '0',
+        sold: '1',
+      },
+    ],
+  });
+  const data = await repo.snapshot(period);
+  assert.equal(data.photos.length, 1);
+  assert.equal(data.photos[0].hidden, false);
+  assert.equal(data.photos[0].sold, true);
 });

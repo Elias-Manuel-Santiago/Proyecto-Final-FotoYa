@@ -4,14 +4,20 @@
  * anteriores del usuario.
  */
 import { db } from '../../config/database.js';
-import { stationScope } from '../../security/access.js';
+import { ApiError } from '../../shared/errors.js';
+import { assertPermission, stationScope } from '../../security/access.js';
 
 export const attendanceRepository = {
+  employeeHistory(actor, input) {
+    assertPermission(actor, 'attendance.read');
+    if (!['dueno', 'secretario'].includes(actor.role)) throw new ApiError(403, 'Solo el dueño y el secretario pueden consultar el historial completo.');
+    return this.query(actor, input, false, true);
+  },
   // Consulta turnos por período y alcance; la variante self restringe al propio usuario.
-  async query(actor, input, self = false) {
+  async query(actor, input, self = false, allHistory = false) {
     const station = self && actor.role !== 'encargado' ? null : stationScope(actor, input.stationId);
-    const params = [input.from, input.to];
-    const where = ['d.fecha BETWEEN ? AND ?'];
+    const params = allHistory ? [] : [input.from, input.to];
+    const where = allHistory ? ['1 = 1'] : ['d.fecha BETWEEN ? AND ?'];
     if (station) { where.push('d.id_puesto = ?'); params.push(station); }
     if (self || input.userId) { where.push('h.id_usuario = ?'); params.push(self ? actor.id : input.userId); }
     const [rows] = await db.execute(`SELECT h.id_horario AS id, h.id_usuario AS userId, d.id_puesto AS stationId,

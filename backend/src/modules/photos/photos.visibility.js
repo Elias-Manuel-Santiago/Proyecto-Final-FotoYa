@@ -6,7 +6,8 @@ import { requirePhotoOperator } from './photos.authorization.js';
 
 // La visibilidad es compartida por el puesto; no cambia archivos, ventas ni conteos.
 export function setPhotoVisibility(actor, input) {
-  const permission = actor.permissions.includes('photos.assign') ? 'photos.assign' : 'sales.create';
+  if (!['vendedor', 'encargado'].includes(actor.role)) throw new ApiError(403, 'Solo vendedores y encargados pueden ocultar fotos.');
+  const permission = 'sales.create';
   assertPermission(actor, permission);
   if (actor.role === 'cliente') throw new ApiError(403, 'Solo el personal puede ocultar fotos.');
   return transaction(async connection => {
@@ -14,7 +15,8 @@ export function setPhotoVisibility(actor, input) {
       const initial = await photoRepository.find(photoId, connection);
       if (!initial) throw new ApiError(404, 'La foto no existe.');
       stationScope(actor, initial.stationId);
-      await requirePhotoOperator(connection, actor, permission, initial.stationId);
+      const current = await requirePhotoOperator(connection, actor, permission, initial.stationId);
+      if (!['vendedor', 'encargado'].includes(current.role)) throw new ApiError(403, 'Solo vendedores y encargados pueden ocultar fotos.');
       const photo = await photoRepository.find(photoId, connection, true);
       if (!photo) throw new ApiError(404, 'La foto no existe.');
       stationScope(actor, photo.stationId);

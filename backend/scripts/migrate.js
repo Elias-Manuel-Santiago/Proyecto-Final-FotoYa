@@ -108,10 +108,13 @@ export async function migrate(db, env, { init = false } = {}) {
     // Secretario tiene alcance global; la asistencia conserva su puesto histórico.
     await connection.execute(`UPDATE usuarios u JOIN rol r ON r.id_rol = u.id_rol
       SET u.id_puesto = NULL WHERE r.nombre = 'secretario' AND u.id_puesto IS NOT NULL`);
-    // Secretario ya no consulta ni registra asistencia; conserva el historial existente.
+    // Secretario consulta asistencia global, sin registrar jornada propia.
     await connection.execute(`DELETE pr FROM permisos_rol pr JOIN rol r ON r.id_rol = pr.id_rol
       JOIN permisos p ON p.id_permisos = pr.id_permiso
-      WHERE r.nombre = 'secretario' AND p.tipo_de_permiso IN ('attendance.read', 'attendance.self')`);
+      WHERE r.nombre = 'secretario' AND p.tipo_de_permiso = 'attendance.self'`);
+    await connection.execute(`INSERT IGNORE INTO permisos_rol (id_rol, id_permiso)
+      SELECT r.id_rol, p.id_permisos FROM rol r CROSS JOIN permisos p
+      WHERE r.nombre = 'secretario' AND p.tipo_de_permiso = 'attendance.read'`);
     // Check-in pertenece a la sesión del encargado. Una migración nunca libera un kiosco.
     for (const name of ['clients.read', 'clients.manage']) {
       const [inserted] = await connection.execute('INSERT IGNORE INTO permisos (tipo_de_permiso) VALUES (?)', [name]);

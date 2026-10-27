@@ -70,7 +70,6 @@ export function SalePhotoCard({
           <Text style={styles.muted}>{error || 'Cargando vista previa…'}</Text>
         )}
         <Text style={styles.text}>
-          Foto {photo.id}
           {selected ? ' · Seleccionada' : ''}
         </Text>
         {photo.sold && <Text style={styles.muted}>Vendida</Text>}

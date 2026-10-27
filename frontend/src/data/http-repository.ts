@@ -51,6 +51,7 @@ interface UserRow extends Omit<Employee, 'roleId' | 'stationId'> {
   stationId: string | null;
 }
 interface PhotoRow {
+  sold?: boolean | number | string;
   hidden?: boolean | number | string;
   id: string;
   stationId: string;
@@ -449,6 +450,7 @@ export class HttpFotoYaRepository {
         clientId: row.clientId === null ? null : String(row.clientId),
         clientEmail: row.clientEmail,
         hidden: Number(row.hidden) === 1,
+        sold: Number(row.sold) === 1,
         name: `Foto ${row.id}`,
         uri: '',
         employeeId: '',
@@ -489,7 +491,22 @@ export class HttpFotoYaRepository {
     };
   }
 
-  // Envía el alta del puesto para que la pantalla refresque los datos tras confirmarse.
+  // Recupera todas las páginas del historial, incluidos puestos y períodos anteriores.
+  async employeeAttendance(userId: string): Promise<Attendance[]> {
+    const rows = await this.api.all<
+      Omit<Attendance, 'employeeId'> & { userId: string }
+    >('attendance/employee', { userId });
+    return rows.map((row) => ({
+      ...row,
+      id: String(row.id),
+      employeeId: String(row.userId),
+      stationId: String(row.stationId),
+      checkIn: utcInstant(row.checkIn),
+      checkOut: row.checkOut ? utcInstant(row.checkOut) : null,
+      closedAt: row.closedAt ? utcInstant(row.closedAt) : null,
+    }));
+  }
+
   async createStation(input: StationInput) {
     await this.api.post('catalog/stations/create', input);
   }

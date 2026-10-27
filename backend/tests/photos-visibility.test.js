@@ -34,7 +34,7 @@ function setup({ outside = false, allowed = true } = {}) {
 test('hiding and restoring a batch only updates shared visibility', async () => {
   for (const hidden of [true, false]) {
     const state = setup();
-    const result = await setPhotoVisibility(actor('encargado', { permissions: ['photos.assign'] }), { photoIds: ['2', '1'], hidden });
+    const result = await setPhotoVisibility(actor('encargado', { permissions: ['sales.create'] }), { photoIds: ['2', '1'], hidden });
     assert.deepEqual(state.updates, [[hidden, '1'], [hidden, '2']]);
     assert.equal(state.committed(), true);
     assert.equal(result.hidden, hidden);
@@ -52,7 +52,7 @@ test('seller can hide photos but clients cannot', async () => {
 test('out-of-station and revoked permissions roll back without updates', async () => {
   for (const options of [{ outside: true }, { allowed: false }]) {
     const state = setup(options);
-    await assert.rejects(setPhotoVisibility(actor('encargado', { permissions: ['photos.assign'] }), { photoIds: ['1'], hidden: true }), { status: 403 });
+    await assert.rejects(setPhotoVisibility(actor('encargado', { permissions: ['sales.create'] }), { photoIds: ['1'], hidden: true }), { status: 403 });
     assert.equal(state.updates.length, 0);
     assert.equal(state.rolledBack(), true);
     mock.restoreAll();
@@ -71,7 +71,21 @@ test('sales lists exclude hidden photos by default and can list them for restora
   const queries = [];
   mock.method(db, 'execute', async (sql, values) => { queries.push({ sql, values }); return [[]]; });
   for (const hidden of [undefined, true]) await salesService.photos(actor('vendedor', { permissions: ['sales.create'] }), { stationId: '10', limit: 48, offset: 0, hidden });
-  assert.match(queries[0].sql, /f.oculta = 0/);
-  assert.match(queries[1].sql, /f.oculta = 1/);
+  assert.match(queries[0].sql, /f.oculta = 0 AND NOT EXISTS/);
+  assert.match(queries[1].sql, /f.oculta = 1 OR EXISTS/);
   assert.deepEqual(queries[0].values, ['10', '2', '48', '0']);
+});
+
+
+test('only sellers and managers may hide photos even if other roles have sales permissions', () => {
+  for (const role of ['dueno', 'secretario', 'editor', 'camarografo', 'cliente']) assert.throws(() => setPhotoVisibility(actor(role, { permissions: ['sales.create', 'photos.assign'] }), { photoIds: ['1'], hidden: true }), { status: 403 });
+});
+
+test('hidden filtering is not applied to another role with a custom sales permission', async () => {
+  mock.method(eventCache, 'get', () => ({ open: true, date: businessDate(), dayId: '2' }));
+  mock.method(db, 'execute', async sql => {
+    assert(!sql.includes('f.oculta ='));
+    return [[]];
+  });
+  await salesService.photos(actor('dueno', { permissions: ['sales.create'] }), { stationId: '10', limit: 48, offset: 0 });
 });

@@ -1022,7 +1022,7 @@ integration('fallo al enviar correo revierte el registro y permite reintentar', 
   assert.equal((await call('auth/register', input, 'anon')).status, 200);
 });
 
-integration('secretario sin puesto ni asistencia: migración, altas y acceso sin jornada', async () => {
+integration('secretario sin puesto ni jornada propia: consulta horarios globales', async () => {
   await db.execute('UPDATE usuarios SET id_puesto=1 WHERE id_usuario=?', [users.secretario]);
   const [history] = await db.execute('SELECT * FROM horarios WHERE id_usuario=?', [users.secretario]);
   await migrate(db, env);
@@ -1051,8 +1051,8 @@ integration('secretario sin puesto ni asistencia: migración, altas y acceso sin
     const ownHeaders = { Authorization: `Bearer ${session}` };
     assert.equal((await authRepository.actor(session)).working, false);
     assert.equal((await http.post('/api/reports/query', period, { headers: ownHeaders })).status, 200);
-    for (const endpoint of ['query', 'mine'])
-      assert.equal((await http.post(`/api/attendance/${endpoint}`, period, { headers: ownHeaders })).status, 403);
+    assert.equal((await http.post('/api/attendance/query', period, { headers: ownHeaders })).status, 200);
+    assert.equal((await http.post('/api/attendance/mine', period, { headers: ownHeaders })).status, 403);
   }
 });
 

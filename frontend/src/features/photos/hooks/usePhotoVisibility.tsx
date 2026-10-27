@@ -4,6 +4,7 @@ import { Button } from '../../../components/ui/Button';
 import { Feedback } from '../../../components/ui/Feedback';
 import { useTheme } from '../../../components/ui/theme';
 import { useWorkspace } from '../../../providers/AppProvider';
+import { can } from '../../../domain/permissions';
 import { useAction } from '../../../hooks/useAction';
 
 export function usePhotoVisibility(
@@ -11,7 +12,11 @@ export function usePhotoVisibility(
   reload: () => void,
   enabled = true,
 ) {
-  const { repository } = useWorkspace();
+  const { repository, employee } = useWorkspace();
+  enabled =
+    enabled &&
+    ['seller', 'manager'].includes(employee.roleId) &&
+    can(employee, 'sales.create');
   const { styles, colors } = useTheme();
   const action = useAction();
   const [showHidden, setShowHidden] = useState(false);
@@ -70,7 +75,7 @@ export function usePhotoVisibility(
       <Feedback error={action.error} success={action.success} />
     </View>
   );
-  const selectionControl = (id: string, name: string) =>
+  const selectionControl = (id: string, name: string, sold = false) =>
     enabled && (
       <Pressable
         accessibilityRole="checkbox"
@@ -80,7 +85,9 @@ export function usePhotoVisibility(
           disabled: action.busy,
         }}
         disabled={
-          action.busy || (!selected.includes(id) && selected.length >= 100)
+          action.busy ||
+          (showHidden && sold) ||
+          (!selected.includes(id) && selected.length >= 100)
         }
         onPress={() =>
           setSelection({
@@ -103,9 +110,13 @@ export function usePhotoVisibility(
         <Text
           style={[styles.text, selected.includes(id) && { color: '#211c24' }]}
         >
-          {selected.includes(id) ? '☑ Seleccionada' : '☐ Seleccionar'}
+          {showHidden && sold
+            ? 'Vendida · oculta'
+            : selected.includes(id)
+              ? '☑ Seleccionada'
+              : '☐ Seleccionar'}
         </Text>
       </Pressable>
     );
-  return { showHidden, controls, selectionControl, busy: action.busy };
+  return { enabled, showHidden, controls, selectionControl, busy: action.busy };
 }

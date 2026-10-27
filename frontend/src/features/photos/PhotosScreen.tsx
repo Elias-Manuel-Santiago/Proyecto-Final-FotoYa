@@ -49,7 +49,7 @@ export function PhotosScreen() {
   const visibility = usePhotoVisibility(
     JSON.stringify([employee.id, period]),
     reload,
-    can(employee, 'photos.assign') || can(employee, 'sales.create'),
+    true,
   );
   const periodKey = JSON.stringify({
     period,
@@ -67,8 +67,8 @@ export function PhotosScreen() {
             (employee.roleId === 'client' ||
               hasStationAccess(employee, photo.stationId)) &&
             matchesPeriod(photo, period) &&
-            (employee.roleId === 'client' ||
-              !!photo.hidden === visibility.showHidden),
+            (!visibility.enabled ||
+              (!!photo.hidden || !!photo.sold) === visibility.showHidden),
         )
         .sort(
           (a, b) =>
@@ -122,7 +122,7 @@ export function PhotosScreen() {
                   {photo.name}
                 </Text>
                 <Text style={styles.muted}>{displayDate(photo.date)}</Text>
-                {visibility.selectionControl(photo.id, photo.name)}
+                {visibility.selectionControl(photo.id, photo.name, photo.sold)}
                 <PhotoPreview
                   photoId={photo.id}
                   name={photo.name}

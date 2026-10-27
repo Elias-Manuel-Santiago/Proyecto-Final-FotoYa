@@ -65,6 +65,7 @@ export const rolePermissions: Record<RoleId, readonly Permission[]> = {
     'sales.create',
   ],
   secretary: [
+    'attendance.read',
     'counts.read',
     'catalog.read',
     'reports.read',
@@ -96,9 +97,7 @@ const globalRoles: readonly RoleId[] = ['owner', 'secretary'];
 export function can(employee: Employee, permission: Permission) {
   return (
     employee.active &&
-    !(
-      employee.roleId === 'secretary' && permission.startsWith('attendance.')
-    ) &&
+    !(employee.roleId === 'secretary' && permission === 'attendance.self') &&
     canWork(employee) &&
     !employee.kioskMode &&
     (employee.permissions ?? rolePermissions[employee.roleId]).includes(

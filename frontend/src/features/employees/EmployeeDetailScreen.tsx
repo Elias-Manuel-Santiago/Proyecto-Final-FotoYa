@@ -20,6 +20,7 @@ import {
 } from '../../domain/permissions';
 import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
+import { EmployeeAttendance } from '../attendance/components/EmployeeAttendance';
 import { EmployeeForm } from './components/EmployeeForm';
 
 // Resuelve el usuario de la ruta y presenta edición, disponibilidad y acceso a asistencia.
@@ -82,6 +83,11 @@ function EmployeeDetails() {
           >
             Consultar horarios
           </Link>
+        )}
+      {target.roleId !== 'client' &&
+        ['owner', 'secretary'].includes(employee.roleId) &&
+        can(employee, 'attendance.read') && (
+          <EmployeeAttendance key={target.id} target={target} />
         )}
       <Feedback error={action.error} success={action.success} />
       {manageable && (

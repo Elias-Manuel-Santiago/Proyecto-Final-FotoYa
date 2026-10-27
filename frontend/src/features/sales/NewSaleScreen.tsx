@@ -107,7 +107,14 @@ function DailySaleScreen({ today }: { today: string }) {
     error = current?.error ?? '';
   const event = current?.event,
     prices = current?.prices ?? [],
-    photos = (current?.photos ?? []).filter((photo) => photo.date === today);
+    photos = (current?.photos ?? []).filter(
+      (photo) =>
+        photo.date === today &&
+        (selling ||
+          visibility.showHidden ||
+          !visibility.enabled ||
+          !photo.sold),
+    );
   const blocked = loading || !!error || action.busy;
   // Refleja aperturas/cierres desde Check-in sin interrumpir un formulario de venta.
   useEffect(() => {
@@ -180,7 +187,7 @@ function DailySaleScreen({ today }: { today: string }) {
                   No hay fotos en esta página del evento.
                 </Text>
               )}
-              <ResponsiveGrid minWidth={selling ? 340 : 160}>
+              <ResponsiveGrid minWidth={selling ? 340 : 300}>
                 {photos
                   .filter((photo) => !selling || photo.id === selected)
                   .map((photo) => (
@@ -192,6 +199,7 @@ function DailySaleScreen({ today }: { today: string }) {
                           ? visibility.selectionControl(
                               photo.id,
                               `Foto ${photo.id}`,
+                              photo.sold,
                             )
                           : undefined
                       }
@@ -289,7 +297,7 @@ function DailySaleScreen({ today }: { today: string }) {
                     blocked ||
                     selling ||
                     visibility.busy ||
-                    photos.length < pageSize
+                    (current?.photos.length ?? 0) < pageSize
                   }
                   onPress={() => {
                     setPageMode(visibility.showHidden);
