@@ -32,6 +32,31 @@ En `.env.local`, configurar `EXPO_PUBLIC_API_URL` incluyendo `/api`. Para web lo
 
 Iniciar el backend siguiendo `../backend/README.md`: requiere MySQL configurado, esquema migrado y un dueño creado. Para web, `CORS_ORIGINS` del backend debe incluir el origen exacto del frontend, por ejemplo `http://localhost:8081`. Reiniciar Expo al cambiar la URL. El frontend no aplica migraciones ni crea datos de demostración.
 
+### Build Android en Windows
+
+El plugin local `plugins/with-android-cmake.js` configura `android.cmakeVersion=3.31.6` y `expo.android.cmakeObjectPathMax=1024` para todos los módulos nativos. CMake 3.22.1 incluye Ninja 1.10.2, que falla con rutas largas (`ninja: error: mkdir(...): No such file or directory`). Reducir el límite a 240 no alcanza para los nombres de archivos objeto de Worklets. Se necesita el Ninja reciente incluido en CMake 3.31.6 y soporte de rutas largas de Windows.
+
+Una sola vez:
+
+1. En Android Studio → SDK Manager → SDK Tools, activar **Show Package Details** e instalar **CMake 3.31.6**.
+2. Habilitar rutas largas desde PowerShell como administrador y reiniciar Windows:
+
+```powershell
+New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name LongPathsEnabled -Value 1 -PropertyType DWord -Force
+```
+
+Referencias: [Expo: toolchain y rutas largas en Windows](https://github.com/expo/expo/issues/36274), [Microsoft: habilitar rutas largas](https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation).
+
+Desde `frontend`, aplicar el plugin al proyecto nativo existente y generar el APK. No es necesario `--clean`: cambiar la versión de CMake y los argumentos invalida la configuración nativa anterior.
+
+```powershell
+npx expo prebuild --platform android --no-install
+Set-Location android
+.\gradlew.bat assembleRelease
+```
+
+El APK se genera en `android/app/build/outputs/apk/release/app-release.apk`. La configuración actual usa la firma de depuración también para release; configurar una firma propia antes de distribuir en producción.
+
 ## Comportamiento integrado
 
 - Login con email/contraseña, perfil y permisos efectivos de `/auth/me`. La sesión se conserva al recargar o reiniciar para los siete roles, incluido el login social y la confirmación de registro. En web se guarda únicamente el token en localStorage; en Android/iOS se usa expo-secure-store (Keychain/Keystore). Al abrir, se valida con /auth/me y se recuperan permisos, jornada y modo check-in antes de habilitar la navegación. Un fallo temporal permite reintentar sin borrar la sesión. No se guardan contraseñas, perfiles ni fotos. Cerrar sesión revoca la sesión del servidor. Una respuesta `UNAUTHENTICATED` elimina el token guardado y el estado local. El cierre de sesión también borra el token local si no hay conexión. La persistencia respeta el vencimiento del servidor (`SESSION_HOURS`, 8 horas por defecto); no prolonga ni renueva sesiones. Se pueden consultar/revocar sesiones propias y cambiar la contraseña (revoca todas las sesiones).

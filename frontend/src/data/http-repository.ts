@@ -242,6 +242,22 @@ export class HttpFotoYaRepository {
     return actor;
   }
 
+  // La sesión identifica la cuenta; no se envían IDs ni campos de administración.
+  async updateProfile(input: Pick<Employee, 'firstName' | 'lastName'>) {
+    const revision = ++this.profileRevision;
+    const actor = user(
+      await this.api.post<UserRow>('auth/me/update', {
+        firstName: input.firstName.trim(),
+        lastName: input.lastName.trim(),
+      }),
+    );
+    if (revision === this.profileRevision) {
+      this.profileRevision += 1;
+      this.onProfile?.(actor);
+    }
+    return actor;
+  }
+
   async enterCheckIn(password?: string) {
     if (password !== undefined)
       await this.api.post('attendance/kiosk/recover', { password });

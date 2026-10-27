@@ -192,6 +192,7 @@ function fixture(
     const schemas: Record<string, { parse: (value: unknown) => unknown }> = {
       'auth/login': loginSchema,
       'auth/me': empty,
+      'auth/me/update': userSchemas.profileUpdate,
       'auth/logout': empty,
       'users/query': userSchemas.query,
       'users/create': userSchemas.create,
@@ -221,6 +222,75 @@ function fixture(
   const repo = new HttpFotoYaRepository(api);
   return { api, repo, requests };
 }
+
+test('cambia el nombre propio sin enviar identificadores y publica el perfil actualizado', async () => {
+  const updated = {
+    ...actor('cliente'),
+    firstName: 'María José',
+    lastName: 'Pérez',
+  };
+  const { repo, requests } = fixture('cliente', { 'auth/me/update': updated });
+  await repo.login('persona@example.com', 'contraseña');
+  let published;
+  repo.setOnProfile((profile) => {
+    published = profile;
+  });
+  const result = await repo.updateProfile({
+    firstName: '  María José ',
+    lastName: ' Pérez  ',
+  });
+  assert.equal(result.firstName, 'María José');
+  assert.equal(result.roleId, 'client');
+  assert.deepEqual(published, result);
+  const request = requests.find((row) => row.path === 'auth/me/update')!;
+  assert.deepEqual(request.body, {
+    firstName: 'María José',
+    lastName: 'Pérez',
+  });
+  assert.equal(
+    request.headers.get('Authorization'),
+    `Bearer ${'t'.repeat(43)}`,
+  );
+  assert(!requests.some((row) => row.path === 'auth/logout'));
+});
+
+test('un perfil anterior en vuelo no reemplaza el nombre recién guardado', async () => {
+  let finish!: (response: Response) => void;
+  const previous = actor('cliente');
+  const updated = { ...previous, firstName: 'Nombre nuevo' };
+  const api = testApi('http://localhost:3000/api', async (input) => {
+    if (String(input).endsWith('/auth/me'))
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    return Response.json({ data: updated });
+  });
+  const repo = new HttpFotoYaRepository(api);
+  const published: string[] = [];
+  repo.setOnProfile((profile) => published.push(profile.firstName));
+  const pending = repo.profile();
+  await repo.updateProfile(updated);
+  finish(Response.json({ data: previous }));
+  await pending;
+  assert.deepEqual(published, ['Nombre nuevo']);
+});
+
+test('una edición tardía no vuelve a publicar el perfil después de cerrar sesión', async () => {
+  let finish!: (response: Response) => void;
+  const api = testApi(
+    'http://localhost:3000/api',
+    async () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const repo = new HttpFotoYaRepository(api);
+  repo.setOnProfile(() => assert.fail('La sesión ya se cerró'));
+  const pending = repo.updateProfile({ firstName: 'Ana', lastName: 'Pérez' });
+  await repo.clearSession();
+  finish(Response.json({ data: { ...actor('cliente'), firstName: 'Ana' } }));
+  await pending;
+});
 
 test('la matriz de fallback coincide con los siete roles del backend', () => {
   for (const [role, spanish] of Object.entries(spanishRoles)) {

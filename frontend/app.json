@@ -26,6 +26,7 @@
       "favicon": "./assets/images/main-icon.jpg"
     },
     "plugins": [
+      "./plugins/with-android-cmake",
       "expo-router",
       "expo-secure-store",
       [

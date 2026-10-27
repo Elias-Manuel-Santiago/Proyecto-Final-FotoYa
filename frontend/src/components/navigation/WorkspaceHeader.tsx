@@ -230,7 +230,13 @@ export function WorkspaceHeader({ children }: { children: ReactNode }) {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator
-            contentContainerStyle={{ padding: 12, gap: 12 }}
+            contentContainerStyle={[
+              { padding: 12, gap: 12 },
+              navigation.length < 4 && {
+                flexGrow: 1,
+                justifyContent: 'center',
+              },
+            ]}
           >
             {navigation.map((item) => (
               <NavigationLink

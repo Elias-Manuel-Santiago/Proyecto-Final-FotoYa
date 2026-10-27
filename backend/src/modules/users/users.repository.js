@@ -9,6 +9,11 @@ import { globalScope, stationScope } from '../../security/access.js';
 const columns = `u.id_usuario AS id, u.nombre, u.apellido, u.email, u.dni, u.auth0_sub, u.id_rol AS roleId,
 r.nombre AS role, u.id_puesto AS stationId, u.disponible AS active, u.created_at, u.updated_at`;
 export const userRepository = {
+  // Cambia exclusivamente el nombre de la cuenta autenticada.
+  async updateName(userId, input) {
+    await db.execute('UPDATE usuarios SET nombre = ?, apellido = ? WHERE id_usuario = ?',
+      [input.firstName, input.lastName, userId]);
+  },
   // Busca usuario con rol y puesto usando el pool o la conexión recibida.
   async find(userId, executor = db) {
     const [[row]] = await executor.execute(`SELECT ${columns},

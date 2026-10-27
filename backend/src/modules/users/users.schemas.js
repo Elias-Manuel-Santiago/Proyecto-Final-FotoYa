@@ -16,6 +16,8 @@ const fields = {
 // Solo el alta recibe contraseña; editar datos o disponibilidad usa contratos separados.
 export const create = z.object({ ...fields, password }).strict();
 export const update = z.object({ userId: id, ...fields }).strict();
+// La cuenta propia solo permite cambiar nombre y apellido; la sesión determina el usuario.
+export const profileUpdate = z.object({ firstName: fields.firstName, lastName: fields.lastName }).strict();
 export const active = z.object({ userId: id, active: z.boolean() }).strict();
 export const detail = z.object({ userId: id }).strict();
 export const auth0Query = z.object({}).strict();

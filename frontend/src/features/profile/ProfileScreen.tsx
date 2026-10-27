@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { Switch, Text, View } from 'react-native';
 import { Button } from '../../components/ui/Button';
+import { Field } from '../../components/ui/Field';
 import { PasswordField } from '../../components/ui/PasswordField';
 import { Icon } from '../../components/ui/Icon';
 import { Feedback } from '../../components/ui/Feedback';
@@ -21,6 +22,9 @@ export function ProfileScreen() {
   const { styles, colors, mode, toggle } = useTheme();
   const { data, employee, logout, repository, refresh } = useWorkspace();
   const action = useAction();
+  const [editingName, setEditingName] = useState(false);
+  const [firstName, setFirstName] = useState(employee.firstName);
+  const [lastName, setLastName] = useState(employee.lastName);
   const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   return (
@@ -41,7 +45,6 @@ export function ProfileScreen() {
       )}
       <View style={styles.card}>
         <Text style={styles.heading}>{fullName(employee)}</Text>
-        <Text style={styles.text}>ID de usuario: {employee.id}</Text>
         <Text style={styles.text}>{roleLabels[employee.roleId]}</Text>
         <Text style={styles.text}>Email: {employee.email}</Text>
         <Text style={styles.text}>DNI: {employee.dni}</Text>
@@ -55,7 +58,66 @@ export function ProfileScreen() {
                 : 'Sin puesto asignado')}
           </Text>
         )}
+        {editingName ? (
+          <>
+            <Field
+              label="Nombre"
+              value={firstName}
+              onChangeText={setFirstName}
+              autoCapitalize="words"
+              maxLength={100}
+              editable={!action.busy}
+            />
+            <Field
+              label="Apellido"
+              value={lastName}
+              onChangeText={setLastName}
+              autoCapitalize="words"
+              maxLength={100}
+              editable={!action.busy}
+            />
+            <Button
+              title="Guardar nombre"
+              busy={action.busy}
+              disabled={
+                !firstName.trim() ||
+                !lastName.trim() ||
+                (firstName.trim() === employee.firstName &&
+                  lastName.trim() === employee.lastName)
+              }
+              onPress={() => {
+                void action.run(async () => {
+                  await repository.updateProfile({ firstName, lastName });
+                  setEditingName(false);
+                  await refresh();
+                }, 'Nombre actualizado.');
+              }}
+            />
+            <Button
+              title="Cancelar"
+              secondary
+              disabled={action.busy}
+              onPress={() => {
+                setEditingName(false);
+                action.clear();
+              }}
+            />
+          </>
+        ) : (
+          <Button
+            title="Cambiar nombre"
+            secondary
+            disabled={action.busy}
+            onPress={() => {
+              setFirstName(employee.firstName);
+              setLastName(employee.lastName);
+              setEditingName(true);
+              action.clear();
+            }}
+          />
+        )}
       </View>
+      <Feedback error={action.error} success={action.success} />
       <View
         style={[
           styles.card,
@@ -81,7 +143,6 @@ export function ProfileScreen() {
           trackColor={{ false: colors.border, true: colors.primary }}
         />
       </View>
-      <Feedback error={action.error} success={action.success} />
       <View style={styles.card}>
         <Text style={styles.heading}>Cambiar contraseña</Text>
         <PasswordField

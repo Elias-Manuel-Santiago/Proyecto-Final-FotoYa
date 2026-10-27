@@ -128,6 +128,7 @@ Las rutas de health, login, registro local/social, verificación de correo y rec
 | `/api/health` | `{}`; confirma que el proceso atiende solicitudes, sin sondear servicios externos |
 | `/api/auth/login` | `email`, `password`; entrega token de sesión una sola vez |
 | `/api/auth/me` | `{}`; perfil y permisos efectivos |
+| `/api/auth/me/update` | `firstName`, `lastName` (1 a 100 caracteres, sin espacios en los extremos); cambia únicamente el nombre de la cuenta autenticada, sin cerrar sesiones. Disponible fuera de jornada, bloqueado en modo Check-in. No acepta IDs ni campos de administración. |
 | `/api/auth/logout` | `{}`; revoca la sesión actual |
 | `/api/auth/sessions/query` | Paginación; lista sesiones propias sin tokens |
 | `/api/auth/sessions/revoke` | `sessionId`; revoca una sesión propia |

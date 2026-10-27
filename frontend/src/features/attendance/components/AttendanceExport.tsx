@@ -192,7 +192,7 @@ export function AttendanceExport({
             onPress={() => {
               void action.run(async () => {
                 await downloadCsv(
-                  `horarios-${employee.id}-${options.from.slice(0, 10)}-${options.to.slice(0, 10)}.csv`,
+                  `horarios-${options.from.slice(0, 10)}-${options.to.slice(0, 10)}.csv`,
                   attendanceCsv(employee, data, records, options),
                 );
               }, 'CSV preparado.');

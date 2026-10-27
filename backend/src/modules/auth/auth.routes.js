@@ -6,6 +6,7 @@
 import { authService } from './auth.service.js';
 import { authRepository } from './auth.repository.js';
 import { userService } from '../users/users.service.js';
+import { profileUpdate } from '../users/users.schemas.js';
 import { authenticate } from '../../security/authenticate.js';
 import { workAccess } from '../../security/work-access.js';
 import { Router } from 'express';
@@ -30,6 +31,7 @@ export function authRoutes() {
   router.post('/password/reset/confirm', sensitive, validate(schema.passwordResetConfirm), endpoint(req => passwordResetService.confirm(req.input)));
   router.use(authenticate, workAccess);
   router.post('/me', validate(schema.empty), endpoint(req => userService.profile(req.actor)));
+  router.post('/me/update', validate(profileUpdate), endpoint(req => userService.updateProfile(req.actor, req.input)));
   router.post('/logout', validate(schema.empty), endpoint(req => authRepository.revoke(req.actor, req.actor.sessionId)));
   router.post('/sessions/query', validate(paged), endpoint(req => authRepository.sessions(req.actor, req.input)));
   router.post('/sessions/revoke', validate(schema.session), endpoint(req => authRepository.revoke(req.actor, req.input.sessionId)));

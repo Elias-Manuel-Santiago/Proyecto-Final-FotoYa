@@ -65,6 +65,11 @@ export const userService = {
   // Combina datos personales con permisos, jornada y kiosco de la sesión actual.
   async profile(actor) { return { ...publicUser(await userRepository.find(actor.id)), permissions: actor.permissions,
     working: actor.working, kioskMode: actor.kioskMode, checkInActive: actor.checkInActive }; },
+  // Conserva permisos, asignación y sesiones al editar únicamente el nombre propio.
+  async updateProfile(actor, input) {
+    await userRepository.updateName(actor.id, input);
+    return userService.profile(actor);
+  },
   // Normaliza el filtro de correo y convierte las filas visibles al contrato público.
   async query(actor, input) {
     const rows = await userRepository.query(actor, { ...input,
