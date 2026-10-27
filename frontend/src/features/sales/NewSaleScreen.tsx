@@ -3,6 +3,7 @@
  * Coordina evento del día, tarifas y páginas de doce fotos. Reinicia al cambiar día/puesto y
  * bloquea refresco durante confirmación.
  */
+import { usePhotoVisibility } from '../photos/hooks/usePhotoVisibility';
 import { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Screen } from '../../components/ui/Screen';
@@ -42,7 +43,7 @@ function DailySaleScreen({ today }: { today: string }) {
   const [selected, setSelected] = useState(photoId ?? '');
   const [selling, setSelling] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const key = JSON.stringify([stationId, offset, revision, today, photoId]);
+
   const [result, setResult] = useState<{
     key: string;
     event?: { open: boolean; date: string | null };
@@ -56,12 +57,33 @@ function DailySaleScreen({ today }: { today: string }) {
     setSelling(false);
     setRevision((value) => value + 1);
   }, []);
+  const visibility = usePhotoVisibility(
+    JSON.stringify([employee.id, stationId, today]),
+    reload,
+  );
+  const pageSize = 48;
+  const [pageMode, setPageMode] = useState(false);
+  const pageOffset = pageMode === visibility.showHidden ? offset : 0;
+  const key = JSON.stringify([
+    stationId,
+    pageOffset,
+    revision,
+    today,
+    photoId,
+    visibility.showHidden,
+  ]);
   useEffect(() => {
     let active = true;
     void Promise.all([
       repository.saleEvent(stationId),
       repository.salePrices(stationId),
-      repository.salePhotos(stationId, offset, photoId),
+      repository.salePhotos(
+        stationId,
+        pageOffset,
+        photoId,
+        pageSize,
+        visibility.showHidden,
+      ),
     ])
       .then(([event, prices, photos]) => {
         if (active) setResult({ key, event, prices, photos });
@@ -78,7 +100,7 @@ function DailySaleScreen({ today }: { today: string }) {
     return () => {
       active = false;
     };
-  }, [repository, stationId, offset, key, photoId]);
+  }, [repository, stationId, pageOffset, key, photoId, visibility.showHidden]);
   // Solo se muestran resultados correspondientes al puesto, día y página actuales.
   const current = result?.key === key ? result : undefined;
   const loading = !current,
@@ -116,7 +138,7 @@ function DailySaleScreen({ today }: { today: string }) {
   }, [repository, stationId, event, selling, reload]);
   return (
     <Screen
-      compact
+      fullWidth
       title="Venta en evento"
       refreshing={loading}
       onRefresh={reload}
@@ -152,97 +174,127 @@ function DailySaleScreen({ today }: { today: string }) {
           )}
           {event?.open && (
             <>
+              {!selling && visibility.controls}
               {!photos.length && (
                 <Text style={styles.text}>
                   No hay fotos en esta página del evento.
                 </Text>
               )}
-              ResponsivePat
-              {photos.map((photo) => (
-                <SalePhotoCard
-                  key={photo.id}
-                  photo={photo}
-                  selected={selected === photo.id}
-                  onSelect={() => {
-                    if (!selling) {
-                      setSelected(photo.id);
-                      action.clear();
-                    }
-                  }}
-                >
-                  {!selling && (
-                    <PhotoAssignment
+              <ResponsiveGrid minWidth={selling ? 340 : 160}>
+                {photos
+                  .filter((photo) => !selling || photo.id === selected)
+                  .map((photo) => (
+                    <SalePhotoCard
+                      key={photo.id}
                       photo={photo}
-                      sale
-                      onSaved={(assignment) =>
-                        setResult((current) =>
-                          current
-                            ? {
-                                ...current,
-                                photos: current.photos.map((row) =>
-                                  row.id === photo.id
-                                    ? { ...row, ...assignment }
-                                    : row,
-                                ),
-                              }
-                            : current,
-                        )
+                      selectionControl={
+                        !selling
+                          ? visibility.selectionControl(
+                              photo.id,
+                              `Foto ${photo.id}`,
+                            )
+                          : undefined
                       }
-                    />
-                  )}
-                  {!selling ? (
-                    <Button
-                      title="Vender"
-                      disabled={blocked || !prices.length}
-                      onPress={() => setSelling(true)}
-                    />
-                  ) : (
-                    <View style={{ gap: 12 }}>
-                      <SaleForm
-                        photoId={photo.id}
-                        stationId={stationId}
-                        prices={prices}
-                        onBusy={setSubmitting}
-                        onSaved={() =>
-                          setResult((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  photos: current.photos.map((row) =>
-                                    row.id === photo.id
-                                      ? { ...row, sold: true }
-                                      : row,
-                                  ),
-                                }
-                              : current,
-                          )
+                      selected={selected === photo.id}
+                      onSelect={() => {
+                        if (!selling) {
+                          setSelected(photo.id);
+                          action.clear();
                         }
-                      />
-                      <Button
-                        title="Volver a las fotos"
-                        secondary
-                        disabled={submitting}
-                        onPress={() => {
-                          setSelling(false);
-                          setSelected('');
-                        }}
-                      />
-                    </View>
-                  )}
-                </SalePhotoCard>
-              ))}
+                      }}
+                    >
+                      {!selling && !visibility.showHidden && (
+                        <PhotoAssignment
+                          photo={photo}
+                          sale
+                          onSaved={(assignment) =>
+                            setResult((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    photos: current.photos.map((row) =>
+                                      row.id === photo.id
+                                        ? { ...row, ...assignment }
+                                        : row,
+                                    ),
+                                  }
+                                : current,
+                            )
+                          }
+                        />
+                      )}
+                      {!selling ? (
+                        <Button
+                          title="Vender"
+                          disabled={
+                            blocked ||
+                            !prices.length ||
+                            visibility.showHidden ||
+                            visibility.busy
+                          }
+                          onPress={() => setSelling(true)}
+                        />
+                      ) : (
+                        <View style={{ gap: 12 }}>
+                          <SaleForm
+                            photoId={photo.id}
+                            stationId={stationId}
+                            prices={prices}
+                            onBusy={setSubmitting}
+                            onSaved={() =>
+                              setResult((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      photos: current.photos.map((row) =>
+                                        row.id === photo.id
+                                          ? { ...row, sold: true }
+                                          : row,
+                                      ),
+                                    }
+                                  : current,
+                              )
+                            }
+                          />
+                          <Button
+                            title="Volver a las fotos"
+                            secondary
+                            disabled={submitting}
+                            onPress={() => {
+                              setSelling(false);
+                              setSelected('');
+                            }}
+                          />
+                        </View>
+                      )}
+                    </SalePhotoCard>
+                  ))}
+              </ResponsiveGrid>
               <View style={styles.row}>
                 <Button
                   title="Anterior"
                   secondary
-                  disabled={blocked || selling || offset === 0}
-                  onPress={() => setOffset((value) => Math.max(0, value - 12))}
+                  disabled={
+                    blocked || selling || visibility.busy || pageOffset === 0
+                  }
+                  onPress={() => {
+                    setPageMode(visibility.showHidden);
+                    setOffset(Math.max(0, pageOffset - pageSize));
+                  }}
                 />
                 <Button
                   title="Siguiente"
                   secondary
-                  disabled={blocked || selling || photos.length < 12}
-                  onPress={() => setOffset((value) => value + 12)}
+                  disabled={
+                    blocked ||
+                    selling ||
+                    visibility.busy ||
+                    photos.length < pageSize
+                  }
+                  onPress={() => {
+                    setPageMode(visibility.showHidden);
+                    setOffset(pageOffset + pageSize);
+                  }}
                 />
               </View>
             </>

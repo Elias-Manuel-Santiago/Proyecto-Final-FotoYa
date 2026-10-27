@@ -998,3 +998,38 @@ test('secretario sin jornada carga sus consultas y omite asistencia con permisos
   assert(!requests.some((row) => row.path.startsWith('attendance/')));
   assert.deepEqual(data.attendance, []);
 });
+
+test('shared photo visibility and dense sales pages match the backend contracts', async () => {
+  const requests: { path: string; body: Record<string, unknown> }[] = [];
+  const api = testApi('http://localhost:3000/api', async (url, init) => {
+    const body = JSON.parse(String(init?.body));
+    const path = String(url);
+    requests.push({ path, body });
+    if (path.endsWith('/photos/visibility'))
+      photoSchemas.visibility.parse(body);
+    else {
+      const { salePhotosInput } = await import(
+        backend + 'modules/sales/sales.schemas.js'
+      );
+      salePhotosInput.parse(body);
+    }
+    return new Response(
+      JSON.stringify({
+        data: path.endsWith('/sales/photos') ? [] : { hidden: body.hidden },
+      }),
+      { status: 200 },
+    );
+  });
+  const repo = new HttpFotoYaRepository(api);
+  await repo.setPhotoVisibility(['1', '2'], true);
+  await repo.setPhotoVisibility(['1'], false);
+  await repo.salePhotos('10', 48, undefined, 48, true);
+  assert.deepEqual(
+    requests.map((row) => row.body),
+    [
+      { photoIds: ['1', '2'], hidden: true },
+      { photoIds: ['1'], hidden: false },
+      { stationId: '10', limit: 48, offset: 48, hidden: true },
+    ],
+  );
+});

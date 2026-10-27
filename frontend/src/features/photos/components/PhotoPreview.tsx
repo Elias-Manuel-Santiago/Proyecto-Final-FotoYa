@@ -19,6 +19,7 @@ export function PhotoPreview({
   name,
   children,
   showOpenButton = true,
+  thumbnailHeight = 220,
 }: {
   uri?: string;
   photoId?: string;
@@ -26,6 +27,7 @@ export function PhotoPreview({
   name: string;
   children?: ReactNode | ((close: () => void) => ReactNode);
   showOpenButton?: boolean;
+  thumbnailHeight?: number;
 }) {
   const { styles } = useTheme();
   const { repository } = useWorkspace();
@@ -92,7 +94,7 @@ export function PhotoPreview({
             source={{ uri }}
             accessibilityLabel={name}
             resizeMode="contain"
-            style={{ width: '100%', height: 220 }}
+            style={{ width: '100%', height: thumbnailHeight }}
             onError={() => setFailed(true)}
           />
         ) : (

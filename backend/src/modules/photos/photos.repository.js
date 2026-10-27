@@ -6,7 +6,7 @@
 import { db } from '../../config/database.js';
 const columns = `f.id_fotos AS id, f.id_cliente AS clientId,
   COALESCE(f.email_cliente, (SELECT email FROM usuarios WHERE id_usuario = f.id_cliente)) AS clientEmail,
-  f.id_puesto AS stationId, d.fecha AS date`;
+  f.id_puesto AS stationId, d.fecha AS date, f.oculta AS hidden`;
 export const photoRepository = {
   // Pagina metadatos por período, puesto y destinatario según el actor.
   async query(actor, input, station) {

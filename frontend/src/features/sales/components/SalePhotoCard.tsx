@@ -17,11 +17,13 @@ export function SalePhotoCard({
   selected,
   onSelect,
   children,
+  selectionControl,
 }: {
   photo: SalePhoto;
   selected: boolean;
   onSelect: () => void;
   children?: ReactNode;
+  selectionControl?: ReactNode;
 }) {
   const { styles } = useTheme();
   const { repository } = useWorkspace();
@@ -46,7 +48,8 @@ export function SalePhotoCard({
     };
   }, [repository, photo.id, retry]);
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { padding: 8, gap: 6 }]}>
+      {selectionControl}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Seleccionar foto ${photo.id}`}
@@ -58,7 +61,7 @@ export function SalePhotoCard({
             source={{ uri: url }}
             accessibilityLabel={`Foto ${photo.id}`}
             resizeMode="contain"
-            style={{ width: '100%', height: 220 }}
+            style={{ width: '100%', height: selected ? 220 : 130 }}
             onError={() =>
               setError('La vista previa venció o no se pudo cargar.')
             }
@@ -66,7 +69,7 @@ export function SalePhotoCard({
         ) : (
           <Text style={styles.muted}>{error || 'Cargando vista previa…'}</Text>
         )}
-        <Text style={styles.heading}>
+        <Text style={styles.text}>
           Foto {photo.id}
           {selected ? ' · Seleccionada' : ''}
         </Text>

@@ -51,6 +51,7 @@ interface UserRow extends Omit<Employee, 'roleId' | 'stationId'> {
   stationId: string | null;
 }
 interface PhotoRow {
+  hidden?: boolean | number | string;
   id: string;
   stationId: string;
   date: string;
@@ -447,6 +448,7 @@ export class HttpFotoYaRepository {
         stationId: String(row.stationId),
         clientId: row.clientId === null ? null : String(row.clientId),
         clientEmail: row.clientEmail,
+        hidden: Number(row.hidden) === 1,
         name: `Foto ${row.id}`,
         uri: '',
         employeeId: '',
@@ -598,12 +600,19 @@ export class HttpFotoYaRepository {
       { stationId },
     );
   }
-  // Recupera una página de doce fotos vendibles con filtro opcional por foto.
-  async salePhotos(stationId: string, offset = 0, photoId?: string) {
+  // Recupera una página de fotos del evento con filtros de foto y visibilidad.
+  async salePhotos(
+    stationId: string,
+    offset = 0,
+    photoId?: string,
+    limit = 12,
+    hidden?: boolean,
+  ) {
     const rows = await this.api.post<SalePhotoRow[]>('sales/photos', {
       stationId,
-      limit: 12,
+      limit,
       offset,
+      ...(hidden === undefined ? {} : { hidden }),
       ...(photoId ? { photoId } : {}),
     });
     return rows.map((row) => ({
@@ -612,6 +621,10 @@ export class HttpFotoYaRepository {
       sold: Number(row.sold) === 1,
     }));
   }
+  setPhotoVisibility(photoIds: string[], hidden: boolean) {
+    return this.api.post('photos/visibility', { photoIds, hidden });
+  }
+
   // Solicita una URL temporal por la ruta autorizada para el evento activo.
   accessSalePhoto(photoId: string) {
     return this.api.post<{ url: string; expiresIn: number }>(

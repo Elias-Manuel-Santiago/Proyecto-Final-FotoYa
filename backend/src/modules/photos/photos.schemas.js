@@ -14,3 +14,5 @@ export const assign = z.object({ photoId: id, clientEmail: z.string().trim().toL
 // Multipart entrega texto: se convierte el cliente ausente en null.
 export const upload = z.object({ stationId: id,
   clientId: z.preprocess(v => v === '' || v === undefined ? null : v, id.nullable()) }).strict();
+
+export const visibility = z.object({ photoIds: z.array(id).min(1).max(100).refine(ids => new Set(ids).size === ids.length), hidden: z.boolean() }).strict();

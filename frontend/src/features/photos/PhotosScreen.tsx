@@ -1,3 +1,4 @@
+import { usePhotoVisibility } from './hooks/usePhotoVisibility';
 import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
 import { SortControl } from '../../components/filters/SortControl';
 /**
@@ -45,7 +46,17 @@ export function PhotosScreen() {
     refreshError,
     error: queryError,
   } = usePeriodData(period);
-  const periodKey = JSON.stringify({ period, ascending });
+  const visibility = usePhotoVisibility(
+    JSON.stringify([employee.id, period]),
+    reload,
+    can(employee, 'photos.assign') || can(employee, 'sales.create'),
+  );
+  const periodKey = JSON.stringify({
+    period,
+    ascending,
+    hidden: visibility.showHidden,
+  });
+  const pageSize = 48;
   const [page, setPage] = useState({ key: periodKey, offset: 0 });
   const error = periodError || queryError;
   const photos = error
@@ -55,7 +66,9 @@ export function PhotosScreen() {
           (photo) =>
             (employee.roleId === 'client' ||
               hasStationAccess(employee, photo.stationId)) &&
-            matchesPeriod(photo, period),
+            matchesPeriod(photo, period) &&
+            (employee.roleId === 'client' ||
+              !!photo.hidden === visibility.showHidden),
         )
         .sort(
           (a, b) =>
@@ -65,11 +78,11 @@ export function PhotosScreen() {
     page.key === periodKey
       ? Math.min(
           page.offset,
-          Math.max(0, Math.ceil(photos.length / 12) - 1) * 12,
+          Math.max(0, Math.ceil(photos.length / pageSize) - 1) * pageSize,
         )
       : 0;
   return (
-    <Screen title="Fotos" refreshing={refreshing} onRefresh={reload}>
+    <Screen fullWidth title="Fotos" refreshing={refreshing} onRefresh={reload}>
       {can(employee, 'photos.upload') && <UploadQueue />}
       <PeriodFilters
         period={period}
@@ -94,18 +107,33 @@ export function PhotosScreen() {
               showMoney={false}
             />
           )}
-          <Text style={styles.heading}>Fotos cargadas</Text>
+          <Text style={styles.heading}>
+            {visibility.showHidden ? 'Fotos ocultas' : 'Fotos cargadas'}
+          </Text>
+          {visibility.controls}
           {!photos.length && <EmptyState />}
-          <ResponsiveGrid>
-            {photos.slice(offset, offset + 12).map((photo) => (
-              <View key={photo.id} style={styles.card}>
-                <Text style={styles.text}>{photo.name}</Text>
+          <ResponsiveGrid minWidth={160}>
+            {photos.slice(offset, offset + pageSize).map((photo) => (
+              <View
+                key={photo.id}
+                style={[styles.card, { padding: 8, gap: 6 }]}
+              >
+                <Text style={styles.text} numberOfLines={1}>
+                  {photo.name}
+                </Text>
                 <Text style={styles.muted}>{displayDate(photo.date)}</Text>
-                <PhotoPreview photoId={photo.id} name={photo.name}>
+                {visibility.selectionControl(photo.id, photo.name)}
+                <PhotoPreview
+                  photoId={photo.id}
+                  name={photo.name}
+                  showOpenButton={false}
+                  thumbnailHeight={130}
+                >
                   {(close) => (
                     <>
                       <PhotoAssignment photo={photo} />
-                      {can(employee, 'sales.create') &&
+                      {!photo.hidden &&
+                        can(employee, 'sales.create') &&
                         photo.stationId === employee.stationId &&
                         photo.date === today && (
                           <Link
@@ -125,23 +153,27 @@ export function PhotosScreen() {
               </View>
             ))}
           </ResponsiveGrid>
-          {photos.length > 12 && (
+          {photos.length > pageSize && (
             <View style={styles.row}>
               <Button
                 title="Anterior"
                 secondary
                 disabled={offset === 0}
-                onPress={() => setPage({ key: periodKey, offset: offset - 12 })}
+                onPress={() =>
+                  setPage({ key: periodKey, offset: offset - pageSize })
+                }
               />
               <Text style={styles.muted}>
-                {offset + 1}–{Math.min(offset + 12, photos.length)} de{' '}
+                {offset + 1}–{Math.min(offset + pageSize, photos.length)} de{' '}
                 {photos.length}
               </Text>
               <Button
                 title="Siguiente"
                 secondary
-                disabled={offset + 12 >= photos.length}
-                onPress={() => setPage({ key: periodKey, offset: offset + 12 })}
+                disabled={offset + pageSize >= photos.length}
+                onPress={() =>
+                  setPage({ key: periodKey, offset: offset + pageSize })
+                }
               />
             </View>
           )}

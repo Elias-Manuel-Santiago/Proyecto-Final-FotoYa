@@ -3,6 +3,7 @@
  * Conecta consulta, detalle, acceso privado, asignación y carga. La carga recibe un archivo
  * multipart y limita solicitudes adicionales.
  */
+import { setPhotoVisibility } from './photos.visibility.js';
 import { photoService } from './photos.service.js';
 import { photoAssignments } from './photos.assignment.js';
 import { photoUploads } from './photos.upload.js';
@@ -16,6 +17,7 @@ import * as schema from './photos.schemas.js';
 // Encadena permiso, validación y servicio para consultar, subir, asignar y previsualizar fotos.
 export function photoRoutes() {
   const router = Router(), detail = validate(schema.detail);
+  router.post('/visibility', validate(schema.visibility), endpoint(req => setPhotoVisibility(req.actor, req.input)));
   router.post('/query', permit('photos.read'), validate(schema.query), endpoint(req => photoService.query(req.actor, req.input)));
   router.post('/detail', permit('photos.read'), detail, endpoint(req => photoService.detail(req.actor, req.input.photoId)));
   router.post('/access', permit('photos.read'), detail, endpoint(req => photoService.access(req.actor, req.input.photoId)));

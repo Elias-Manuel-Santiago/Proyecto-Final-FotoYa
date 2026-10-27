@@ -15,7 +15,7 @@ export const saleInput = z.object({
 }).strict().refine(input => new Set(input.prices.map(row => row.priceId)).size === input.prices.length,
   'Cada tarifa debe aparecer una sola vez.');
 
-export const salePhotosInput = z.object({ stationId: id, photoId: id.optional(), ...pagination }).strict();
+export const salePhotosInput = z.object({ stationId: id, photoId: id.optional(), hidden: z.boolean().default(false), ...pagination }).strict();
 
 // DECIMAL se calcula en centavos enteros; el cliente nunca decide el importe.
 // Calcula en centavos BigInt copias e importes aplicados a las tarifas del servidor.

@@ -28,6 +28,7 @@ export function Screen({
   onRefresh,
   refreshEnabled = true,
   compact = false,
+  fullWidth = false,
 }: {
   title: string;
   children: ReactNode;
@@ -35,6 +36,7 @@ export function Screen({
   onRefresh?: () => void;
   refreshEnabled?: boolean;
   compact?: boolean;
+  fullWidth?: boolean;
 }) {
   const { colors, styles } = useTheme();
   const { embedded, bottomNavigation } = useContext(ScreenLayoutContext);
@@ -64,6 +66,11 @@ export function Screen({
               paddingBottom: embedded ? 32 : 88,
             },
             compact && { maxWidth: 720 },
+            fullWidth && {
+              maxWidth: undefined,
+              padding: 12,
+              paddingBottom: embedded ? 32 : 88,
+            },
           ]}
           alwaysBounceVertical={!!onRefresh && refreshEnabled}
           refreshControl={

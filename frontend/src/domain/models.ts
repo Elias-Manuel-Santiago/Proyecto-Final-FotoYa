@@ -111,6 +111,7 @@ export interface StationUpdateInput {
 
 // Metadatos de una foto/familia; la URL privada se solicita aparte y puede vencer.
 export interface Photo {
+  hidden?: boolean;
   id: string;
   operationId: string;
   stationId: string;

@@ -85,6 +85,7 @@ export async function migrate(db, env, { init = false } = {}) {
       await connection.query('ALTER TABLE usuarios MODIFY dni VARCHAR(20) NULL');
     if (!await hasColumn('usuarios', 'auth0_sub')) await connection.query('ALTER TABLE usuarios ADD auth0_sub VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL UNIQUE');
     await migrateVerifications(connection, { hasColumn, hasIndex });
+    if (!await hasColumn('fotos', 'oculta')) await connection.query('ALTER TABLE fotos ADD oculta BOOLEAN NOT NULL DEFAULT FALSE');
     if (!await hasColumn('fotos', 'email_cliente')) await connection.query('ALTER TABLE fotos ADD email_cliente VARCHAR(254) NULL');
     // No se reconstruyen autor ni hora de fotos históricas: permanecen desconocidos.
     if (!await hasColumn('fotos', 'id_camarografo')) await connection.query('ALTER TABLE fotos ADD id_camarografo BIGINT UNSIGNED NULL');
