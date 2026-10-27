@@ -1076,3 +1076,44 @@ test('gallery metadata normalizes hidden and sold flags without hiding photos fr
   assert.equal(data.photos[0].hidden, false);
   assert.equal(data.photos[0].sold, true);
 });
+
+test('reported attendance duration is normalized in history and saved through the validated endpoint', async () => {
+  const { repo } = fixture('secretario', {
+    'attendance/employee': [
+      {
+        id: '3',
+        userId: '7',
+        stationId: '1',
+        date: '2026-10-15',
+        checkIn: '2026-10-15 12:00:00',
+        checkOut: null,
+        closedAt: '2026-10-16 03:00:00',
+        manualMinutes: '470',
+        manualMinutesBy: 2,
+        manualMinutesAt: '2026-10-17 12:00:00',
+      },
+    ],
+  });
+  const records = await repo.employeeAttendance('7');
+  assert.equal(records[0].manualMinutes, 470);
+  assert.equal(records[0].manualMinutesBy, '2');
+  assert.equal(records[0].manualMinutesAt, '2026-10-17T12:00:00Z');
+  const api = testApi('http://localhost:3000/api', async (url, init) => {
+    assert(String(url).endsWith('/attendance/duration'));
+    const body = JSON.parse(String(init?.body));
+    const { durationInput } = await import(
+      backend + 'modules/attendance/attendance.schemas.js'
+    );
+    durationInput.parse(body);
+    assert.deepEqual(body, { attendanceId: '3', hours: 7, minutes: 50 });
+    return new Response(
+      JSON.stringify({ data: { id: '3', manualMinutes: 470 } }),
+      { status: 200 },
+    );
+  });
+  assert.equal(
+    (await new HttpFotoYaRepository(api).defineAttendanceDuration('3', 7, 50))
+      .manualMinutes,
+    470,
+  );
+});

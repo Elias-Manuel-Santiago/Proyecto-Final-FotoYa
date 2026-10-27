@@ -65,6 +65,7 @@ export async function migrate(db, env, { init = false } = {}) {
     // Cierre administrativo por falta de check-out; nunca inventa una hora de salida.
     if (!await hasColumn('horarios', 'closed_at')) await connection.query(`ALTER TABLE horarios ADD closed_at DATETIME(6) NULL,
       ADD CONSTRAINT ck_horarios_cierre CHECK (closed_at IS NULL OR (check_out IS NULL AND closed_at >= check_in))`);
+    if (!await hasColumn('horarios', 'manual_minutes')) await connection.query('ALTER TABLE horarios ADD manual_minutes INT UNSIGNED NULL, ADD manual_minutes_by BIGINT UNSIGNED NULL, ADD manual_minutes_at DATETIME(6) NULL');
     if (!await hasIndex('horarios', 'ix_horarios_usuario_abierto')) await connection.query('CREATE INDEX ix_horarios_usuario_abierto ON horarios (id_usuario, check_out)');
     // Las tarifas antiguas quedan sin asignar: nunca se convierten en tarifas globales.
     if (!await hasColumn('precios', 'id_puesto')) await connection.query('ALTER TABLE precios ADD id_puesto BIGINT UNSIGNED NULL, ADD CONSTRAINT fk_precios_puesto FOREIGN KEY (id_puesto) REFERENCES puesto (id_puesto)');

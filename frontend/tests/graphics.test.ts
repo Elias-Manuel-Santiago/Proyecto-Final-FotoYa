@@ -185,3 +185,49 @@ test('rendimiento conserva personas sin ventas, datos sin autor y base de turnos
   assert.equal(graphicValue(sellers[1], 'percentage'), 40);
   assert.equal(peopleValues(data, ['1'], 'editor')[0].taken, 20);
 });
+
+test('multiple team roles can be compared without merging a person or unknown author across roles', () => {
+  const data: GraphicsData = {
+    ...empty,
+    people: [
+      {
+        ...values,
+        stationId: '1',
+        employeeId: '7',
+        name: 'Persona',
+        role: 'seller',
+        opportunityTaken: 10,
+      },
+      {
+        ...values,
+        stationId: '1',
+        employeeId: '7',
+        name: 'Persona',
+        role: 'cameraman',
+      },
+      {
+        ...values,
+        stationId: '1',
+        employeeId: null,
+        name: 'Sin autor',
+        role: 'editor',
+      },
+      {
+        ...values,
+        stationId: '2',
+        employeeId: '8',
+        name: 'Otro puesto',
+        role: 'editor',
+      },
+    ],
+  };
+  const combined = peopleValues(data, ['1'], ['seller', 'cameraman', 'editor']);
+  assert.equal(combined.length, 3);
+  assert.equal(new Set(combined.map((row) => row.id)).size, 3);
+  assert.deepEqual(
+    new Set(combined.map((row) => row.role)),
+    new Set(['seller', 'cameraman', 'editor']),
+  );
+  assert.equal(peopleValues(data, ['1'], ['cameraman'])[0].taken, 10);
+  assert.deepEqual(peopleValues(data, ['1'], []), []);
+});

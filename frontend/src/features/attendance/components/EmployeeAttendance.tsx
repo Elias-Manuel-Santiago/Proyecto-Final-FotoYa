@@ -52,7 +52,11 @@ export function EmployeeAttendance({ target }: { target: Employee }) {
       <Feedback error={current?.error} />
       {current && !current.error && (
         <>
-          <AttendanceTable records={current.records} data={data} />
+          <AttendanceTable
+            records={current.records}
+            data={data}
+            onDurationSaved={() => setRevision((value) => value + 1)}
+          />
           {employee.roleId === 'secretary' && (
             <AttendanceExport
               key={target.id}

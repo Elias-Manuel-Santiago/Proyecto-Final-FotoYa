@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useTheme } from './theme';
 export function DataTable({
@@ -7,7 +7,7 @@ export function DataTable({
   label,
 }: {
   columns: string[];
-  rows: { key: string; cells: (string | number)[] }[];
+  rows: { key: string; cells: ReactNode[] }[];
   label: string;
 }) {
   const { colors, styles } = useTheme();
@@ -72,7 +72,11 @@ export function DataTable({
                     justifyContent: 'center',
                   }}
                 >
-                  <Text style={styles.text}>{cell}</Text>
+                  {typeof cell === 'string' || typeof cell === 'number' ? (
+                    <Text style={styles.text}>{cell}</Text>
+                  ) : (
+                    cell
+                  )}
                 </View>
               ))}
             </View>

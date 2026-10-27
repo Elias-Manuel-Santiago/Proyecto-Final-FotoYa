@@ -473,6 +473,13 @@ export class HttpFotoYaRepository {
         id: String(row.id),
         stationId: String(row.stationId),
         employeeId: String(row.userId),
+        manualMinutes:
+          row.manualMinutes == null ? null : Number(row.manualMinutes),
+        manualMinutesBy:
+          row.manualMinutesBy == null ? null : String(row.manualMinutesBy),
+        manualMinutesAt: row.manualMinutesAt
+          ? utcInstant(row.manualMinutesAt)
+          : null,
         checkIn: utcInstant(row.checkIn),
         checkOut: row.checkOut ? utcInstant(row.checkOut) : null,
         closedAt: row.closedAt ? utcInstant(row.closedAt) : null,
@@ -492,6 +499,17 @@ export class HttpFotoYaRepository {
   }
 
   // Recupera todas las páginas del historial, incluidos puestos y períodos anteriores.
+  defineAttendanceDuration(
+    attendanceId: string,
+    hours: number,
+    minutes: number,
+  ) {
+    return this.api.post<{ id: string; manualMinutes: number }>(
+      'attendance/duration',
+      { attendanceId, hours, minutes },
+    );
+  }
+
   async employeeAttendance(userId: string): Promise<Attendance[]> {
     const rows = await this.api.all<
       Omit<Attendance, 'employeeId'> & { userId: string }
@@ -501,6 +519,13 @@ export class HttpFotoYaRepository {
       id: String(row.id),
       employeeId: String(row.userId),
       stationId: String(row.stationId),
+      manualMinutes:
+        row.manualMinutes == null ? null : Number(row.manualMinutes),
+      manualMinutesBy:
+        row.manualMinutesBy == null ? null : String(row.manualMinutesBy),
+      manualMinutesAt: row.manualMinutesAt
+        ? utcInstant(row.manualMinutesAt)
+        : null,
       checkIn: utcInstant(row.checkIn),
       checkOut: row.checkOut ? utcInstant(row.checkOut) : null,
       closedAt: row.closedAt ? utcInstant(row.closedAt) : null,

@@ -166,3 +166,23 @@ test('oculta la cuenta propia después de vincular Auth0 y combina filtros de ro
     );
   }
 });
+
+test('secretary directory excludes owner accounts even when they share an email with another employee', () => {
+  const owner = { ...employee, id: 'owner', roleId: 'owner' as const };
+  const seller = { ...employee, id: 'seller', roleId: 'seller' as const };
+  const secretary = {
+    ...employee,
+    id: 'secretary',
+    roleId: 'secretary' as const,
+  };
+  const rows = filterUserDirectory(
+    userDirectory([owner, seller], []),
+    secretary,
+    { role: '', stationId: '', status: 'all', search: '' },
+  );
+  assert.equal(rows.length, 1);
+  assert.deepEqual(
+    rows[0].accounts?.map((row) => row.localUser?.id),
+    ['seller'],
+  );
+});

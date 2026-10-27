@@ -42,15 +42,16 @@ export const graphicsRepository = {
 
     // El importe se reparte por foto cuando una venta histórica vincula más de una familia.
     const [editors] = await connection.execute(`SELECT d.id_puesto AS stationId, f.id_camarografo AS employeeId,
-      'editor' AS role, COALESCE(CONCAT(u.nombre,' ',u.apellido),'Sin editor registrado') AS name,
+      CASE WHEN r.nombre='camarografo' THEN 'cameraman' ELSE 'editor' END AS role, COALESCE(CONCAT(u.nombre,' ',u.apellido),'Sin autor registrado') AS name,
       COUNT(DISTINCT f.id_fotos) AS taken, COUNT(DISTINCT v.id_venta) AS sales,
       COALESCE(SUM(v.precio_total / links.photos),0) AS earnings,
       COUNT(DISTINCT CASE WHEN v.id_venta IS NOT NULL THEN f.id_fotos END) AS sold
       FROM fotos f JOIN dias d ON d.id_dias=f.id_dia LEFT JOIN usuarios u ON u.id_usuario=f.id_camarografo
+      LEFT JOIN rol r ON r.id_rol=u.id_rol
       LEFT JOIN fotos_venta fv ON fv.id_foto=f.id_fotos LEFT JOIN venta v ON v.id_venta=fv.id_venta
       LEFT JOIN (SELECT id_venta,COUNT(*) AS photos FROM fotos_venta GROUP BY id_venta) links ON links.id_venta=v.id_venta
       WHERE d.fecha BETWEEN ? AND ?${scope}
-      GROUP BY d.id_puesto,f.id_camarografo,u.nombre,u.apellido`, params);
+      GROUP BY d.id_puesto,f.id_camarografo,u.nombre,u.apellido,r.nombre`, params);
 
     const [unattributed] = await connection.execute(`SELECT d.id_puesto AS stationId,NULL AS employeeId,
       'editor' AS role,'Sin editor registrado' AS name,
@@ -65,11 +66,11 @@ export const graphicsRepository = {
     // También aparecen empleados que trabajaron y no registraron producción o ventas.
     const [workers] = await connection.execute(`SELECT DISTINCT d.id_puesto AS stationId,h.id_usuario AS employeeId,
       CONCAT(u.nombre,' ',u.apellido) AS name,
-      CASE r.nombre WHEN 'vendedor' THEN 'seller' ELSE 'editor' END AS role,
+      CASE r.nombre WHEN 'vendedor' THEN 'seller' WHEN 'camarografo' THEN 'cameraman' ELSE 'editor' END AS role,
       ${opportunities('h.id_usuario')} AS opportunityTaken,${missingTimes} AS missingTimes
       FROM horarios h JOIN dias d ON d.id_dias=h.id_dias JOIN usuarios u ON u.id_usuario=h.id_usuario
       JOIN rol r ON r.id_rol=u.id_rol WHERE d.fecha BETWEEN ? AND ?${scope}
-      AND r.nombre IN ('vendedor','editor')`, [input.from, input.to, input.from, input.to, ...params]);
+      AND r.nombre IN ('vendedor','camarografo','editor')`, [input.from, input.to, input.from, input.to, ...params]);
     let hours = [], attendance = [];
     if (input.day) {
       const dayParams = [input.day, ...(station ? [station] : [])];

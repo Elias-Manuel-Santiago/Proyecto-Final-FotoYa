@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { Text, View } from 'react-native';
 import { PeriodFilters } from '../../components/filters/PeriodFilters';
+import { ScopeCheckbox } from '../../components/filters/ScopeColumns';
 import { EmployeeGraphic } from '../../components/graphics/EmployeeGraphic';
 import { PeriodGraphic } from '../../components/graphics/PeriodGraphic';
 import { ScopePicker } from '../../components/graphics/ScopePicker';
@@ -14,6 +15,7 @@ import {
   graphicMetrics,
   graphicScopes,
   type GraphicMetric,
+  type GraphicPerson,
 } from '../../domain/graphics';
 import { visibleStations } from '../../domain/metrics';
 import { useGraphicsData } from '../../hooks/useGraphicsData';
@@ -32,7 +34,9 @@ export function ReportsScreen() {
     own ? [`station:${employee.stationId}`] : ['total'],
   );
   const [metric, setMetric] = useState<GraphicMetric>('earnings');
-  const [teamRole, setTeamRole] = useState<'seller' | 'editor'>('seller');
+  const [teamRoles, setTeamRoles] = useState<GraphicPerson['role'][]>([
+    'seller',
+  ]);
   const scopes = own
     ? available
     : available.filter((s) => selected.includes(s.id));
@@ -72,15 +76,27 @@ export function ReportsScreen() {
         }
       >
         <View style={{ paddingTop: 16 }}>
-          <Select
-            label="Rendimiento del equipo"
-            value={teamRole}
-            options={[
+          <Text style={styles.label}>Rendimiento del equipo</Text>
+          {(
+            [
               { value: 'seller', label: 'Vendedores' },
+              { value: 'cameraman', label: 'Camarógrafos' },
               { value: 'editor', label: 'Editores' },
-            ]}
-            onChange={(value) => setTeamRole(value as typeof teamRole)}
-          />
+            ] as const
+          ).map((option) => (
+            <ScopeCheckbox
+              key={option.value}
+              label={option.label}
+              checked={teamRoles.includes(option.value)}
+              onPress={() =>
+                setTeamRoles((current) =>
+                  current.includes(option.value)
+                    ? current.filter((role) => role !== option.value)
+                    : [...current, option.value],
+                )
+              }
+            />
+          ))}
         </View>
       </PeriodFilters>
       <Text style={styles.muted}>
@@ -119,7 +135,7 @@ export function ReportsScreen() {
             }
           />
           <EmployeeGraphic
-            role={teamRole}
+            roles={teamRoles}
             data={data}
             scopes={scopes}
             metric={metric}

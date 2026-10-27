@@ -58,7 +58,16 @@ export function attendancePayroll(
   const stepSeconds = options.incrementMinutes * 60;
   const rows = records.flatMap((record) => {
     const start = Date.parse(utcInstant(record.checkIn));
-    const end = record.checkOut ? Date.parse(utcInstant(record.checkOut)) : NaN;
+    const corrected =
+      !record.checkOut &&
+      record.manualMinutes != null &&
+      Number.isInteger(record.manualMinutes) &&
+      record.manualMinutes > 0;
+    const end = record.checkOut
+      ? Date.parse(utcInstant(record.checkOut))
+      : corrected
+        ? start + record.manualMinutes! * 60000
+        : NaN;
     if (!Number.isFinite(start)) return [];
     const valid = Number.isFinite(end) && end > start;
     // Un turno abierto puede solaparse con el rango; se muestra sin inventar salida.
@@ -94,7 +103,9 @@ export function attendancePayroll(
         paidSeconds,
         amountCents,
         status: valid
-          ? 'Completo'
+          ? corrected
+            ? 'Duración informada por Secretario'
+            : 'Completo'
           : record.checkOut
             ? 'Horario inválido'
             : record.closedAt

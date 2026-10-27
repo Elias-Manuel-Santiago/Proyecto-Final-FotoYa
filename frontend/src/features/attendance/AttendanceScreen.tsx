@@ -87,7 +87,13 @@ export function AttendanceScreen() {
         </Text>
       )}
       {!error && !loading && !records.length && <EmptyState />}
-      {!error && !loading && <AttendanceTable records={records} data={data} />}
+      {!error && !loading && (
+        <AttendanceTable
+          records={records}
+          data={data}
+          onDurationSaved={reload}
+        />
+      )}
     </Screen>
   );
 }

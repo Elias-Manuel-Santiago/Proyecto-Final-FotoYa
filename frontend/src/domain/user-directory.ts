@@ -77,6 +77,7 @@ export function filterUserDirectory(
   const visible = rows.filter(
     (row) =>
       row.localUser?.roleId !== 'client' &&
+      (actor.roleId !== 'secretary' || row.localUser?.roleId !== 'owner') &&
       row.localUser?.id !== actor.id &&
       (!filters.role || row.localUser?.roleId === filters.role) &&
       (!filters.stationId || row.stationId === filters.stationId) &&

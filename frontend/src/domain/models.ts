@@ -196,6 +196,9 @@ export interface SalePhoto {
 
 // Turno abierto: sin checkOut ni closedAt. closedAt registra el cierre sin salida.
 export interface Attendance {
+  manualMinutes?: number | null;
+  manualMinutesBy?: string | null;
+  manualMinutesAt?: string | null;
   id: string;
   employeeId: string;
   stationId: string;

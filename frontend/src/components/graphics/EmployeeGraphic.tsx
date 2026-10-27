@@ -3,6 +3,7 @@ import {
   graphicValue,
   peopleValues,
   type GraphicMetric,
+  type GraphicPerson,
   type GraphicScope,
   type GraphicsData,
 } from '../../domain/graphics';
@@ -10,58 +11,60 @@ import type { Station } from '../../domain/models';
 import { useTheme } from '../ui/theme';
 import { MetricChart } from './MetricChart';
 
+const roleLabels = {
+  seller: 'Vendedores',
+  cameraman: 'Camarógrafos',
+  editor: 'Editores',
+};
 export function EmployeeGraphic({
   data,
   scopes,
   metric,
   stations,
-  role,
+  roles,
 }: {
   data: GraphicsData;
   scopes: GraphicScope[];
   metric: GraphicMetric;
   stations: Station[];
-  role: 'seller' | 'editor';
+  roles: GraphicPerson['role'][];
 }) {
   const { styles } = useTheme();
-  const ids = [...new Set(scopes.flatMap((s) => s.stationIds))];
-  const people = peopleValues(data, ids, role);
+  const ids = [...new Set(scopes.flatMap((scope) => scope.stationIds))];
+  const chartRoles = roles.filter(
+    (role) => metric !== 'taken' || role !== 'seller',
+  );
+  const people = peopleValues(data, ids, chartRoles);
+  if (!roles.length)
+    return (
+      <Text style={styles.muted}>
+        Seleccioná al menos un rol para comparar el equipo.
+      </Text>
+    );
+  if (!chartRoles.length)
+    return (
+      <View style={styles.card}>
+        <Text style={styles.muted}>
+          Las familias fotografiadas se muestran por camarógrafo o editor.
+          Seleccioná esos roles u otro indicador para comparar vendedores.
+        </Text>
+      </View>
+    );
   return (
     <View style={styles.stack}>
-      {role === 'seller' && metric === 'taken' ? (
-        <View style={styles.card}>
-          <Text style={styles.muted}>
-            Las familias fotografiadas se muestran por editor. Elegí otro
-            indicador para comparar vendedores.
-          </Text>
-        </View>
-      ) : (
-        <MetricChart
-          title={
-            role === 'seller'
-              ? 'Rendimiento por vendedor'
-              : 'Rendimiento por editor'
-          }
-          metric={metric}
-          legends={[
-            role === 'seller'
-              ? 'Ventas registradas por cada persona'
-              : 'Resultados de las fotos cargadas por cada persona',
-          ]}
-          hint={
-            role === 'seller'
-              ? 'El porcentaje relaciona familias compradoras acreditadas al vendedor con familias cargadas en su puesto durante sus turnos. Los turnos superpuestos comparten esa base; los porcentajes individuales no se suman.'
-              : 'Ingresos y ventas vinculados a las fotos cargadas por cada editor. Si una venta incluye varias fotos, el ingreso se reparte entre ellas. Los registros históricos sin autor se agrupan aparte.'
-          }
-          points={people.map((person) => ({
-            id: person.id,
-            label: person.name.split(' ')[0],
-            description: `${person.name} · ${stations.find((s) => s.id === person.stationId)?.name ?? 'Puesto'}`,
-            value: graphicValue(person, metric),
-            series: 0,
-          }))}
-        />
-      )}
+      <MetricChart
+        title="Rendimiento del equipo"
+        metric={metric}
+        legends={[chartRoles.map((role) => roleLabels[role]).join(' · ')]}
+        hint="Vendedores: ventas registradas y oportunidades durante sus turnos. Camarógrafos y editores: resultados de las fotos atribuidas a cada autor. Una misma venta puede aparecer en funciones diferentes; esos resultados no se suman. Los registros sin autor se agrupan aparte."
+        points={people.map((person) => ({
+          id: person.id,
+          label: person.name.split(' ')[0],
+          description: `${person.name} · ${roleLabels[person.role]} · ${stations.find((station) => station.id === person.stationId)?.name ?? 'Puesto'}`,
+          value: graphicValue(person, metric),
+          series: 0,
+        }))}
+      />
     </View>
   );
 }

@@ -29,7 +29,7 @@ export interface GraphicPerson extends GraphicValues {
   stationId: string;
   employeeId: string | null;
   name: string;
-  role: 'seller' | 'editor';
+  role: 'seller' | 'cameraman' | 'editor';
   opportunityTaken?: number;
   missingTimes?: number;
 }
@@ -180,25 +180,30 @@ export function hourlyValues(
 export function peopleValues(
   data: GraphicsData,
   stationIds: string[],
-  role: GraphicPerson['role'],
+  roles: GraphicPerson['role'] | GraphicPerson['role'][],
 ) {
+  const selectedRoles = Array.isArray(roles) ? roles : [roles];
   const people = new Map<string, GraphicPerson>();
   for (const row of [...data.workers, ...data.people]) {
-    if (row.role !== role || !stationIds.includes(row.stationId)) continue;
-    const key = `${row.stationId}:${row.employeeId ?? 'unknown'}`;
+    if (
+      !selectedRoles.includes(row.role) ||
+      !stationIds.includes(row.stationId)
+    )
+      continue;
+    const key = `${row.role}:${row.stationId}:${row.employeeId ?? 'unknown'}`;
     if (!people.has(key))
       people.set(key, {
         ...row,
         earnings: 0,
         sales: 0,
         sold: 0,
-        taken: role === 'seller' ? null : 0,
+        taken: row.role === 'seller' ? null : 0,
       });
     if ('sales' in row) {
       const previous = people.get(key)!;
       const values = sumGraphicValues(
         [previous, row as GraphicPerson],
-        role !== 'seller',
+        row.role !== 'seller',
       );
       people.set(key, { ...previous, ...row, ...values });
     }
@@ -208,7 +213,7 @@ export function peopleValues(
     id,
     ...row,
     taken:
-      role === 'seller'
+      row.role === 'seller'
         ? row.employeeId !== null && !row.missingTimes
           ? (row.opportunityTaken ?? null)
           : null

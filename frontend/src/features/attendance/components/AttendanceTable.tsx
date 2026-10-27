@@ -1,3 +1,7 @@
+import { useWorkspace } from '../../../providers/AppProvider';
+import { can } from '../../../domain/permissions';
+import { hoursLabel } from '../../../domain/attendance-payroll';
+import { AttendanceDuration } from './AttendanceDuration';
 import { DataTable } from '../../../components/ui/DataTable';
 import { displayDate, displayInstant, duration } from '../../../domain/dates';
 import type { AppData, Attendance } from '../../../domain/models';
@@ -6,11 +10,16 @@ export function AttendanceTable({
   records,
   data,
   personal = false,
+  onDurationSaved,
 }: {
   records: Attendance[];
   data: AppData;
   personal?: boolean;
+  onDurationSaved?: () => void;
 }) {
+  const { employee: actor, refresh } = useWorkspace();
+  const editable =
+    !personal && actor.roleId === 'secretary' && can(actor, 'attendance.read');
   return (
     <DataTable
       label={personal ? 'Mi asistencia' : 'Horarios y asistencias'}
@@ -39,7 +48,21 @@ export function AttendanceTable({
               : record.closedAt
                 ? 'No hizo check-out'
                 : 'Sin registrar',
-            duration(record.checkIn, record.checkOut, record.closedAt),
+            editable && !record.checkOut ? (
+              <AttendanceDuration
+                record={record}
+                onSaved={
+                  onDurationSaved ??
+                  (() => {
+                    void refresh();
+                  })
+                }
+              />
+            ) : !record.checkOut && record.manualMinutes != null ? (
+              `${hoursLabel(record.manualMinutes * 60)} · Informada`
+            ) : (
+              duration(record.checkIn, record.checkOut, record.closedAt)
+            ),
           ],
         };
       })}

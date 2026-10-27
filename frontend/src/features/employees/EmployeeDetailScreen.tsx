@@ -36,7 +36,10 @@ function EmployeeDetails() {
   const [editing, setEditing] = useState(false);
   const action = useAction();
   const target = data.employees.find(
-    (row) => row.id === id && hasStationAccess(employee, row.stationId),
+    (row) =>
+      row.id === id &&
+      hasStationAccess(employee, row.stationId) &&
+      (employee.roleId !== 'secretary' || row.roleId !== 'owner'),
   );
   if (!target)
     return (

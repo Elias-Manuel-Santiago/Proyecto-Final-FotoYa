@@ -143,3 +143,29 @@ test('CSV contains original punches, adjusted minutes, totals and Excel-safe esc
   assert(csv.includes('"TOTAL"'));
   assert(csv.includes('"Hacia arriba"'));
 });
+
+test('a reported missing-checkout duration participates in rounding, payroll and CSV while original marks remain missing', () => {
+  const record = {
+    ...shift(undefined, null, '2026-10-16T03:00:00Z'),
+    manualMinutes: 470,
+    manualMinutesBy: 'secretary',
+  };
+  const result = attendancePayroll([record], { ...options, rounding: 'up' });
+  assert.equal(result.seconds, 470 * 60);
+  assert.equal(result.paidSeconds, 480 * 60);
+  assert.equal(result.amountCents, 800000);
+  assert.equal(result.incomplete, 0);
+  assert.match(result.rows[0].status, /informada/);
+  const data = createSeed();
+  assert(
+    attendanceCsv(data.employees[0], data, [record], options).includes(
+      'Duración informada por Secretario',
+    ),
+  );
+  assert.equal(record.checkOut, null);
+  const actual = attendancePayroll(
+    [{ ...record, checkOut: '2026-10-15T13:00:00Z' }],
+    options,
+  );
+  assert.equal(actual.seconds, 3600);
+});

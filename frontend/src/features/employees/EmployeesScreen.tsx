@@ -79,7 +79,11 @@ function EmployeeDirectory() {
           options={[
             { value: '', label: 'Todos' },
             ...Object.entries(roleLabels)
-              .filter(([value]) => value !== 'client')
+              .filter(
+                ([value]) =>
+                  value !== 'client' &&
+                  (employee.roleId !== 'secretary' || value !== 'owner'),
+              )
               .map(([value, label]) => ({ value, label })),
           ]}
         />

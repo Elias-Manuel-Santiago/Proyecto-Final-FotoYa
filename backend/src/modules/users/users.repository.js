@@ -20,7 +20,7 @@ export const userRepository = {
   async query(actor, input) {
     const station = stationScope(actor, input.stationId), where = ["r.nombre <> 'checkin'"], params = [];
     if (station) { where.push('u.id_puesto = ?'); params.push(station); }
-    if (actor.role === 'secretario') where.push("r.nombre <> 'cliente'");
+    if (actor.role === 'secretario') where.push("r.nombre NOT IN ('cliente','dueno')");
     for (const [name, column] of [['email', 'email'], ['dni', 'dni'], ['active', 'disponible']]) {
       if (input[name] !== undefined) { where.push(`u.${column} = ?`); params.push(input[name]); }
     }
@@ -35,6 +35,6 @@ export const userRepository = {
   },
   // Evalúa visibilidad según rol global o coincidencia de puesto.
   canRead(actor, row) {
-    return row && row.role !== 'checkin' && (globalScope(actor) ? actor.role !== 'secretario' || row.role !== 'cliente' : actor.stationId && actor.stationId === row.stationId);
+    return row && row.role !== 'checkin' && (globalScope(actor) ? actor.role !== 'secretario' || !['cliente', 'dueno'].includes(row.role) : actor.stationId && actor.stationId === row.stationId);
   },
 };
