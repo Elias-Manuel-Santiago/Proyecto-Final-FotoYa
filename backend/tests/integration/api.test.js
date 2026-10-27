@@ -313,14 +313,23 @@ integration('puestos: alta, baja reversible, permisos e historial', async () => 
   await migrate(db, env);
   const [[existing]] = await db.query('SELECT MIN(disponible) AS active FROM puesto');
   assert.equal(Number(existing.active), 1);
-  const input = { name: 'Nuevo puesto', city: 'Ciudad', event: 'Nuevo evento' };
+  const [[city]] = await db.query("SELECT id_ciudad AS id FROM ciudad WHERE nombre='Ciudad'");
+  const event = await call('catalog/events/save', { name: 'Nuevo evento', cityId: String(city.id), stationIds: [] });
+  assert.equal(event.status, 200);
+  const input = { eventId: event.data.data.id };
   for (const role of ['encargado', 'secretario', 'vendedor', 'editor', 'camarografo', 'cliente']) {
     assert.equal((await call('catalog/stations/create', input, role)).status, 403);
     assert.equal((await call('catalog/stations/availability', { stationId: '1', active: false }, role)).status, 403);
   }
   assert.equal((await call('catalog/stations/create', { ...input, name: ' ' })).status, 422);
+  assert.equal((await call('catalog/stations/create', { eventId: '999999' })).status, 404);
+  assert.equal((await call('catalog/stations/create', { name: 'Libre', city: 'Libre', event: 'Libre' })).status, 422);
   const created = await call('catalog/stations/create', input);
   assert.equal(created.status, 200); const id = created.data.data.id;
+  const [[saved]] = await db.execute('SELECT nombre, id_ciudad, id_evento FROM puesto WHERE id_puesto=?', [id]);
+  assert.equal(saved.nombre, 'Nuevo evento');
+  assert.equal(String(saved.id_ciudad), String(city.id));
+  assert.equal(String(saved.id_evento), input.eventId);
   assert.equal((await call('catalog/stations/create', input)).status, 409);
   const [[cityCount]] = await db.query("SELECT COUNT(*) AS count FROM ciudad WHERE nombre='Ciudad'");
   assert.equal(Number(cityCount.count), 1);
@@ -720,7 +729,7 @@ integration('encargado administra precios de su puesto y conserva tarifas histó
   assert.equal(Number(all.find(row => row.id === priceId).active), 0);
   assert(!(await call('catalog/query', { resource: 'prices' }, 'vendedor')).data.data.some(row => row.id === priceId));
   assert.equal((await call('catalog/prices/availability', { stationId: '1', priceId, active: true }, 'encargado')).status, 200);
-  assert.equal((await call('catalog/stations/create', { name: 'No', city: 'No' }, 'encargado')).status, 403);
+  assert.equal((await call('catalog/stations/create', { eventId: '1' }, 'encargado')).status, 403);
   const [[historic]] = await db.query(`SELECT pv.id_venta AS saleId, pv.id_precio AS priceId, pv.precio_unitario_aplicado AS amount
     FROM precios_venta pv JOIN venta v ON v.id_venta=pv.id_venta WHERE v.operation_id IS NOT NULL LIMIT 1`);
   await call('catalog/prices/update', { ...input, priceId: historic.priceId, amount: '99.99' }, 'encargado');

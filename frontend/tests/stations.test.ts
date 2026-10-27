@@ -4,21 +4,34 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { image, repository } from './fixtures';
+import { image } from './fixtures';
+import { createSeed } from './support/seed';
+import { MockFotoYaRepository } from './support/mock-repository';
 
 test('solo el dueño administra puestos y la baja conserva el historial', async () => {
-  const repo = repository();
+  const data = createSeed();
+  data.cities = [{ id: 'city', name: 'Ciudad' }];
+  data.events = [
+    { id: 'event', name: 'Evento', cityId: 'city', directions: '' },
+  ];
+  const repo = new MockFotoYaRepository({ data });
   const input = {
-    name: 'Nuevo',
-    city: 'Ciudad',
-    event: '',
+    eventId: 'event',
   };
   await assert.rejects(repo.createStation('manager', input), /permiso/);
   await assert.rejects(
     repo.setStationActive('secretary', 'centro', false),
     /permiso/,
   );
+  await assert.rejects(
+    repo.createStation('owner', { eventId: 'missing' }),
+    /evento no existe/,
+  );
   await repo.createStation('owner', input);
+  const created = (await repo.snapshot()).stations.at(-1)!;
+  assert.equal(created.name, 'Evento');
+  assert.equal(created.cityId, 'city');
+  assert.equal(created.eventId, 'event');
   await assert.rejects(repo.createStation('owner', input), /ya existe/);
   const before = await repo.snapshot();
   await repo.setStationActive('owner', 'centro', false);

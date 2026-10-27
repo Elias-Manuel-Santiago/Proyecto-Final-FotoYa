@@ -23,7 +23,6 @@ import { useAction } from '../../hooks/useAction';
 import { useWorkspace } from '../../providers/AppProvider';
 import { StationPrices } from './StationPrices';
 import { StationEditor } from './StationEditor';
-const empty = { name: '', city: '', event: '' };
 // Filtra puestos y coordina alta, disponibilidad y consulta de tarifas.
 export function StationsScreen() {
   const { city = '', event = '' } = useLocalSearchParams<{
@@ -43,7 +42,8 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
   const { styles } = useTheme();
   const { data, employee, repository, refresh } = useWorkspace();
   const manage = can(employee, 'stations.manage');
-  const [input, setInput] = useState(empty);
+  const [eventId, setEventId] = useState('');
+  const events = data.events ?? [];
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
@@ -91,36 +91,31 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
       {manage && creating && (
         <View style={styles.card}>
           <Text style={styles.heading}>Nuevo puesto</Text>
-          {(['name', 'city', 'event'] as const).map((key) => (
-            <Field
-              key={key}
-              label={
-                {
-                  name: 'Nombre del puesto',
-                  city: 'Ciudad',
-                  event: 'Evento (opcional)',
-                }[key]
-              }
-              value={input[key]}
-              maxLength={key === 'city' ? 120 : 150}
-              editable={!action.busy}
-              onChangeText={(value) =>
-                setInput((current) => ({ ...current, [key]: value }))
-              }
-            />
-          ))}
+          <Select
+            label="Evento"
+            value={eventId}
+            disabled={action.busy || !events.length}
+            options={events.map((row) => ({
+              value: row.id,
+              label: `${row.name} · ${data.cities?.find((city) => city.id === row.cityId)?.name ?? ''}`,
+            }))}
+            onChange={setEventId}
+          />
           <Text style={styles.muted}>
-            Si la ciudad o el evento ya existen, se reutilizan.
+            {events.length
+              ? 'El puesto toma el nombre y la ciudad del evento seleccionado.'
+              : 'Primero creá un evento para poder dar de alta un puesto.'}
           </Text>
           <Button
             title="Guardar puesto"
             busy={action.busy}
+            disabled={!events.some((row) => row.id === eventId)}
             onPress={() => {
               void action.run(async () => {
-                if (!input.name.trim() || !input.city.trim())
-                  throw new Error('Completá nombre y ciudad.');
-                await repository.createStation(input);
-                setInput(empty);
+                if (!events.some((row) => row.id === eventId))
+                  throw new Error('Seleccioná un evento existente.');
+                await repository.createStation({ eventId });
+                setEventId('');
                 setCreating(false);
                 await refresh();
               }, 'Puesto creado.');
@@ -156,9 +151,7 @@ function StationDirectory({ city, event }: { city: string; event: string }) {
           <View key={station.id} style={styles.card}>
             <Text style={styles.heading}>{station.name}</Text>
             <Text style={styles.text}>{station.city}</Text>
-            {!!station.event && (
-              <Text style={styles.text}>Evento: {station.event}</Text>
-            )}
+            <Text style={styles.text}>{station.event}</Text>
             <Text style={styles.muted}>
               {station.active === false ? 'Inactivo' : 'Activo'}
             </Text>

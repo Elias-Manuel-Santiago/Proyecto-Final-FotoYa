@@ -73,11 +73,9 @@ export interface Station {
   active?: boolean;
 }
 
-// Campos del formulario de alta de puesto; el servidor resuelve ciudad y evento.
+// El alta usa un evento existente; el servidor deriva el nombre y la ciudad.
 export interface StationInput {
-  name: string;
-  city: string;
-  event: string;
+  eventId: string;
 }
 
 export interface City {

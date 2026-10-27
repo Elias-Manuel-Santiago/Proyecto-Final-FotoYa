@@ -23,19 +23,17 @@ export function createStation(
   input: StationInput,
 ) {
   authorize(actor);
+  const event = data.events?.find((row) => row.id === input.eventId);
+  if (!event) throw new Error('El evento no existe.');
+  const city = data.cities?.find((row) => row.id === event.cityId);
+  if (!city) throw new Error('La ciudad no existe.');
   const fields = {
-    name: input.name.trim(),
-    city: input.city.trim(),
-    event: input.event.trim(),
+    name: event.name,
+    city: city.name,
+    event: event.name,
+    cityId: city.id,
+    eventId: event.id,
   };
-  if (!fields.name || !fields.city)
-    throw new Error('Completá nombre y ciudad.');
-  if (
-    fields.name.length > 150 ||
-    fields.city.length > 120 ||
-    fields.event.length > 150
-  )
-    throw new Error('Los datos del puesto superan el largo permitido.');
   if (
     data.stations.some((row) =>
       (['name', 'city', 'event'] as const).every(

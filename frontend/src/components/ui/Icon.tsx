@@ -31,6 +31,7 @@ const icons = {
   'tema-oscuro': require('../../../assets/images/ui-svg/tema-oscuro.svg'),
   usuarios: require('../../../assets/images/ui-svg/usuarios.svg'),
   ventas: require('../../../assets/images/ui-svg/ventas.svg'),
+  clientes: require('../../../assets/images/ui-svg/clientes.svg')
 } as const;
 export type IconName = keyof typeof icons;
 // Optional local assets for the selected state; otherwise use the same icon.

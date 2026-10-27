@@ -19,17 +19,24 @@ export const workspaceLinks: NavigationItem[] = [
     roles: ['owner', 'secretary'],
   },
   {
+    href: '/reports',
+    icon: 'estadisticas',
+    label: 'Estadísticas',
+    permission: 'reports.read',
+  },
+  {
     href: '/events',
     icon: 'eventos',
     label: 'Eventos',
     permission: 'catalog.read',
     roles: ['owner', 'secretary'],
   },
-  {
-    href: '/reports',
-    icon: 'estadisticas',
-    label: 'Estadísticas',
-    permission: 'reports.read',
+    {
+    href: '/stations',
+    icon: 'puestos',
+    label: 'Puestos',
+    permission: 'catalog.read',
+    roles: ['owner', 'secretary'],
   },
   {
     href: '/employees',
@@ -39,16 +46,9 @@ export const workspaceLinks: NavigationItem[] = [
   },
   {
     href: '/clients',
-    icon: 'usuarios',
+    icon: 'clientes',
     label: 'Clientes',
     permission: 'clients.read',
-  },
-  {
-    href: '/stations',
-    icon: 'puestos',
-    label: 'Puestos',
-    permission: 'catalog.read',
-    roles: ['owner', 'secretary'],
   },
   {
     href: '/prices',

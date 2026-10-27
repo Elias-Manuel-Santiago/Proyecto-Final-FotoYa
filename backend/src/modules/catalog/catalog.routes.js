@@ -38,8 +38,7 @@ export function catalogRoutes() {
   router.post('/prices/update', permit('prices.manage'), validate(z.object({ ...priceFields, priceId: id }).strict()), endpoint(req => pricesService.update(req.actor, req.input)));
   router.post('/prices/availability', permit('prices.manage'), validate(z.object({ stationId: id, priceId: id, active: z.boolean() }).strict()), endpoint(req => pricesService.setActive(req.actor, req.input)));
   router.post('/stations/create', permit('stations.manage'), validate(z.object({
-    name: z.string().trim().min(1).max(150),
-    city: z.string().trim().min(1).max(120), event: z.string().trim().max(150).default(''),
+    eventId: id,
   }).strict()), endpoint(req => stations.create(req.actor, req.input)));
   router.post('/stations/availability', permit('stations.manage'), validate(z.object({
     stationId: id, active: z.boolean(),

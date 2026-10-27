@@ -84,13 +84,39 @@ test('an empty event can be deleted after its references are checked', async () 
   assert.equal(state.writes.length, 1);
 });
 
-test('station creation cannot reuse an event from another city', async () => {
-  const state = connectionFor(sql => {
-    if (sql.includes('FROM ciudad')) return [[{ id: 1 }]];
-    if (sql.includes('FROM evento')) return [[{ id: 2, cityId: 9 }]];
+test('station creation derives its name and city from an existing event', async () => {
+  const state = connectionFor((sql, values) => {
+    if (sql.includes('FROM evento')) {
+      assert.deepEqual(values, ['2']);
+      return [[{ id: 2, name: 'Evento', cityId: 9 }]];
+    }
+    if (sql.startsWith('SELECT id_puesto')) return [[]];
+    if (sql.startsWith('INSERT INTO puesto')) return [{ insertId: 3 }];
     assert.fail(sql);
   });
-  await assert.rejects(stations.create(owner, { name: 'Puesto', city: 'Ciudad', event: 'Evento' }), { status: 409 });
+  assert.deepEqual(await stations.create(owner, { eventId: '2' }), { id: '3', active: true });
+  assert.equal(state.committed, true);
+  assert.equal(state.writes.length, 1);
+  assert.deepEqual(state.writes[0].values, ['Evento', 9, 2]);
+});
+
+test('station creation rejects missing events without creating locations', async () => {
+  const state = connectionFor(sql => {
+    if (sql.includes('FROM evento')) return [[]];
+    assert.fail(sql);
+  });
+  await assert.rejects(stations.create(owner, { eventId: '999' }), { status: 404 });
+  assert.equal(state.writes.length, 0);
+  assert.equal(state.rolledBack, true);
+});
+
+test('station creation rejects duplicates including inactive stations', async () => {
+  const state = connectionFor(sql => {
+    if (sql.includes('FROM evento')) return [[{ id: 2, name: 'Evento', cityId: 9 }]];
+    if (sql.startsWith('SELECT id_puesto')) return [[{ id_puesto: 3 }]];
+    assert.fail(sql);
+  });
+  await assert.rejects(stations.create(owner, { eventId: '2' }), { status: 409 });
   assert.equal(state.writes.length, 0);
   assert.equal(state.rolledBack, true);
 });

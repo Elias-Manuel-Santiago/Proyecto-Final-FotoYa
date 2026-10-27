@@ -1,6 +1,6 @@
 /**
  * @file
- * Crea puestos reutilizando ciudad/evento y permite baja/reactivación. Revalida al dueño y
+ * Crea puestos desde eventos existentes y permite baja/reactivación. Revalida al dueño y
  * evita duplicar también puestos inactivos.
  */
 import { ApiError } from '../../shared/errors.js';
@@ -25,34 +25,19 @@ export const managed = (actor, callback) => {
     return callback(connection);
   });
 };
-// Reutiliza o crea ciudad/evento por nombre con identificadores SQL definidos por el servicio.
-const reference = async (connection, table, key, name) => {
-  const [[existing]] = await connection.execute(`SELECT ${key} AS id FROM ${table} WHERE nombre = ? ORDER BY ${key} LIMIT 1`, [name]);
-  if (existing) return existing.id;
-  const [created] = await connection.execute(`INSERT INTO ${table} (nombre) VALUES (?)`, [name]);
-  return created.insertId;
-};
 export const stations = {
-  // Resuelve ciudad y evento y rechaza duplicados antes de crear el puesto.
+  // El evento define nombre y ciudad; el alta nunca crea ubicaciones nuevas.
   create(actor, input) {
     return managed(actor, async connection => {
-      const cityId = await reference(connection, 'ciudad', 'id_ciudad', input.city);
-      let eventId = null;
-      if (input.event) {
-        const [[existing]] = await connection.execute('SELECT id_evento AS id, id_ciudad AS cityId FROM evento WHERE nombre = ? ORDER BY id_evento LIMIT 1 FOR UPDATE', [input.event]);
-        if (existing && String(existing.cityId) !== String(cityId)) throw new ApiError(409, 'El evento pertenece a otra ciudad.');
-        if (existing) eventId = existing.id;
-        else {
-          const [created] = await connection.execute('INSERT INTO evento (nombre, id_ciudad) VALUES (?, ?)', [input.event, cityId]);
-          eventId = created.insertId;
-        }
-      }
+      const [[event]] = await connection.execute('SELECT id_evento AS id, nombre AS name, id_ciudad AS cityId FROM evento WHERE id_evento = ? FOR UPDATE', [input.eventId]);
+      if (!event) throw new ApiError(404, 'El evento no existe.');
+      const { name, cityId, id: eventId } = event;
       const [[duplicate]] = await connection.execute(`SELECT id_puesto FROM puesto
         WHERE nombre = ? AND id_ciudad = ? AND id_evento <=> ? LIMIT 1`,
-      [input.name, cityId, eventId]);
+      [name, cityId, eventId]);
       if (duplicate) throw new ApiError(409, 'El puesto ya existe. Si está inactivo, reactivalo.');
       const [result] = await connection.execute(`INSERT INTO puesto (nombre, id_ciudad, id_evento)
-        VALUES (?, ?, ?)`, [input.name, cityId, eventId]);
+        VALUES (?, ?, ?)`, [name, cityId, eventId]);
       return { id: String(result.insertId), active: true };
     });
   },
