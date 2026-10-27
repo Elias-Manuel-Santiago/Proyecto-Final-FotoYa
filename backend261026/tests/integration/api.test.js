@@ -1,0 +1,1082 @@
+/**
+ * @file
+ * Recorre la API con MySQL temporal al habilitar TEST_DB_PORT. Simula Storage, correo e
+ * identidad y elimina sólo su base aleatoria.
+ */
+import { after, before, test, mock } from 'node:test';
+import assert from 'node:assert/strict';
+import mysql from 'mysql2/promise';
+import axios from 'axios';
+import { randomBytes, randomUUID, createCipheriv } from 'node:crypto';
+import { migrate } from '../../scripts/migrate.js';
+import { hashPassword, verifyPassword, newToken } from '../../src/security/crypto.js';
+import { env as fixture } from '../fixtures.js';
+import { ApiError } from '../../src/shared/errors.js';
+import { eventCache } from '../../src/modules/sales/sales.events.js';
+
+// Crea y elimina exclusivamente una base nueva con nombre aleatorio; nunca usa DB_NAME.
+const enabled = process.env.TEST_DB_PORT, integration = (name, fn) => test(name, { skip: !enabled }, fn);
+const database = `foto_ya_test_${randomBytes(6).toString('hex')}`;
+const env = { ...fixture, DB_NAME: database, DB_PORT: Number(enabled ?? 33307), DB_HOST: process.env.TEST_DB_HOST ?? '127.0.0.1',
+  DB_USER: process.env.TEST_DB_USER ?? 'root', DB_PASSWORD: process.env.TEST_DB_PASSWORD ?? '' };
+let admin, db, server, http, passwordHash, authRepository, photoUploads, businessDate;
+const users = {}, tokens = {};
+const kioskTokens = {};
+const kioskCall = (stationId, open) => http.post('/api/attendance/kiosk/event/set', { open }, {
+  headers: { Authorization: `Bearer ${kioskTokens[stationId]}` },
+});
+const objects = new Map(), storageCalls = { uploads: 0 };
+let failureMode = null;
+let removalFailure = false;
+const verificationMail = [];
+const recoveryMail = [];
+let mailFailure = false;
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=', 'base64');
+const storage = {
+  signedUrl: async file => ({ url: `https://private.example/${file}`, expiresIn: 60 }),
+  remove: async file => { if (removalFailure) throw new Error('cleanup failure'); objects.delete(file); },
+  upload: async (file, bytes) => {
+    storageCalls.uploads++;
+    if (failureMode === 'before') throw new ApiError(502, 'Fallo de prueba de Storage.');
+    objects.set(file, bytes);
+    if (failureMode === 'after') throw new ApiError(502, 'Timeout simulado tras almacenar el archivo.');
+  },
+};
+const period = { from: '2026-10-14', to: '2026-10-14' };
+const call = (path, input = {}, role = 'dueno') => http.post(`/api/${path}`, input, {
+  headers: tokens[role] ? { Authorization: `Bearer ${tokens[role]}` } : {},
+});
+const upload = (clientId, overrides = {}) => {
+  const form = new FormData();
+  form.set('stationId', overrides.stationId ?? '1');
+  if (clientId !== undefined) form.set('clientId', clientId);
+  form.set('photo', new Blob([overrides.bytes ?? png], { type: 'image/png' }), 'photo.png');
+  return call('photos/upload', form, overrides.role ?? 'encargado');
+};
+
+before(async () => {
+  if (!enabled) return;
+  admin = await mysql.createConnection({ host: env.DB_HOST, port: env.DB_PORT, user: env.DB_USER, password: env.DB_PASSWORD });
+  await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+  const { env: runtimeEnv } = await import('../../src/config/env.js');
+  Object.assign(runtimeEnv, env);
+  ({ db } = await import('../../src/config/database.js'));
+  // La suite supera el cupo de un minuto: conservar el middleware sin limitar los casos funcionales.
+  const { rateLimit: realRateLimit } = await import('express-rate-limit');
+  mock.module('express-rate-limit', { namedExports: { rateLimit: options => realRateLimit({ ...options, limit: 10000 }) } });
+  mock.module('../../src/integrations/storage.js', { namedExports: {
+    uploadFile: storage.upload, removeFile: storage.remove, signedUrl: storage.signedUrl, signedPreviewUrl: storage.signedUrl,
+  } });
+  mock.module('../../src/integrations/mail.js', { namedExports: { sendVerification: async (email, code) => {
+    if (mailFailure) throw new ApiError(502, 'Correo no disponible.', 'MAIL_UNAVAILABLE');
+    verificationMail.push({ email, code });
+  }, sendPasswordReset: async (email, code) => {
+    if (mailFailure) throw new ApiError(502, 'Correo no disponible.', 'MAIL_UNAVAILABLE');
+    recoveryMail.push({ email, code });
+  } } });
+  mock.module('../../src/integrations/auth0.js', { namedExports: { socialIdentity: async idToken => ({
+    emailVerified: true, subject: `google-oauth2|${idToken}`, email: idToken === 'owner' ? 'dueno@example.com' : `${idToken}@social.example.com`,
+  }) } });
+  ({ authRepository } = await import('../../src/modules/auth/auth.repository.js'));
+  ({ photoUploads, businessDate } = await import('../../src/modules/photos/photos.upload.js'));
+  passwordHash = await hashPassword('Test-password-1234');
+  await migrate(db, env, { init: true });
+  await db.query("INSERT INTO ciudad (nombre) VALUES ('Ciudad')");
+  await db.query("INSERT INTO puesto (nombre, id_ciudad) VALUES ('Uno',1),('Dos',1),('Sin registros',1)");
+  for (const [key, role, station] of [['dueno', 'dueno', null], ['encargado', 'encargado', '1'], ['otroEncargado', 'encargado', '2'],
+    ['secretario', 'secretario', null], ['vendedor', 'vendedor', '1'], ['editor', 'editor', '1'], ['camarografo', 'camarografo', '1'], ['cliente', 'cliente', null], ['otroCliente', 'cliente', null]]) {
+    const [[r]] = await db.execute('SELECT id_rol FROM rol WHERE nombre = ?', [role]);
+    const dni = String(10000000 + Object.keys(users).length), email = `${key.toLowerCase()}@example.com`;
+    const [result] = await db.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, password, id_rol, id_puesto)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`, [key, 'Apellido', email, dni, passwordHash, r.id_rol, station]);
+    users[key] = String(result.insertId); tokens[key] = newToken();
+    await db.execute('INSERT INTO sesiones_usuario (id_usuario, token, expires_at) VALUES (?, ?, TIMESTAMPADD(HOUR, 2, UTC_TIMESTAMP(6)))', [users[key], tokens[key]]);
+  }
+  for (const [station, account] of [['1', 'encargado'], ['2', 'otroEncargado']]) {
+    kioskTokens[station] = newToken();
+    await db.execute('INSERT INTO sesiones_usuario(id_usuario,token,check_in_mode,expires_at) VALUES (?,?,TRUE,TIMESTAMPADD(HOUR,2,UTC_TIMESTAMP(6)))', [users[account], kioskTokens[station]]);
+  }
+  await db.query("INSERT INTO dias (fecha, fotos, descartes, id_puesto) VALUES ('2026-10-14',100,30,1),('2026-10-14',10,0,2)");
+  await db.execute("INSERT INTO fotos (id_archivo, id_dia, id_cliente, id_puesto) VALUES ('1/photo.jpg',1,?,1),('1/other.jpg',1,?,1)", [users.cliente, users.otroCliente]);
+  await db.query("INSERT INTO precios (nombre, monto, id_puesto) VALUES ('Inicial',20,1),('Otra',25,1)");
+  await db.query('INSERT INTO venta (cantidad, precio_total, id_dias) VALUES (50,1000,1),(20,500,1),(10,200,2)');
+  await db.query('INSERT INTO precios_venta (id_venta,id_precio,precio_unitario_aplicado,cantidad) VALUES (1,1,20,30),(1,1,20,20),(2,2,25,20),(3,1,20,10)');
+  await db.query('INSERT INTO fotos_venta (id_foto,id_venta) VALUES (1,1),(2,1)');
+  await db.execute("INSERT INTO horarios (id_dias,id_usuario,check_in,check_out) VALUES (1,?,'2026-10-14 23:00:00','2026-10-15 01:00:00')", [users.vendedor]);
+  for (const role of ['secretario', 'vendedor', 'editor', 'camarografo'])
+    await db.execute("INSERT INTO horarios (id_dias,id_usuario,check_in) VALUES (1,?,'2026-10-14 12:00:00')", [users[role]]);
+  const { createApp } = await import('../../src/app.js');
+  const app = createApp();
+  server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
+  http = axios.create({ baseURL: `http://127.0.0.1:${server.address().port}`, validateStatus: () => true, timeout: 10000, proxy: false });
+});
+after(async () => {
+  if (server) await new Promise(resolve => server.close(resolve));
+  if (db) await db.end();
+  if (admin) { await admin.query(`DROP DATABASE IF EXISTS \`${database}\``); await admin.end(); }
+});
+
+integration('Camarógrafo consulta ventas pero no vende, carga ni asigna fotos', async () => {
+  assert.equal((await call('sales/query', period, 'camarografo')).status, 200);
+  assert.equal((await call('attendance/mine', period, 'camarografo')).status, 200);
+  for (const path of ['sales/create', 'sales/event', 'sales/photos', 'sales/photos/access', 'sales/photos/assign', 'photos/assign'])
+    assert.equal((await call(path, {}, 'camarografo')).status, 403, path);
+  assert.equal((await upload(undefined, { role: 'camarografo' })).status, 403);
+  const catalog = (await call('catalog/query', { resource: 'roles' }, 'encargado')).data.data;
+  for (const name of ['editor', 'camarografo', 'vendedor']) assert(catalog.some(role => role.name === name));
+});
+
+integration('la apertura no requiere tabla y la migración retira event_sales de bases anteriores', async () => {
+  const tables = async () => (await db.query("SHOW TABLES LIKE 'event_sales'"))[0];
+  assert.equal((await tables()).length, 0);
+  await db.query(`CREATE TABLE event_sales (
+    id_puesto BIGINT UNSIGNED PRIMARY KEY, id_dia BIGINT UNSIGNED NOT NULL,
+    abierta BOOLEAN NOT NULL DEFAULT FALSE,
+    FOREIGN KEY (id_puesto) REFERENCES puesto(id_puesto),
+    FOREIGN KEY (id_dia, id_puesto) REFERENCES dias(id_dias, id_puesto)
+  ) ENGINE=InnoDB`);
+  await db.query('INSERT INTO event_sales VALUES (1,1,1)');
+  await migrate(db, env);
+  assert.equal((await tables()).length, 0);
+  assert.equal((await call('sales/event', { stationId: '1' }, 'vendedor')).data.data.open, false);
+});
+
+integration('API: POST, autenticación, CORS y validación', async () => {
+  assert.equal((await http.post('/api/health')).status, 200);
+  assert.equal((await http.get('/api/health')).status, 405);
+  assert.equal((await http.post('/api/users/query', {})).status, 401);
+  assert.equal((await http.post('/api/health', {}, { headers: { Origin: 'https://hostile.example' } })).status, 403);
+  assert.equal((await call('reports/query', { ...period, stationId: '1 OR 1=1' })).status, 422);
+  assert.equal((await call('reports/query', { ...period, actorId: users.dueno })).status, 422);
+});
+integration('check-in: una sesión de trabajo y una de kiosco, activación concurrente y cierre aislado', async () => {
+  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre = 'vendedor'");
+  const ids = [];
+  for (const [name, station, active] of [['kioskEmployee', '1', true], ['kioskOther', '2', true], ['kioskInactive', '1', false]]) {
+    const [result] = await db.execute(`INSERT INTO usuarios (nombre,apellido,email,dni,password,id_rol,id_puesto,disponible)
+      VALUES (?,'Prueba',?,?,?,?,?,?)`, [name, `${name.toLowerCase()}@example.com`, String(70000000 + ids.length), passwordHash, role.id_rol, station, active]);
+    ids.push(String(result.insertId));
+  }
+  const employee = ids[0], credentials = { email: 'kioskemployee@example.com', password: 'Test-password-1234' };
+  const managerCredentials = { email: 'kioskmanager@example.com', password: 'Manager-password-1234' };
+  const [[managerRole]] = await db.query("SELECT id_rol FROM rol WHERE nombre = 'encargado'");
+  const [manager] = await db.execute(`INSERT INTO usuarios(nombre,apellido,email,dni,password,id_rol,id_puesto)
+    VALUES ('Encargado','Kiosco',?,'71000000',?,?,'1')`,
+    [managerCredentials.email, await hashPassword(managerCredentials.password), managerRole.id_rol]);
+  const managerId = String(manager.insertId);
+  const request = token => (path, input = {}) => http.post(`/api/${path}`, input, { headers: { Authorization: `Bearer ${token}` } });
+  const deviceToken = (await call('auth/login', credentials)).data.data.token;
+  const device = request(deviceToken);
+  assert.equal((await device('sales/query', period)).data.error.code, 'CHECK_IN_REQUIRED');
+  for (const name of ['dueno', 'secretario', 'vendedor', 'editor', 'camarografo', 'cliente'])
+    assert.equal((await call('attendance/kiosk/enter', {}, name)).status, 403);
+  assert.equal((await call('attendance/kiosk/employees', {}, 'encargado')).status, 403);
+  for (const path of ['users/check-in/create', 'users/check-in/update', 'users/check-in/password'])
+    assert.equal((await call(path, {})).status, 404);
+  const [columns] = await db.query("SHOW COLUMNS FROM usuarios LIKE 'checkin_password'");
+  assert.equal(columns.length, 0);
+
+  const firstToken = (await call('auth/login', managerCredentials)).data.data.token;
+  // Simula dos sesiones anteriores al despliegue intentando reservar el único kiosco.
+  const secondToken = newToken();
+  await db.execute('INSERT INTO sesiones_usuario(id_usuario,token,expires_at) VALUES (?,?,TIMESTAMPADD(HOUR,2,UTC_TIMESTAMP(6)))', [managerId, secondToken]);
+  // Un kiosco vencido no debe impedir una nueva activación.
+  await db.execute(`INSERT INTO sesiones_usuario(id_usuario,token,check_in_mode,created_at,expires_at)
+    VALUES (?,?,TRUE,TIMESTAMPADD(HOUR,-2,UTC_TIMESTAMP(6)),TIMESTAMPADD(HOUR,-1,UTC_TIMESTAMP(6)))`, [managerId, newToken()]);
+  const candidates = [request(firstToken), request(secondToken)];
+  const activation = await Promise.all(candidates.map(candidate => candidate('attendance/kiosk/enter')));
+  assert.deepEqual(activation.map(result => result.status).sort(), [200, 409]);
+  const winner = activation.findIndex(result => result.status === 200), kiosk = candidates[winner], previousNormal = candidates[1 - winner];
+  assert.equal((await previousNormal('attendance/kiosk/enter')).data.error.code, 'CHECK_IN_ACTIVE');
+  assert.equal((await kiosk('auth/me')).data.data.kioskMode, true);
+  assert.equal((await previousNormal('auth/me')).data.data.kioskMode, false);
+  assert.equal((await previousNormal('auth/me')).data.data.checkInActive, true);
+  assert.equal((await call('auth/me', {}, 'otroEncargado')).data.data.kioskMode, false);
+
+  let normal = request((await call('auth/login', managerCredentials)).data.data.token);
+  assert.equal((await previousNormal('auth/me')).status, 401);
+  assert.equal((await normal('auth/me')).status, 200);
+  assert.equal((await kiosk('auth/me')).status, 200);
+  assert.equal((await normal('auth/logout')).status, 200);
+  assert.equal((await kiosk('auth/me')).status, 200);
+  normal = request((await call('auth/login', managerCredentials)).data.data.token);
+  await migrate(db, env);
+  assert.equal((await kiosk('auth/me')).data.data.kioskMode, true);
+  const [pendingBefore] = await db.query('SELECT id_horario FROM horarios WHERE closed_at IS NULL AND check_out IS NULL');
+  const [otherShift] = await db.execute('INSERT INTO horarios(id_dias,id_usuario,check_in) VALUES(2,?,UTC_TIMESTAMP(6))', [ids[1]]);
+  try {
+    for (const path of ['users/query', 'sales/query', 'auth/logout', 'auth/sessions/query', 'auth/sessions/revoke', 'auth/password/change',
+      'attendance/kiosk/enter', 'attendance/kiosk/assign', 'attendance/kiosk/stations'])
+      assert.equal((await kiosk(path)).data.error.code, 'KIOSK_LOCKED');
+    const roster = (await kiosk('attendance/kiosk/employees')).data.data;
+    assert(roster.some(row => row.id === employee)); assert(!roster.some(row => ids.slice(1).includes(row.id)));
+    assert(roster.every(row => row.email === undefined && row.password === undefined));
+    const mark = { ...credentials, userId: employee, action: 'check-in', attendanceId: null };
+    assert.equal((await kiosk('attendance/kiosk/event')).data.data.open, false);
+    assert.equal((await normal('attendance/kiosk/event/set', { open: true })).status, 403);
+    assert.equal((await normal('sales/event/set', { stationId: '1', open: true })).status, 404);
+    assert.equal((await kiosk('attendance/kiosk/event/set', { stationId: '2', open: true })).status, 422);
+    assert.equal((await kiosk('attendance/kiosk/mark', mark)).data.error.code, 'EVENT_CLOSED');
+    assert.equal((await kiosk('attendance/kiosk/event/set', { open: true })).status, 200);
+    assert.equal((await call('sales/event', { stationId: '1' }, 'encargado')).data.data.open, true);
+    assert.equal((await call('sales/event', { stationId: '2' }, 'otroEncargado')).data.data.open, false);
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, password: 'incorrecta' })).status, 401);
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, email: 'vendedor@example.com' })).status, 401);
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, userId: ids[1], email: 'kioskother@example.com' })).status, 401);
+    const results = await Promise.all([kiosk('attendance/kiosk/mark', mark), kiosk('attendance/kiosk/mark', mark)]);
+    assert.deepEqual(results.map(result => result.status).sort(), [200, 409]);
+    assert.equal((await device('sales/query', period)).status, 200);
+    assert.equal((await kiosk('auth/me')).data.data.id, managerId);
+    assert.equal((await normal('users/query')).status, 200);
+    const current = (await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee);
+    assert.equal((await kiosk('attendance/kiosk/event/set', { open: false })).status, 200);
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).data.error.code, 'EVENT_CLOSED');
+    assert.equal((await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee).working, false);
+    assert.equal((await device('auth/me')).data.data.working, false);
+    const [[missed]] = await db.execute('SELECT check_in, check_out, closed_at FROM horarios WHERE id_horario = ?', [current.attendanceId]);
+    assert(missed.check_in); assert.equal(missed.check_out, null); assert(missed.closed_at);
+    const [[other]] = await db.execute('SELECT check_out, closed_at FROM horarios WHERE id_horario = ?', [String(otherShift.insertId)]);
+    assert.equal(other.check_out, null); assert.equal(other.closed_at, null, 'el cierre respeta los turnos de otro puesto');
+    const historyPeriod = { from: businessDate(), to: businessDate() };
+    const missedHistory = (await call('attendance/query', { ...historyPeriod, userId: employee })).data.data.find(row => row.id === current.attendanceId);
+    assert.equal(missedHistory.checkOut, null); assert.equal(missedHistory.closedAt, missed.closed_at);
+    assert.equal(missedHistory.durationSeconds, null);
+    // Cerrar de nuevo conserva la primera marca de cierre y no inventa una salida.
+    assert.equal((await kiosk('attendance/kiosk/event/set', { open: false })).status, 200);
+    const [[repeated]] = await db.execute('SELECT check_out, closed_at FROM horarios WHERE id_horario = ?', [current.attendanceId]);
+    assert.equal(repeated.closed_at, missed.closed_at); assert.equal(repeated.check_out, null);
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, userId: ids[2], email: 'kioskinactive@example.com' })).data.error.code, 'EVENT_CLOSED');
+    // Reabrir permite una jornada nueva; el cambio de día no bloquea las marcaciones.
+    assert.equal((await kiosk('attendance/kiosk/event/set', { open: true })).status, 200);
+    const event = eventCache.get('1');
+    eventCache.set('1', { ...event, open: true, date: '2000-01-01' });
+    const overnightEvent = (await kiosk('attendance/kiosk/event')).data.data;
+    assert.equal(overnightEvent.open, false); assert.equal(overnightEvent.attendanceOpen, true);
+    assert.equal((await kiosk('attendance/kiosk/mark', mark)).status, 200);
+    const next = (await kiosk('attendance/kiosk/employees')).data.data.find(row => row.id === employee);
+    assert.notEqual(next.attendanceId, current.attendanceId);
+    await db.execute('UPDATE horarios SET id_dias = 1, check_in = TIMESTAMPADD(HOUR,-26,UTC_TIMESTAMP(6)) WHERE id_horario = ?', [next.attendanceId]);
+    // Una selección anterior al cierre tampoco puede completar la jornada archivada.
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: current.attendanceId })).data.error.code, 'ATTENDANCE_CHANGED');
+    assert.equal((await kiosk('attendance/kiosk/mark', { ...mark, action: 'check-out', attendanceId: next.attendanceId })).status, 200);
+    assert.equal((await device('sales/query', period)).status, 403);
+    const [[closed]] = await db.execute('SELECT id_dias, check_out FROM horarios WHERE id_horario = ?', [next.attendanceId]);
+    assert.equal(closed.id_dias, '1'); assert(closed.check_out);
+    assert.equal((await kiosk('attendance/kiosk/exit', { password: credentials.password })).status, 401);
+    assert.equal((await kiosk('auth/me')).status, 200);
+    assert.equal((await kiosk('attendance/kiosk/exit', { password: managerCredentials.password })).status, 200);
+    assert.equal((await kiosk('auth/me')).status, 401);
+    assert.equal((await normal('auth/me')).data.data.checkInActive, false);
+    assert.equal((await normal('users/query')).status, 200);
+    // La reserva se libera al cerrar y el dispositivo normal puede convertirse en el próximo kiosco.
+    assert.equal((await normal('attendance/kiosk/enter')).status, 200);
+    const nextKiosk = normal;
+    normal = request((await call('auth/login', managerCredentials)).data.data.token);
+    // Token perdido: el login normal conserva el kiosco; recuperarlo exige contraseña.
+    assert.equal((await normal('attendance/kiosk/recover', { password: 'wrong' })).status, 401);
+    assert.equal((await nextKiosk('auth/me')).status, 200);
+    const [historyBeforeRecovery] = await db.execute('SELECT * FROM horarios WHERE id_usuario = ?', [employee]);
+    const eventBeforeRecovery = { ...eventCache.get('1') };
+    assert.equal((await normal('attendance/kiosk/recover', { password: managerCredentials.password })).status, 200);
+    assert.equal((await nextKiosk('auth/me')).status, 401);
+    assert.equal((await normal('auth/me')).data.data.kioskMode, true);
+    assert.equal((await normal('users/query')).data.error.code, 'KIOSK_LOCKED');
+    const [historyAfterRecovery] = await db.execute('SELECT * FROM horarios WHERE id_usuario = ?', [employee]);
+    assert.deepEqual(historyAfterRecovery, historyBeforeRecovery);
+    assert.deepEqual(eventCache.get('1'), eventBeforeRecovery);
+    assert.equal((await http.post('/api/auth/me', {}, { headers: { Authorization: `Bearer ${kioskTokens['1']}` } })).status, 200);
+    const recoveredKiosk = normal;
+    normal = request((await call('auth/login', managerCredentials)).data.data.token);
+    const newPassword = 'Changed-manager-password-1234';
+    assert.equal((await normal('auth/password/change', { currentPassword: managerCredentials.password, password: newPassword })).status, 200);
+    assert.equal((await nextKiosk('auth/me')).status, 401);
+    assert.equal((await recoveredKiosk('auth/me')).status, 401);
+    assert.equal((await normal('auth/me')).status, 401);
+    assert.equal((await call('auth/login', { ...managerCredentials, password: newPassword })).status, 200);
+  } finally {
+    const event = eventCache.get('1');
+    if (event) eventCache.set('1', { ...event, open: false });
+    await db.execute('DELETE FROM horarios WHERE id_usuario = ?', [employee]);
+    await db.execute('DELETE FROM horarios WHERE id_horario = ?', [String(otherShift.insertId)]);
+    for (const row of pendingBefore) await db.execute('UPDATE horarios SET closed_at = NULL WHERE id_horario = ?', [row.id_horario]);
+  }
+});
+
+integration('el retiro de cuentas dedicadas conserva datos heredados sin exponer contraseñas', async () => {
+  await db.query("INSERT IGNORE INTO rol(nombre) VALUES ('checkin')");
+  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre = 'checkin'");
+  await db.query('ALTER TABLE usuarios ADD COLUMN checkin_password TEXT NULL');
+  const [legacy] = await db.execute(`INSERT INTO usuarios(nombre,apellido,email,dni,password,id_rol,id_puesto,checkin_password)
+    VALUES ('Check-in','','legacy-kiosk@example.com',NULL,?,?,1,'legacy-encrypted-copy')`, [passwordHash, role.id_rol]);
+  const legacyId = String(legacy.insertId), token = newToken();
+  await db.execute('INSERT INTO sesiones_usuario(id_usuario,token,expires_at) VALUES (?,?,TIMESTAMPADD(HOUR,2,UTC_TIMESTAMP(6)))', [legacyId, token]);
+  await migrate(db, env);
+  const [[row]] = await db.execute('SELECT disponible,checkin_password FROM usuarios WHERE id_usuario = ?', [legacyId]);
+  assert.equal(row.disponible, 1);
+  assert.equal(row.checkin_password, 'legacy-encrypted-copy');
+  assert.equal((await http.post('/api/auth/me', {}, { headers: { Authorization: `Bearer ${token}` } })).status, 401);
+  assert.equal((await call('auth/login', { email: 'legacy-kiosk@example.com', password: 'Test-password-1234' })).status, 403);
+  assert(!(await call('users/query')).data.data.some(user => user.id === legacyId));
+  assert(!(await call('catalog/query', { resource: 'roles' })).data.data.some(item => item.name === 'checkin'));
+  assert.equal((await call('users/detail', { userId: legacyId })).status, 404);
+});
+
+integration('puestos: alta, baja reversible, permisos e historial', async () => {
+  // Simula una instalación existente con su catálogo de permisos ya poblado.
+  await db.query('ALTER TABLE puesto DROP COLUMN disponible');
+  await db.query("DELETE pr FROM permisos_rol pr JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE p.tipo_de_permiso='stations.manage'");
+  await db.query("DELETE FROM permisos WHERE tipo_de_permiso='stations.manage'");
+  await migrate(db, env);
+  const [[existing]] = await db.query('SELECT MIN(disponible) AS active FROM puesto');
+  assert.equal(Number(existing.active), 1);
+  const [[city]] = await db.query("SELECT id_ciudad AS id FROM ciudad WHERE nombre='Ciudad'");
+  const event = await call('catalog/events/save', { name: 'Nuevo evento', cityId: String(city.id), stationIds: [] });
+  assert.equal(event.status, 200);
+  const input = { name: '  Entrada principal  ', eventId: event.data.data.id };
+  for (const role of ['encargado', 'secretario', 'vendedor', 'editor', 'camarografo', 'cliente']) {
+    assert.equal((await call('catalog/stations/create', input, role)).status, 403);
+    assert.equal((await call('catalog/stations/availability', { stationId: '1', active: false }, role)).status, 403);
+  }
+  assert.equal((await call('catalog/stations/create', { ...input, name: ' ' })).status, 422);
+  assert.equal((await call('catalog/stations/create', { eventId: input.eventId })).status, 422);
+  assert.equal((await call('catalog/stations/create', { ...input, name: 'x'.repeat(151) })).status, 422);
+  assert.equal((await call('catalog/stations/create', { name: 'Entrada', eventId: '999999' })).status, 404);
+  assert.equal((await call('catalog/stations/create', { name: 'Libre', city: 'Libre', event: 'Libre' })).status, 422);
+  const created = await call('catalog/stations/create', input);
+  assert.equal(created.status, 200); const id = created.data.data.id;
+  const [[saved]] = await db.execute('SELECT nombre, id_ciudad, id_evento FROM puesto WHERE id_puesto=?', [id]);
+  assert.equal(saved.nombre, 'Entrada principal');
+  assert.equal(String(saved.id_ciudad), String(city.id));
+  assert.equal(String(saved.id_evento), input.eventId);
+  assert.equal((await call('catalog/stations/create', input)).status, 409);
+  const [[cityCount]] = await db.query("SELECT COUNT(*) AS count FROM ciudad WHERE nombre='Ciudad'");
+  assert.equal(Number(cityCount.count), 1);
+  assert.equal((await call('catalog/stations/availability', { stationId: id, active: false })).status, 200);
+  await migrate(db, env);
+  const [[inactive]] = await db.execute('SELECT disponible AS active FROM puesto WHERE id_puesto=?', [id]);
+  assert.equal(Number(inactive.active), 0);
+  assert.equal((await call('catalog/stations/create', input)).status, 409);
+  assert.equal((await call('catalog/stations/availability', { stationId: id, active: true })).status, 200);
+  assert.equal((await call('catalog/stations/availability', { stationId: '999999', active: false })).status, 404);
+  const [[before]] = await db.query('SELECT COUNT(*) AS count FROM fotos WHERE id_puesto=1');
+  assert.equal((await call('catalog/stations/availability', { stationId: '1', active: false })).status, 200);
+  const uploads = storageCalls.uploads;
+  assert.equal((await upload()).status, 409);
+  assert.equal(storageCalls.uploads, uploads);
+  const catalog = await call('catalog/query', { resource: 'stations' });
+  assert.equal(Number(catalog.data.data.find(row => String(row.id) === '1').active), 0);
+  assert.equal((await call('reports/query', period)).status, 200);
+  const [[after]] = await db.query('SELECT COUNT(*) AS count FROM fotos WHERE id_puesto=1');
+  assert.equal(after.count, before.count);
+  const [[sellerRole]] = await db.query("SELECT id_rol AS id FROM rol WHERE nombre='vendedor'");
+  assert.equal((await call('users/create', { firstName: 'Nuevo', lastName: 'Empleado', email: 'inactive-station@example.com', dni: '48555999', password: 'Test-password-1234', roleId: String(sellerRole.id), stationId: '1' })).status, 422);
+  assert.equal((await call('catalog/stations/availability', { stationId: '1', active: true })).status, 200);
+  const uploaded = await upload();
+  assert.equal(uploaded.status, 200);
+  // Dejar las cantidades iniciales intactas para las comprobaciones de informes.
+  const [[photo]] = await db.execute('SELECT id_fotos,id_archivo FROM fotos WHERE id_fotos=?', [uploaded.data.data.id]);
+  await db.execute('DELETE FROM fotos WHERE id_fotos=?', [photo.id_fotos]);
+  objects.delete(photo.id_archivo);
+  await db.execute('DELETE FROM dias WHERE fecha=? AND id_puesto=1 AND fecha<>?', [businessDate(new Date()), period.from]);
+  await db.execute('DELETE FROM puesto WHERE id_puesto=?', [id]);
+});
+
+integration('ciudades y eventos independientes, edición de asociaciones y restricciones de borrado', async () => {
+  const first = await call('catalog/cities/save', { name: 'Ciudad gestión A' });
+  const second = await call('catalog/cities/save', { name: 'Ciudad gestión B' });
+  assert.equal(first.status, 200); assert.equal(second.status, 200);
+  const cityId = first.data.data.id, otherCityId = second.data.data.id;
+  const created = await call('catalog/events/save', { name: 'Evento gestión', directions: 'Calle 123', cityId, stationIds: [] });
+  assert.equal(created.status, 200);
+  const eventId = created.data.data.id;
+  assert((await call('catalog/query', { resource: 'events' })).data.data.some(row => String(row.id) === eventId));
+  assert.equal((await call('catalog/locations/delete', { kind: 'city', id: cityId })).status, 409);
+  assert.equal((await call('catalog/events/save', { name: 'Sin ciudad', stationIds: [] })).status, 422);
+  assert.equal((await call('catalog/cities/save', { name: 'Prohibida' }, 'secretario')).status, 403);
+  const station = await call('catalog/stations/create', { name: 'Puesto gestión', city: 'Ciudad gestión A', event: 'Evento gestión' });
+  assert.equal(station.status, 200);
+  const stationId = station.data.data.id;
+  assert.equal((await call('catalog/stations/availability', { stationId, active: false })).status, 200);
+  assert.equal((await call('catalog/locations/delete', { kind: 'event', id: eventId })).status, 409);
+  assert.equal((await call('catalog/events/save', { id: eventId, name: 'Evento modificado', directions: 'Calle 456', cityId: otherCityId, stationIds: [stationId] })).status, 200);
+  const eventRows = await call('catalog/query', { resource: 'events' });
+  assert.equal(eventRows.data.data.find(row => String(row.id) === eventId).directions, 'Calle 456');
+  const [[moved]] = await db.execute('SELECT id_ciudad, id_evento FROM puesto WHERE id_puesto=?', [stationId]);
+  assert.equal(String(moved.id_ciudad), otherCityId); assert.equal(String(moved.id_evento), eventId);
+  await assert.rejects(db.execute('UPDATE puesto SET id_ciudad=? WHERE id_puesto=?', [cityId, stationId]), { code: 'ER_NO_REFERENCED_ROW_2' });
+  assert.equal((await call('catalog/cities/save', { id: cityId, name: 'Ciudad renombrada', eventCities: [{ eventId, cityId }] })).status, 200);
+  const [[cascade]] = await db.execute('SELECT id_ciudad FROM puesto WHERE id_puesto=?', [stationId]);
+  assert.equal(String(cascade.id_ciudad), cityId);
+  assert.equal((await call('catalog/stations/update', { stationId, name: 'Puesto modificado', cityId: otherCityId, eventId: null, employeeStations: [] })).status, 200);
+  assert.equal((await call('catalog/locations/delete', { kind: 'event', id: eventId })).status, 200);
+  assert.equal((await call('catalog/locations/delete', { kind: 'city', id: cityId })).status, 200);
+  await db.execute('DELETE FROM puesto WHERE id_puesto=?', [stationId]);
+  assert.equal((await call('catalog/locations/delete', { kind: 'city', id: otherCityId })).status, 200);
+});
+
+integration('login real guarda el token de sesión sin hash y rechaza contraseñas erróneas', async () => {
+  const response = await call('auth/login', { email: 'dueno@example.com', password: 'Test-password-1234' });
+  assert.equal(response.status, 200); const token = response.data.data.token;
+  const [[session]] = await db.execute('SELECT token FROM sesiones_usuario WHERE token = ?', [token]);
+  assert(session); assert.equal(session.token, token);
+  assert.equal((await call('auth/login', { email: 'dueno@example.com', password: 'wrong' })).status, 401);
+  assert.equal((await call('auth/login', { email: 'nobody@example.com', password: 'wrong' })).status, 401);
+});
+integration('permisos frescos, secretario sin escritura y encargado sin acceso a otro puesto', async () => {
+  assert.equal((await call('reports/graphics/query', period, 'secretario')).status, 200);
+  assert.equal((await call('reports/graphics/query', period, 'vendedor')).status, 403);
+  assert.equal((await call('reports/graphics/query', period, 'anon')).status, 401);
+  assert.equal((await call('reports/query', period, 'secretario')).status, 200);
+  assert.equal((await call('users/availability', { userId: users.vendedor, active: false }, 'secretario')).status, 403);
+  assert.equal((await call('reports/query', { ...period, stationId: '2' }, 'encargado')).status, 403);
+  assert.equal((await call('users/detail', { userId: users.otroEncargado }, 'encargado')).status, 404);
+  await db.query("DELETE pr FROM permisos_rol pr JOIN rol r ON r.id_rol=pr.id_rol JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE r.nombre='secretario' AND p.tipo_de_permiso='reports.read'");
+  assert.equal((await call('reports/query', period, 'secretario')).status, 403);
+  assert.equal((await call('reports/graphics/query', period, 'secretario')).status, 403);
+  await db.query("INSERT INTO permisos_rol (id_rol,id_permiso) SELECT r.id_rol,p.id_permisos FROM rol r CROSS JOIN permisos p WHERE r.nombre='secretario' AND p.tipo_de_permiso='reports.read'");
+});
+integration('cliente aislado por propietario, incluso en acceso directo', async () => {
+  const response = await call('photos/query', period, 'cliente');
+  assert.equal(response.status, 200); assert.equal(response.data.data.length, 1);
+  assert.equal(response.data.data[0].clientId, users.cliente); assert.equal(response.data.data[0].file, undefined);
+  assert.equal((await call('photos/access', { photoId: '2' }, 'cliente')).status, 404);
+  assert.equal((await call('photos/detail', { photoId: '2' }, 'cliente')).status, 404);
+  assert.equal((await call('photos/access', { photoId: '1' }, 'cliente')).status, 200);
+  assert.equal((await call('users/query', {}, 'cliente')).status, 403);
+  assert.equal((await call('reports/query', period, 'cliente')).status, 403);
+  assert.equal((await call('photos/query', period, 'dueno')).status, 403);
+});
+
+integration('encargado consulta y gestiona únicamente usuarios, horarios y datos de su puesto', async () => {
+  const graphics = await call('reports/graphics/query', { ...period, day: period.from }, 'encargado');
+  assert.equal(graphics.status, 200);
+  for (const rows of Object.values(graphics.data.data)) assert(rows.every(row => row.stationId === '1'));
+  assert.equal((await call('reports/graphics/query', { ...period, stationId: '2' }, 'encargado')).status, 403);
+  for (const path of ['users/query', 'attendance/query', 'reports/query', 'reports/days/query', 'sales/query', 'photos/query']) {
+    const filters = path === 'users/query' ? {} : period;
+    const response = await call(path, filters, 'encargado');
+    assert.equal(response.status, 200, path);
+    assert(response.data.data.every(row => row.stationId === '1'), path);
+    assert.equal((await call(path, { ...filters, stationId: '2' }, 'encargado')).status, 403, path);
+  }
+  assert.equal((await call('users/availability', { userId: users.otroEncargado, active: false }, 'encargado')).status, 404);
+  assert.equal((await call('sales/detail', { saleId: '3' }, 'encargado')).status, 404);
+  assert.equal((await call('reports/summary', { ...period, stationId: '2' }, 'encargado')).status, 403);
+  assert.equal((await call('catalog/query', { resource: 'stations' }, 'encargado')).data.data.length, 1);
+  await db.execute("INSERT INTO horarios (id_dias,id_usuario,check_in,check_out) VALUES (1,?,'2026-10-14 10:00:00','2026-10-14 11:00:00'),(2,?,'2026-10-14 10:00:00','2026-10-14 11:00:00')", [users.encargado, users.encargado]);
+  try {
+    const mine = await call('attendance/mine', period, 'encargado');
+    assert.equal(mine.status, 200); assert.equal(mine.data.data.length, 1);
+    assert.equal(mine.data.data[0].stationId, '1');
+  } finally { await db.execute('DELETE FROM horarios WHERE id_usuario=?', [users.encargado]); }
+});
+integration('informes: 100 tomadas, 70 vendidas y 30 descartes sin multiplicar importes', async () => {
+  const response = await call('reports/query', period); assert.equal(response.status, 200);
+  const [first, second, empty] = response.data.data;
+  assert.equal(Number(first.taken), 100); assert.equal(Number(first.sold), 70);
+  assert.equal(Number(first.discarded), 30); assert.equal(Number(first.revenue), 1500); assert.equal(Number(first.percentage), 70);
+  assert.equal(Number(second.discarded), 0); assert.equal(empty.taken, null); assert.equal(Number(empty.sold), 0);
+  const partial = await call('reports/query', { from: '2026-10-14', to: '2026-10-15' });
+  assert.equal(partial.data.data[0].taken, null); assert.equal(partial.data.data[0].discarded, null);
+  const daily = await call('reports/days/query', period, 'vendedor');
+  assert.equal(daily.data.data.length, 1); assert.equal(Number(daily.data.data[0].discarded), 30);
+  const summary = await call('reports/summary', { ...period, limit: 1 });
+  assert.equal(summary.status, 200); assert.equal(Number(summary.data.data.sold), 80);
+  assert.equal(Number(summary.data.data.revenue), 1700); assert.equal(summary.data.data.taken, null);
+  const scoped = await call('reports/summary', period, 'encargado');
+  assert.equal(Number(scoped.data.data.percentage), 70);
+});
+integration('porcentaje global ponderado e inconsistencias que no se compensan entre días', async () => {
+  await db.query("INSERT INTO dias (fecha,fotos,descartes,id_puesto) VALUES ('2026-10-14',0,0,3)");
+  const summary = await call('reports/summary', period);
+  assert.equal(Number(summary.data.data.taken), 110); assert.equal(Number(summary.data.data.percentage), 72.73);
+  await db.query("INSERT INTO dias (fecha,fotos,descartes,id_puesto) VALUES ('2026-10-15',1,0,1)");
+  await db.query("INSERT INTO venta (cantidad,precio_total,id_dias) SELECT 2,10,id_dias FROM dias WHERE id_puesto=1 AND fecha='2026-10-15'");
+  const invalid = await call('reports/query', { from: '2026-10-14', to: '2026-10-15', stationId: '1' });
+  assert.equal(Number(invalid.data.data[0].invalidDays), 1); assert.equal(invalid.data.data[0].discarded, null);
+  await db.query("DELETE v FROM venta v JOIN dias d ON d.id_dias=v.id_dias WHERE d.fecha='2026-10-15'");
+  await db.query("DELETE FROM dias WHERE fecha='2026-10-15' OR id_puesto=3");
+});
+integration('ventas conserva tarifas históricas y separa las tablas intermedias', async () => {
+  await db.query('UPDATE precios SET monto=999 WHERE id_precios=1');
+  const response = await call('sales/detail', { saleId: '1' }, 'vendedor');
+  assert.equal(response.status, 200); assert.equal(Number(response.data.data.total), 1000);
+  assert.equal(response.data.data.prices.length, 2); assert.equal(response.data.data.photos.length, 2);
+  assert.equal(Number(response.data.data.prices[0].unitPrice), 20);
+  assert.equal((await call('sales/detail', { saleId: '3' }, 'vendedor')).status, 404);
+});
+integration('asistencia conserva puesto histórico y turno que cruza medianoche', async () => {
+  await db.execute('UPDATE usuarios SET id_puesto=2 WHERE id_usuario=?', [users.vendedor]);
+  try {
+    const response = await call('attendance/query', { ...period, userId: users.vendedor }, 'encargado');
+    assert.equal(response.status, 200); assert.equal(response.data.data.length, 2);
+    const closed = response.data.data.find(row => row.checkOut !== null);
+    assert.equal(closed.stationId, '1'); assert.equal(Number(closed.durationSeconds), 7200);
+    assert.equal((await call('attendance/query', period, 'otroEncargado')).data.data.length, 0);
+  } finally { await db.execute('UPDATE usuarios SET id_puesto=1 WHERE id_usuario=?', [users.vendedor]); }
+});
+integration('alta guarda datos sin cifrar, hashea contraseña y rechaza duplicados y escalamiento', async () => {
+  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='cliente'");
+  const input = { firstName: 'Cliente nuevo', lastName: 'Prueba', email: 'new@example.com', dni: '30444555', password: 'New-password-1234', roleId: String(role.id_rol), stationId: null };
+  const response = await call('users/create', input); assert.equal(response.status, 200);
+  const [[stored]] = await db.execute('SELECT nombre,email,dni,password FROM usuarios WHERE id_usuario=?', [response.data.data.id]);
+  assert.equal(stored.nombre, input.firstName); assert.equal(stored.email, input.email); assert.equal(stored.dni, input.dni); assert(stored.password.startsWith('scrypt$'));
+  assert.equal((await call('users/query', { email: input.email })).data.data.length, 1);
+  assert.equal((await call('users/create', input)).status, 409);
+  assert.equal((await call('users/create', { ...input, email: 'other@example.com', dni: '30444556' }, 'encargado')).status, 403);
+});
+integration('baja reversible invalida sesiones anteriores y preserva el identificador', async () => {
+  assert.equal((await call('users/availability', { userId: users.vendedor, active: false }, 'encargado')).status, 200);
+  assert.equal((await call('auth/me', {}, 'vendedor')).status, 401);
+  assert.equal((await call('users/availability', { userId: users.vendedor, active: true }, 'encargado')).status, 200);
+  assert.equal((await call('auth/me', {}, 'vendedor')).status, 401);
+  const detail = await call('users/detail', { userId: users.vendedor });
+  assert.equal(detail.data.data.id, users.vendedor); assert.equal(detail.data.data.active, true);
+});
+integration('operaciones inválidas y marcación fuera de la vista no escriben registros', async () => {
+  const [[before]] = await db.query('SELECT COUNT(*) AS count FROM venta');
+  assert.equal((await call('sales/create', {}, 'encargado')).status, 422);
+  assert.equal((await call('attendance/check-in', {}, 'encargado')).status, 403);
+  assert.equal((await call('photos/upload', {}, 'cliente')).status, 403);
+  const [[after]] = await db.query('SELECT COUNT(*) AS count FROM venta'); assert.equal(after.count, before.count);
+});
+integration('cargas concurrentes independientes cuentan cada foto y permiten asignación posterior', async () => {
+  const date = businessDate(new Date());
+  const [[before]] = await db.execute('SELECT COALESCE(SUM(fotos),0) AS taken FROM dias WHERE fecha=? AND id_puesto=1', [date]);
+  const initialCalls = storageCalls.uploads;
+  const [first, retry] = await Promise.all([upload(), upload()]);
+  assert.equal(first.status, 200); assert.equal(retry.status, 200);
+  const photo = first.data.data; assert.equal(photo.clientId, null); assert.equal(photo.date, date);
+  assert.notEqual(retry.data.data.id, photo.id); assert.equal(storageCalls.uploads - initialCalls, 2);
+  const query = { from: date, to: date, unassigned: true };
+  assert((await call('photos/query', query, 'encargado')).data.data.some(row => row.id === photo.id));
+  assert.equal((await call('photos/query', query, 'cliente')).status, 403);
+  assert.equal((await call('photos/detail', { photoId: photo.id }, 'cliente')).status, 404);
+  assert.equal((await call('photos/access', { photoId: photo.id }, 'cliente')).status, 404);
+  const assigned = await call('photos/assign', { photoId: photo.id, clientEmail: 'cliente@example.com' }, 'encargado');
+  assert.equal(assigned.status, 200); assert.equal(assigned.data.data.clientId, users.cliente);
+  assert.equal((await call('photos/assign', { photoId: photo.id, clientEmail: 'cliente@example.com' }, 'encargado')).status, 200);
+  assert.equal((await call('photos/assign', { photoId: photo.id, clientEmail: 'otroCliente@example.com' }, 'encargado')).status, 409);
+  assert.equal((await call('photos/access', { photoId: photo.id }, 'cliente')).status, 200);
+  assert.equal((await call('photos/access', { photoId: photo.id }, 'otroCliente')).status, 404);
+  const [[after]] = await db.execute('SELECT fotos,descartes FROM dias WHERE fecha=? AND id_puesto=1', [date]);
+  assert.equal(after.fotos, Number(before.taken) + 2); assert.equal(after.descartes, after.fotos);
+});
+integration('cliente durante carga y asignaciones concurrentes respetan permisos y puesto', async () => {
+  const initial = await upload(users.otroCliente); assert.equal(initial.status, 200);
+  assert.equal(initial.data.data.clientId, users.otroCliente);
+  assert.equal((await call('photos/access', { photoId: initial.data.data.id }, 'otroCliente')).status, 200);
+  const unassigned = await upload(); assert.equal(unassigned.status, 200);
+  const photoId = unassigned.data.data.id;
+  assert.equal((await call('photos/assign', { photoId, clientEmail: 'cliente@example.com' }, 'otroEncargado')).status, 403);
+  assert.equal((await call('photos/assign', { photoId, clientEmail: 'cliente@example.com' }, 'cliente')).status, 403);
+  assert.equal((await call('photos/assign', { photoId, clientEmail: 'vendedor@example.com' }, 'encargado')).status, 422);
+  const assignments = await Promise.all([
+    call('photos/assign', { photoId, clientEmail: 'cliente@example.com' }, 'encargado'),
+    call('photos/assign', { photoId, clientEmail: 'otroCliente@example.com' }, 'editor'),
+  ]);
+  assert.deepEqual(assignments.map(r => r.status).sort(), [200, 409]);
+});
+integration('carga valida cliente, puesto, formato real y límite de 6 MB antes de guardar', async () => {
+  const before = storageCalls.uploads;
+  assert.equal((await upload(users.vendedor)).status, 422);
+  assert.equal((await upload('999999999')).status, 422);
+  assert.equal((await upload(undefined, { stationId: '2' })).status, 403);
+  assert.equal((await upload(undefined, { role: 'cliente' })).status, 403);
+  assert.equal((await upload(undefined, { bytes: Buffer.from('<svg></svg>') })).status, 422);
+  assert.equal((await upload(undefined, { bytes: Buffer.alloc(6 * 1024 * 1024 + 1) })).status, 413);
+  await db.query("DELETE pr FROM permisos_rol pr JOIN rol r ON r.id_rol=pr.id_rol JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE r.nombre='encargado' AND p.tipo_de_permiso='photos.assign'");
+  try { assert.equal((await upload(users.cliente)).status, 403); }
+  finally { await db.query("INSERT INTO permisos_rol (id_rol,id_permiso) SELECT r.id_rol,p.id_permisos FROM rol r CROSS JOIN permisos p WHERE r.nombre='encargado' AND p.tipo_de_permiso='photos.assign'"); }
+  assert.equal(storageCalls.uploads, before);
+});
+integration('fallos de Storage retiran el archivo nuevo y no cambian fotos ni conteos', async () => {
+  const date = businessDate(new Date());
+  const [[before]] = await db.execute('SELECT fotos,descartes FROM dias WHERE fecha=? AND id_puesto=1', [date]);
+  const confirmed = [...objects.keys()];
+  for (const mode of ['before', 'after']) {
+    try { failureMode = mode; assert.equal((await upload()).status, 502); }
+    finally { failureMode = null; }
+    assert.deepEqual([...objects.keys()], confirmed);
+    const [[after]] = await db.execute('SELECT fotos,descartes FROM dias WHERE fecha=? AND id_puesto=1', [date]);
+    assert.deepEqual(after, before);
+  }
+});
+integration('fallo de metadatos limpia el archivo; una respuesta perdida de COMMIT preserva la foto confirmada', async () => {
+  const actor = await authRepository.actor(tokens.encargado);
+  const date = businessDate(new Date());
+  for (const fault of ['metadata', 'counts', 'cleanup', 'lookup', 'commit']) {
+    const input = { stationId: '1', clientId: null };
+    const initialObjects = new Set(objects.keys());
+    const [[before]] = await db.execute('SELECT fotos FROM dias WHERE fecha=? AND id_puesto=1', [date]);
+    const getConnection = db.getConnection.bind(db);
+    const faulty = { execute: (...args) => db.execute(...args), async getConnection() {
+      const connection = await getConnection();
+      return new Proxy(connection, { get(target, property) {
+        if (property === 'execute' && fault !== 'commit') return async (sql, values) => {
+          if (sql.startsWith(fault === 'counts' ? 'UPDATE dias SET' : 'INSERT INTO fotos')) throw new Error('metadata failure');
+          return target.execute(sql, values);
+        };
+        if (property === 'commit' && fault === 'commit') return async () => { await target.commit(); throw new Error('commit response lost'); };
+        const value = target[property]; return typeof value === 'function' ? value.bind(target) : value;
+      } });
+    } };
+    const replacement = mock.method(db, 'getConnection', () => faulty.getConnection());
+    const execute = db.execute.bind(db);
+    const lookupFailure = fault === 'lookup' ? mock.method(db, 'execute', async (sql, values) => {
+      if (sql.startsWith('SELECT id_fotos FROM fotos WHERE id_archivo')) throw new Error('lookup failure');
+      return execute(sql, values);
+    }) : null;
+    removalFailure = fault === 'cleanup';
+    try { await assert.rejects(photoUploads.upload(actor, input, { buffer: png }), { message: fault === 'commit' ? 'commit response lost' : 'metadata failure' }); }
+    finally { replacement.mock.restore(); lookupFailure?.mock.restore(); removalFailure = false; }
+    const [[middle]] = await db.execute('SELECT fotos FROM dias WHERE fecha=? AND id_puesto=1', [date]);
+    assert.equal(middle.fotos, before.fotos + (fault === 'commit' ? 1 : 0));
+    const added = [...objects.keys()].filter(path => !initialObjects.has(path));
+    assert.equal(added.length, ['commit', 'cleanup', 'lookup'].includes(fault) ? 1 : 0);
+    if (fault === 'commit') {
+      const [[saved]] = await db.execute('SELECT id_fotos FROM fotos WHERE id_archivo=?', [added[0]]);
+      assert(saved);
+    }
+    if (fault === 'cleanup' || fault === 'lookup') objects.delete(added[0]);
+  }
+});
+integration('migración de ventas y precios anteriores conserva el historial sin asignar tarifas globales', async () => {
+  await db.query('ALTER TABLE precios DROP FOREIGN KEY fk_precios_puesto');
+  await db.query('ALTER TABLE precios DROP COLUMN id_puesto, DROP COLUMN disponible');
+  await db.query('ALTER TABLE venta DROP INDEX uq_venta_operation');
+  for (const name of ['operation_id', 'request_data', 'id_vendedor', 'metodo_pago', 'copias', 'familia_contada', 'created_at'])
+    await db.query(`ALTER TABLE venta DROP COLUMN ${name}`);
+  await migrate(db, env);
+  await migrate(db, env);
+  const [[legacy]] = await db.query('SELECT COUNT(*) AS n FROM precios WHERE id_puesto IS NULL');
+  assert.equal(Number(legacy.n), 2);
+  assert.deepEqual((await call('catalog/query', { resource: 'prices', stationId: '1' }, 'encargado')).data.data, []);
+  const detail = (await call('sales/detail', { saleId: '1' }, 'encargado')).data.data;
+  assert.equal(detail.total, '1000.00'); assert.equal(detail.prices.length, 2);
+});
+
+integration('ventas del evento: tarifas por puesto, copias, familias, reintentos y cierre', async () => {
+  tokens.vendedor = (await call('auth/login', { email: 'vendedor@example.com', password: 'Test-password-1234' })).data.data.token;
+  const form = { operationId: randomUUID(), stationId: '1', photoId: '1', paymentMethod: 'efectivo', prices: [{ priceId: '1', copies: 3 }] };
+  assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'EVENT_CLOSED');
+  assert.equal((await call('attendance/kiosk/event/set', { open: true }, 'vendedor')).status, 403);
+  assert.equal((await call('attendance/kiosk/event/set', { open: true }, 'encargado')).status, 403);
+  const opened = await kioskCall('1', true);
+  assert.equal(opened.status, 200);
+  const date = opened.data.data.date;
+  // Fotos creadas por este test, fuera de los datos históricos de informes.
+  const firstPhoto = (await upload()).data.data.id;
+  const secondPhoto = (await upload()).data.data.id;
+  const beforeSale = await call('sales/photos', { stationId: '1', photoId: firstPhoto }, 'vendedor');
+  assert.equal(beforeSale.status, 200);
+  assert.equal(beforeSale.data.data.find(photo => photo.id === firstPhoto)?.sold, false);
+  form.photoId = firstPhoto;
+  await db.query('UPDATE precios SET disponible=0 WHERE id_puesto=1');
+  assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'NO_PRICES');
+  const empty = await call('catalog/query', { resource: 'prices', stationId: '1' }, 'vendedor');
+  assert.deepEqual(empty.data.data, []);
+  const created = await call('catalog/prices/create', { stationId: '1', name: 'Copia', amount: '10.10' });
+  const another = await call('catalog/prices/create', { stationId: '1', name: 'Grande', amount: '20.25' });
+  const otherStation = await call('catalog/prices/create', { stationId: '2', name: 'Ajena', amount: '1.00' });
+  assert.equal(created.status, 200);
+  assert.equal((await call('catalog/prices/create', { stationId: '1', name: 'Prohibida', amount: '1' }, 'vendedor')).status, 403);
+  form.prices = [{ priceId: otherStation.data.data.id, copies: 1 }];
+  assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'INVALID_PRICE');
+  form.prices = [{ priceId: created.data.data.id, copies: 3 }, { priceId: another.data.data.id, copies: 2 }];
+  const [[before]] = await db.execute('SELECT COUNT(*) AS n FROM venta');
+  const responses = await Promise.all([call('sales/create', form, 'vendedor'), call('sales/create', form, 'vendedor')]);
+  assert(responses.every(response => response.status === 200), JSON.stringify(responses.map(response => response.data)));
+  assert.equal(responses[0].data.data.id, responses[1].data.data.id);
+  const [[after]] = await db.execute('SELECT COUNT(*) AS n FROM venta');
+  assert.equal(Number(after.n), Number(before.n) + 1);
+  const detail = (await call('sales/detail', { saleId: responses[0].data.data.id }, 'vendedor')).data.data;
+  assert.equal(detail.total, '70.80'); assert.equal(Number(detail.copies), 5); assert.equal(detail.prices.length, 2);
+  assert.equal(detail.paymentMethod, 'efectivo');
+  assert.equal((await call('sales/create', { ...form, paymentMethod: 'tarjeta' }, 'vendedor')).status, 409);
+  const extra = await call('sales/create', { ...form, operationId: randomUUID(), paymentMethod: 'transferencia' }, 'vendedor');
+  assert.equal(extra.status, 200); assert.equal(extra.data.data.counted, false);
+  const independentInputs = ['vendedor', 'encargado'].map(role => ({ role, input: {
+    ...form, photoId: secondPhoto, operationId: randomUUID(), paymentMethod: 'tarjeta',
+  } }));
+  const independent = await Promise.all(independentInputs.map(({ role, input }) => call('sales/create', input, role)));
+  assert(independent.every(response => response.status === 200));
+  assert.equal(independent.filter(response => response.data.data.counted).length, 1);
+  const days = (await call('reports/days/query', { from: date, to: date, stationId: '1' }, 'vendedor')).data.data;
+  assert.equal(Number(days[0].sold), 2);
+  assert.equal(days[0].revenue, '283.20');
+  const photos = await call('sales/photos', { stationId: '1' }, 'vendedor');
+  assert.equal(photos.status, 200); assert.equal(photos.data.data.find(photo => photo.id === firstPhoto)?.sold, true);
+  assert.equal((await call('sales/photos/access', { photoId: firstPhoto }, 'vendedor')).status, 200);
+  assert.equal((await call('sales/photos/access', { photoId: firstPhoto }, 'cliente')).status, 403);
+  assert.equal((await call('sales/create', { ...form, operationId: randomUUID(), photoId: '1' }, 'vendedor')).status, 422);
+  assert.equal((await kioskCall('1', false)).status, 200);
+  assert.equal((await call('sales/create', { ...form, operationId: randomUUID() }, 'vendedor')).data.error.code, 'CHECK_IN_REQUIRED');
+  assert.equal((await call('sales/create', form, 'vendedor')).data.error.code, 'CHECK_IN_REQUIRED');
+  // Un actor autorizado todavía recupera su confirmación perdida después del cierre.
+  assert.equal((await call('sales/create', independentInputs[1].input, 'encargado')).status, 200);
+  assert.deepEqual((await call('sales/photos', { stationId: '1' }, 'encargado')).data.data, []);
+});
+
+integration('encargado administra precios de su puesto y conserva tarifas históricas', async () => {
+  // Una nueva apertura y entrada habilitan al vendedor después del cierre anterior.
+  await kioskCall('1', true);
+  assert.equal((await http.post('/api/attendance/kiosk/mark', {
+    userId: users.vendedor, email: 'vendedor@example.com', password: 'Test-password-1234',
+    action: 'check-in', attendanceId: null,
+  }, { headers: { Authorization: `Bearer ${kioskTokens['1']}` } })).status, 200);
+  // Simula una instalación que todavía no tenía el permiso.
+  await db.query("DELETE pr FROM permisos_rol pr JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE p.tipo_de_permiso='prices.manage'");
+  await db.query("DELETE FROM permisos WHERE tipo_de_permiso='prices.manage'");
+  await migrate(db, env);
+  assert((await call('auth/me', {}, 'encargado')).data.data.permissions.includes('prices.manage'));
+  const input = { stationId: '1', name: 'Tarifa del encargado', amount: '12.50' };
+  const created = await call('catalog/prices/create', input, 'encargado');
+  assert.equal(created.status, 200); const priceId = created.data.data.id;
+  assert.equal((await call('catalog/prices/create', { ...input, stationId: '2' }, 'encargado')).status, 403);
+  for (const role of ['vendedor', 'secretario', 'editor', 'cliente'])
+    assert.equal((await call('catalog/prices/query', { stationId: '1' }, role)).status, 403);
+  const [[foreign]] = await db.query('SELECT id_precios AS id FROM precios WHERE id_puesto=2 LIMIT 1');
+  assert.equal((await call('catalog/prices/query', { stationId: '2' }, 'encargado')).status, 403);
+  assert.equal((await call('catalog/prices/update', { ...input, priceId: foreign.id }, 'encargado')).status, 404);
+  assert.equal((await call('catalog/prices/availability', { stationId: '1', priceId: foreign.id, active: false }, 'encargado')).status, 404);
+  assert.equal((await call('catalog/prices/update', { ...input, priceId, amount: '15.75' }, 'encargado')).status, 200);
+  assert.equal((await call('catalog/prices/availability', { stationId: '1', priceId, active: false }, 'encargado')).status, 200);
+  const all = (await call('catalog/prices/query', { stationId: '1' }, 'encargado')).data.data;
+  assert(all.every(row => row.stationId === '1'));
+  assert.equal(Number(all.find(row => row.id === priceId).active), 0);
+  assert(!(await call('catalog/query', { resource: 'prices' }, 'vendedor')).data.data.some(row => row.id === priceId));
+  assert.equal((await call('catalog/prices/availability', { stationId: '1', priceId, active: true }, 'encargado')).status, 200);
+  assert.equal((await call('catalog/stations/create', { eventId: '1' }, 'encargado')).status, 403);
+  const [[historic]] = await db.query(`SELECT pv.id_venta AS saleId, pv.id_precio AS priceId, pv.precio_unitario_aplicado AS amount
+    FROM precios_venta pv JOIN venta v ON v.id_venta=pv.id_venta WHERE v.operation_id IS NOT NULL LIMIT 1`);
+  await call('catalog/prices/update', { ...input, priceId: historic.priceId, amount: '99.99' }, 'encargado');
+  const detail = (await call('sales/detail', { saleId: historic.saleId }, 'encargado')).data.data;
+  assert(detail.prices.some(row => row.priceId === historic.priceId && row.unitPrice === historic.amount));
+  await db.query("DELETE pr FROM permisos_rol pr JOIN rol r ON r.id_rol=pr.id_rol JOIN permisos p ON p.id_permisos=pr.id_permiso WHERE r.nombre='encargado' AND p.tipo_de_permiso='prices.manage'");
+  await migrate(db, env);
+  assert.equal((await call('catalog/prices/create', input, 'encargado')).status, 403);
+  await db.query("INSERT INTO permisos_rol (id_rol,id_permiso) SELECT r.id_rol,p.id_permisos FROM rol r CROSS JOIN permisos p WHERE r.nombre='encargado' AND p.tipo_de_permiso='prices.manage'");
+});
+
+integration('ventas solo lista, previsualiza y vende fotos del día actual de Argentina', async () => {
+  // Un evento que quedó abierto ayer ya no habilita fotos ni ventas.
+  eventCache.set('1', { dayId: '1', date: '2026-10-14', open: true });
+  assert.equal((await call('sales/event', { stationId: '1' }, 'vendedor')).data.data.open, false);
+  assert.deepEqual((await call('sales/photos', { stationId: '1' }, 'vendedor')).data.data, []);
+  assert.equal((await call('sales/photos/access', { photoId: '1' }, 'vendedor')).status, 404);
+  const [[price]] = await db.query('SELECT id_precios AS id FROM precios WHERE id_puesto=1 AND disponible=1 LIMIT 1');
+  const input = { stationId: '1', photoId: '1', operationId: randomUUID(), paymentMethod: 'efectivo', prices: [{ priceId: price.id, copies: 1 }] };
+  assert.equal((await call('sales/create', input, 'vendedor')).data.error.code, 'EVENT_CLOSED');
+  const open = await kioskCall('1', true);
+  assert.equal(open.status, 200); assert.equal(open.data.data.date, businessDate(new Date()));
+  const rows = (await call('sales/photos', { stationId: '1' }, 'vendedor')).data.data;
+  assert(rows.length > 0); assert(rows.every(row => row.date === businessDate(new Date())));
+  assert(!rows.some(row => row.id === '1'));
+  assert.equal((await call('sales/photos/access', { photoId: '1' }, 'vendedor')).status, 404);
+  assert.equal((await call('sales/create', input, 'vendedor')).status, 422);
+  await kioskCall('1', false);
+});
+
+integration('recuperación pública por Mailtrap reemplaza códigos y revoca todas las sesiones sin habilitar cuentas sociales', async () => {
+  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='cliente'");
+  const email = 'recuperar@example.com', password = 'Recovered-password-1234';
+  const [created] = await db.execute(`INSERT INTO usuarios (nombre,apellido,email,dni,password,id_rol)
+    VALUES ('Recuperar','Prueba',?,'99887766',?,?)`, [email, passwordHash, role.id_rol]);
+  const oldLogin = await call('auth/login', { email, password: 'Test-password-1234' }, 'anon');
+  assert.equal(oldLogin.status, 200);
+  const start = () => call('auth/password/reset/start', { email }, 'anon');
+  const first = (await start()).data.data;
+  const originalMail = recoveryMail.at(-1), mailCount = recoveryMail.length;
+  assert.equal(originalMail.email, email); assert.match(originalMail.code, /^\d{6}$/);
+  assert.equal((await start()).status, 200); assert.equal(recoveryMail.length, mailCount);
+  await db.execute("UPDATE tokens_autenticacion SET sent_at = TIMESTAMPADD(MINUTE,-2,UTC_TIMESTAMP(6)) WHERE id_usuario=?", [created.insertId]);
+  mailFailure = true;
+  try { assert.equal((await start()).status, 502); } finally { mailFailure = false; }
+  const [[preserved]] = await db.execute("SELECT used_at FROM tokens_autenticacion WHERE id_usuario=? AND tipo='password_reset'", [created.insertId]);
+  assert.equal(preserved.used_at, null);
+  const second = (await start()).data.data;
+  const body = { recoveryToken: second.recoveryToken, code: recoveryMail.at(-1).code, password };
+  assert.equal((await call('auth/password/reset/confirm', { ...body, recoveryToken: first.recoveryToken, code: originalMail.code }, 'anon')).status, 422);
+  const confirmations = await Promise.all([call('auth/password/reset/confirm', body, 'anon'), call('auth/password/reset/confirm', body, 'anon')]);
+  assert.deepEqual(confirmations.map(response => response.status).sort(), [200, 422]);
+  assert.deepEqual(confirmations.find(response => response.status === 200).data.data, { changed: true, loginRequired: true });
+  assert.equal((await http.post('/api/auth/me', {}, { headers: { Authorization: `Bearer ${oldLogin.data.data.token}` } })).status, 401);
+  assert.equal((await call('auth/login', { email, password: 'Test-password-1234' }, 'anon')).status, 401);
+  assert.equal((await call('auth/login', { email, password }, 'anon')).status, 200);
+  assert.equal((await call('auth/password/reset/confirm', body, 'anon')).status, 422);
+  await db.execute('UPDATE usuarios SET auth0_sub=? WHERE id_usuario=?', ['google-oauth2|recovery-test', created.insertId]);
+  const count = recoveryMail.length;
+  const social = await start(), unknown = await call('auth/password/reset/start', { email: 'unknown@example.com' }, 'anon');
+  assert.equal(social.status, 200); assert.equal(unknown.status, 200); assert.equal(recoveryMail.length, count);
+  assert.deepEqual(Object.keys(social.data.data), Object.keys(unknown.data.data));
+});
+
+integration('cambio de contraseña revoca sesiones y logout no altera asistencia', async () => {
+  const [[before]] = await db.query('SELECT COUNT(*) AS count FROM horarios');
+  const changed = await call('auth/password/change', { currentPassword: 'Test-password-1234', password: 'Changed-password-1234' }, 'editor');
+  assert.equal(changed.status, 200); assert.equal((await call('auth/me', {}, 'editor')).status, 401);
+  assert.equal((await call('auth/logout', {}, 'cliente')).status, 200); assert.equal((await call('auth/me', {}, 'cliente')).status, 401);
+  const [[after]] = await db.query('SELECT COUNT(*) AS count FROM horarios'); assert.equal(after.count, before.count);
+});
+integration('migraciones repetibles preservan permisos y datos originales', async () => {
+  const [previous] = await db.query('SELECT id_horario,check_in,check_out FROM horarios ORDER BY id_horario');
+  await db.query('ALTER TABLE sesiones_usuario DROP COLUMN check_in_mode');
+  await db.query('ALTER TABLE horarios DROP INDEX ix_horarios_usuario_abierto');
+  await db.query('ALTER TABLE horarios DROP CHECK ck_horarios_cierre, DROP COLUMN closed_at');
+  await migrate(db, env);
+  await migrate(db, env);
+  const [preserved] = await db.query('SELECT id_horario,check_in,check_out FROM horarios ORDER BY id_horario');
+  assert.deepEqual(preserved, previous);
+  const [[pending]] = await db.query('SELECT COUNT(*) AS count FROM horarios WHERE closed_at IS NOT NULL');
+  assert.equal(Number(pending.count), 0, 'la migración no inventa cierres históricos');
+  for (const token of Object.values(kioskTokens)) await db.execute('UPDATE sesiones_usuario SET check_in_mode = TRUE WHERE token = ?', [token]);
+  const response = await call('auth/me'); assert.equal(response.status, 200); assert.equal(response.data.data.email, 'dueno@example.com');
+  assert.equal(response.data.data.kioskMode, false);
+  const [indexes] = await db.query("SHOW INDEX FROM horarios WHERE Key_name='ix_horarios_usuario_abierto'");
+  assert(indexes.length > 0);
+});
+integration('migración conserva datos personales y sólo hashea contraseñas', async () => {
+  const [[role]] = await db.query("SELECT id_rol FROM rol WHERE nombre='cliente'");
+  const [created] = await db.execute(`INSERT INTO usuarios (nombre,apellido,email,dni,password,id_rol)
+    VALUES ('Anterior','Prueba','Legacy@example.com','40.123.456','Legacy-password-123',?)`, [role.id_rol]);
+  await migrate(db, env);
+  const [[user]] = await db.execute('SELECT * FROM usuarios WHERE id_usuario=?', [created.insertId]);
+  assert.equal(user.email, 'legacy@example.com');
+  assert.equal(user.dni, '40123456');
+  assert.equal(await verifyPassword('Legacy-password-123', user.password), true);
+  await migrate(db, env);
+  assert.equal((await call('auth/me')).status, 200);
+});
+integration('sesiones vencidas y revocación de sesiones ajenas', async () => {
+  const token = newToken();
+  const [expired] = await db.execute(`INSERT INTO sesiones_usuario (id_usuario,token,created_at,expires_at)
+    VALUES (?,?,TIMESTAMPADD(HOUR,-2,UTC_TIMESTAMP(6)),TIMESTAMPADD(HOUR,-1,UTC_TIMESTAMP(6)))`, [users.dueno, token]);
+  assert.equal((await http.post('/api/auth/me', {}, { headers: { Authorization: `Bearer ${token}` } })).status, 401);
+  await call('auth/sessions/revoke', { sessionId: String(expired.insertId) }, 'secretario');
+  const [[row]] = await db.execute('SELECT revoked_at FROM sesiones_usuario WHERE id_sesiones_usuario=?', [expired.insertId]);
+  assert.equal(row.revoked_at, null);
+});
+
+integration('registro local exige código, permite reenvío y revoca acceso tras la baja lógica del cliente', async () => {
+  const input = { firstName: 'Cliente nuevo', lastName: 'Apellido', email: 'nuevo@example.com', dni: '87654321', password: 'Password-test-1234' };
+  assert.equal((await call('auth/register', { ...input, roleId: '1' }, 'anon')).status, 422);
+  const registration = await call('auth/register', input, 'anon');
+  assert.equal(registration.status, 200);
+  let verificationToken = registration.data.data.verificationToken;
+  assert(verificationToken);
+  assert.equal((await call('auth/login', { email: input.email, password: input.password }, 'anon')).data.error.code, 'EMAIL_UNVERIFIED');
+  assert.equal((await call('auth/verification/resend', { verificationToken }, 'anon')).status, 429);
+  await db.execute("UPDATE tokens_autenticacion SET sent_at = TIMESTAMPADD(MINUTE,-2,UTC_TIMESTAMP(6)) WHERE tipo = 'email_verification'");
+  const resend = await call('auth/verification/resend', { verificationToken }, 'anon');
+  assert.equal(resend.status, 200);
+  const oldToken = verificationToken;
+  verificationToken = resend.data.data.verificationToken;
+  assert.notEqual(oldToken, verificationToken);
+  assert.equal((await call('auth/verification/confirm', { verificationToken: oldToken, code: verificationMail.at(-1).code }, 'anon')).status, 422);
+  assert.equal((await call('auth/verification/confirm', { verificationToken, code: 'bad' }, 'anon')).status, 422);
+  const verified = await call('auth/verification/confirm', { verificationToken, code: verificationMail.at(-1).code }, 'anon');
+  assert.equal(verified.status, 200);
+  tokens.newClient = verified.data.data.token;
+  assert.equal((await call('auth/me', {}, 'newClient')).status, 200);
+  assert.equal((await call('auth/verification/confirm', { verificationToken, code: verificationMail.at(-1).code }, 'anon')).status, 422);
+  const listed = await call('clients/query', { search: 'nuevo@example.com' });
+  assert.equal(listed.data.data.clients.length, 1);
+  assert.deepEqual(listed.data.data.clients[0].authenticationProviders, ['local']);
+  assert.equal(listed.data.data.clients[0].auth0Subject, undefined);
+  const clientId = String(listed.data.data.clients[0].id);
+  const [[verification]] = await db.execute("SELECT used_at FROM tokens_autenticacion WHERE id_usuario = ? AND tipo = 'email_verification'", [clientId]);
+  assert(verification.used_at);
+  for (const role of ['newClient', 'encargado', 'secretario']) {
+    if (role !== 'newClient') {
+      tokens[role] = newToken();
+      await db.execute('INSERT INTO sesiones_usuario (id_usuario,token,expires_at) VALUES (?,?,TIMESTAMPADD(HOUR,1,UTC_TIMESTAMP(6)))', [users[role], tokens[role]]);
+    }
+    assert.equal((await call('clients/query', {}, role)).status, 403);
+    assert.equal((await call('clients/deactivate', { clientId }, role)).status, 403);
+  }
+  assert.equal((await call('clients/deactivate', { clientId: users.dueno })).status, 404);
+  assert.equal((await call('clients/deactivate', { clientId })).status, 200);
+  assert.equal((await call('auth/me', {}, 'newClient')).status, 401);
+  assert.equal((await call('auth/login', { email: input.email, password: input.password }, 'anon')).status, 401);
+  assert.equal((await call('clients/query', { search: input.email })).data.data.clients.length, 0);
+  const [[persisted]] = await db.execute('SELECT disponible FROM usuarios WHERE id_usuario = ?', [clientId]);
+  assert.equal(persisted.disponible, 0);
+});
+
+integration('migra verificaciones pendientes sin perder códigos, intentos ni fechas y conserva otros tipos de tokens', async () => {
+  assert.equal((await db.query("SHOW TABLES LIKE 'client_verifications'"))[0].length, 0);
+  const pending = [];
+  for (const [index, state] of ['pending', 'blocked', 'expired'].entries()) {
+    const input = { firstName: 'Migración', lastName: state, email: `verification-${state}@example.com`,
+      dni: String(81000000 + index), password: 'Password-test-1234' };
+    const response = await call('auth/register', input, 'anon');
+    assert.equal(response.status, 200);
+    const [[user]] = await db.execute('SELECT id_usuario FROM usuarios WHERE email = ?', [input.email]);
+    pending.push({ id: user.id_usuario, verificationToken: response.data.data.verificationToken, code: verificationMail.at(-1).code });
+  }
+  await db.execute("UPDATE tokens_autenticacion SET attempts = 2 WHERE id_usuario = ? AND tipo = 'email_verification'", [pending[0].id]);
+  await db.execute("UPDATE tokens_autenticacion SET attempts = 5 WHERE id_usuario = ? AND tipo = 'email_verification'", [pending[1].id]);
+  await db.execute(`UPDATE tokens_autenticacion SET created_at = TIMESTAMPADD(MINUTE,-20,UTC_TIMESTAMP(6)),
+    sent_at = TIMESTAMPADD(MINUTE,-20,UTC_TIMESTAMP(6)), expires_at = TIMESTAMPADD(MINUTE,-10,UTC_TIMESTAMP(6))
+    WHERE id_usuario = ? AND tipo = 'email_verification'`, [pending[2].id]);
+  const unrelated = newToken();
+  for (const token of [unrelated, newToken()]) await db.execute(`INSERT INTO tokens_autenticacion (id_usuario,tipo,token,expires_at)
+    VALUES (?,'other_type',?,TIMESTAMPADD(HOUR,1,UTC_TIMESTAMP(6)))`, [pending[0].id, token]);
+  await db.query(`CREATE TABLE client_verifications (
+    id_usuario BIGINT UNSIGNED PRIMARY KEY, challenge CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL UNIQUE,
+    code_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL, expires_at DATETIME(6) NOT NULL,
+    sent_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario)
+  ) ENGINE=InnoDB`);
+  await db.query(`INSERT INTO client_verifications SELECT id_usuario,token,code_hash,expires_at,sent_at,attempts
+    FROM tokens_autenticacion WHERE tipo = 'email_verification' AND used_at IS NULL`);
+  const [before] = await db.query('SELECT id_usuario,challenge AS token,code_hash,expires_at,sent_at,attempts FROM client_verifications ORDER BY id_usuario');
+  await db.query("DELETE FROM tokens_autenticacion WHERE tipo = 'email_verification' AND used_at IS NULL");
+  // Simula una actualización desde la estructura anterior de tokens_autenticacion.
+  await db.query(`ALTER TABLE tokens_autenticacion DROP INDEX uq_tokens_verificacion_usuario,
+    DROP COLUMN id_usuario_verificacion, DROP COLUMN code_hash, DROP COLUMN sent_at, DROP COLUMN attempts`);
+  await migrate(db, env);
+  await migrate(db, env);
+  assert.equal((await db.query("SHOW TABLES LIKE 'client_verifications'"))[0].length, 0);
+  const [after] = await db.query(`SELECT id_usuario,token,code_hash,expires_at,sent_at,attempts FROM tokens_autenticacion
+    WHERE tipo = 'email_verification' AND used_at IS NULL ORDER BY id_usuario`);
+  assert.deepEqual(after, before);
+  const [[other]] = await db.execute("SELECT COUNT(*) AS count FROM tokens_autenticacion WHERE id_usuario = ? AND tipo = 'other_type' AND used_at IS NULL", [pending[0].id]);
+  assert.equal(Number(other.count), 2);
+  assert.equal((await call('auth/verification/resend', { verificationToken: pending[0].verificationToken }, 'anon')).status, 429);
+  for (const item of pending.slice(1))
+    assert.equal((await call('auth/verification/confirm', { verificationToken: item.verificationToken, code: item.code }, 'anon')).data.error.code, 'INVALID_CODE');
+  assert.equal((await call('auth/verification/confirm', { verificationToken: pending[0].verificationToken, code: pending[0].code }, 'anon')).status, 200);
+  const [[unchanged]] = await db.execute('SELECT used_at FROM tokens_autenticacion WHERE token = ?', [unrelated]);
+  assert.equal(unchanged.used_at, null);
+});
+
+integration('verificación rechaza tokens de otro tipo o usados aunque el código sea correcto', async () => {
+  const { digest, codeDigest } = await import('../../src/modules/auth/registration.service.js');
+  const input = { firstName: 'Tipos', lastName: 'Tokens', email: 'verification-types@example.com', dni: '82000000', password: 'Password-test-1234' };
+  const response = await call('auth/register', input, 'anon');
+  const { verificationToken } = response.data.data, code = verificationMail.at(-1).code;
+  const [[user]] = await db.execute('SELECT id_usuario FROM usuarios WHERE email = ?', [input.email]);
+  const otherToken = newToken();
+  await db.execute(`INSERT INTO tokens_autenticacion (id_usuario,tipo,token,code_hash,expires_at)
+    VALUES (?,'other_type',?,?,TIMESTAMPADD(MINUTE,10,UTC_TIMESTAMP(6)))`, [user.id_usuario, digest(otherToken), codeDigest(otherToken, code)]);
+  assert.equal((await call('auth/verification/confirm', { verificationToken: otherToken, code }, 'anon')).status, 422);
+  assert.equal((await call('auth/verification/resend', { verificationToken: otherToken }, 'anon')).status, 422);
+  await db.execute("UPDATE tokens_autenticacion SET used_at = UTC_TIMESTAMP(6) WHERE id_usuario = ? AND tipo = 'email_verification'", [user.id_usuario]);
+  assert.equal((await call('auth/verification/confirm', { verificationToken, code }, 'anon')).status, 422);
+  assert.equal((await call('auth/verification/resend', { verificationToken }, 'anon')).status, 422);
+});
+
+integration('clientes se consultan de a veinte, con búsqueda parcial por correo o DNI y sin empleados', async () => {
+  for (let index = 0; index < 21; index++) await db.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, password, id_rol)
+    SELECT 'Cliente', 'Página', ?, ?, ?, id_rol FROM rol WHERE nombre = 'cliente'`, [`pagina-${index}@example.com`, String(90000000 + index), passwordHash]);
+  const first = (await call('clients/query', { search: 'pagina-' })).data.data;
+  assert.equal(first.clients.length, 20); assert.equal(first.hasMore, true);
+  const second = (await call('clients/query', { search: 'pagina-', offset: 20 })).data.data;
+  assert.equal(second.clients.length, 1); assert.equal(second.hasMore, false);
+  assert(!first.clients.some(row => row.id === second.clients[0].id));
+  assert.equal((await call('clients/query', { search: '90.000.020' })).data.data.clients.length, 1);
+  assert.equal((await call('clients/query', { search: '%' })).data.data.clients.length, 0);
+  assert.equal((await call('clients/query', { search: '-' })).data.data.clients.length, 20);
+  assert.equal((await call('clients/query', { limit: 100 })).status, 422);
+  assert.equal((await call('clients/query', { search: 'dueno@example.com' })).data.data.clients.length, 0);
+});
+
+integration('registro social verificado inicia sesión y reutiliza la cuenta existente por correo', async () => {
+  const owner = await call('auth/social', { idToken: 'owner' }, 'anon');
+  assert.equal(owner.status, 200);
+  tokens.socialOwner = owner.data.data.token;
+  const ownerProfile = await call('auth/me', {}, 'socialOwner');
+  assert.equal(String(ownerProfile.data.data.id), String(users.dueno));
+  assert.equal(ownerProfile.data.data.role, 'dueno');
+  assert.equal((await call('auth/login', { email: 'dueno@example.com', password: 'Test-password-1234' }, 'anon')).status, 200);
+  const mailCount = verificationMail.length;
+  const result = await call('auth/social', { idToken: 'social-test' }, 'anon');
+  assert.equal(result.status, 200);
+  assert.ok(result.data.data.token);
+  assert.equal(result.data.data.verificationToken, undefined);
+  assert.equal(verificationMail.length, mailCount);
+  tokens.socialClient = result.data.data.token;
+  assert.equal((await call('auth/me', {}, 'socialClient')).status, 200);
+  const login = await call('auth/social', { idToken: 'social-test' }, 'anon');
+  assert.equal(login.status, 200);
+  tokens.socialClient = login.data.data.token;
+  const profile = await call('auth/me', {}, 'socialClient');
+  assert.equal(profile.data.data.role, 'cliente');
+  const clientId = String(profile.data.data.id);
+  const [[stored]] = await db.execute('SELECT nombre, apellido, dni FROM usuarios WHERE id_usuario = ?', [clientId]);
+  assert.equal(stored.nombre, ''); assert.equal(stored.apellido, ''); assert.equal(stored.dni, null);
+  await call('clients/deactivate', { clientId });
+  assert.equal((await call('auth/social', { idToken: 'social-test' }, 'anon')).status, 403);
+  assert.equal((await call('auth/me', {}, 'socialClient')).status, 401);
+});
+
+integration('fallo al enviar correo revierte el registro y permite reintentar', async () => {
+  const input = { firstName: 'Correo', lastName: 'Fallido', email: 'fallo@example.com', dni: '77777777', password: 'Password-test-1234' };
+  mailFailure = true;
+  try { assert.equal((await call('auth/register', input, 'anon')).status, 502); }
+  finally { mailFailure = false; }
+  const [[row]] = await db.execute('SELECT COUNT(*) AS count FROM usuarios WHERE email = ?', [input.email]);
+  assert.equal(Number(row.count), 0);
+  assert.equal((await call('auth/register', input, 'anon')).status, 200);
+});
+
+integration('secretario sin puesto ni jornada propia: consulta horarios globales', async () => {
+  await db.execute('UPDATE usuarios SET id_puesto=1 WHERE id_usuario=?', [users.secretario]);
+  const [history] = await db.execute('SELECT * FROM horarios WHERE id_usuario=?', [users.secretario]);
+  await migrate(db, env);
+  const [[migrated]] = await db.execute('SELECT id_puesto FROM usuarios WHERE id_usuario=?', [users.secretario]);
+  assert.equal(migrated.id_puesto, null);
+  const [preserved] = await db.execute('SELECT * FROM horarios WHERE id_usuario=?', [users.secretario]);
+  assert.deepEqual(preserved, history);
+  const [[role]] = await db.query("SELECT id_rol AS id FROM rol WHERE nombre='secretario'");
+  const created = await call('users/create', { firstName: 'Nueva', lastName: 'Secretaria', email: 'secretaria-global@example.com', dni: '98765432', roleId: role.id, stationId: '1', password: 'Test-password-1234' });
+  assert.equal(created.status, 200);
+  assert.equal(created.data.data.stationId, null);
+  const id = created.data.data.id;
+  const session = newToken();
+  await db.execute('INSERT INTO sesiones_usuario (id_usuario,token,expires_at) VALUES (?,?,TIMESTAMPADD(HOUR,2,UTC_TIMESTAMP(6)))', [id, session]);
+  for (const station of ['1', '2']) {
+    await kioskCall(station, true);
+    const headers = { Authorization: `Bearer ${kioskTokens[station]}` };
+    const directory = await http.post('/api/attendance/kiosk/employees', {}, { headers });
+    assert.equal(directory.status, 200);
+    assert(!directory.data.data.some(row => row.id === id));
+    const credentials = { userId: id, email: 'secretaria-global@example.com', password: 'Test-password-1234' };
+    for (const action of ['check-in', 'check-out']) {
+      const marked = await http.post('/api/attendance/kiosk/mark', { ...credentials, action, attendanceId: null }, { headers });
+      assert.equal(marked.status, 401);
+    }
+    const ownHeaders = { Authorization: `Bearer ${session}` };
+    assert.equal((await authRepository.actor(session)).working, false);
+    assert.equal((await http.post('/api/reports/query', period, { headers: ownHeaders })).status, 200);
+    assert.equal((await http.post('/api/attendance/query', period, { headers: ownHeaders })).status, 200);
+    assert.equal((await http.post('/api/attendance/mine', period, { headers: ownHeaders })).status, 403);
+  }
+});
+
+integration('convierte el esquema anterior, descifra datos y elimina tablas auxiliares sin recrearlas', async () => {
+  const key = randomBytes(32), iv = randomBytes(12), cipher = createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(Buffer.from('nombre'));
+  const ciphertext = Buffer.concat([cipher.update('Nombre anterior', 'utf8'), cipher.final()]);
+  const encrypted = `enc:v1:${Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64')}`;
+  await db.query('ALTER TABLE usuarios MODIFY nombre VARCHAR(1024) NOT NULL, ADD email_hash CHAR(64) UNIQUE, ADD dni_hash CHAR(64) UNIQUE');
+  await db.execute('UPDATE usuarios SET nombre=? WHERE id_usuario=?', [encrypted, users.dueno]);
+  for (const table of ['sesiones_usuario', 'tokens_autenticacion'])
+    await db.query(`ALTER TABLE ${table} CHANGE token token_hash VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL`);
+  await db.query('CREATE TABLE photo_uploads (operation_id CHAR(36) PRIMARY KEY, request_data LONGTEXT)');
+  await db.query("INSERT INTO photo_uploads VALUES ('old-upload', 'legacy-content')");
+  await db.query('CREATE TABLE backend_locks (name VARCHAR(30) PRIMARY KEY)');
+  await db.query('CREATE TABLE backend_migrations (name VARCHAR(150) PRIMARY KEY)');
+  await migrate(db, { ...env, DATA_ENCRYPTION_KEY: key.toString('hex') });
+  const [[user]] = await db.execute('SELECT nombre, password FROM usuarios WHERE id_usuario=?', [users.dueno]);
+  assert.equal(user.nombre, 'Nombre anterior'); assert.equal(user.password, passwordHash);
+  const [[active]] = await db.query('SELECT COUNT(*) AS count FROM sesiones_usuario WHERE revoked_at IS NULL');
+  assert.equal(Number(active.count), 0);
+  await migrate(db, env);
+  const [tables] = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('backend_locks','backend_migrations','photo_uploads')");
+  assert.equal(tables.length, 0);
+  const [hashColumns] = await db.query("SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND NOT (table_name = 'tokens_autenticacion' AND column_name = 'code_hash') AND column_name LIKE '%hash%'");
+  assert.equal(hashColumns.length, 0);
+});

@@ -56,8 +56,8 @@ function NavigationLink({
       >
         <View
           style={{
-            width: 28,
-            height: 28,
+            width: tab ? 24 : 28,
+            height: tab ? 24 : 28,
             flexShrink: 0,
             alignItems: 'center',
             justifyContent: 'center',
@@ -66,7 +66,7 @@ function NavigationLink({
           <Icon
             name={item.icon}
             selected={active}
-            size={28}
+            size={tab ? 24 : 28}
             color={active ? colors.primary : colors.muted}
           />
         </View>

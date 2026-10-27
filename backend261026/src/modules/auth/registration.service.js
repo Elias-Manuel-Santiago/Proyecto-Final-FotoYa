@@ -1,0 +1,128 @@
+/**
+ * @file
+ * Coordina alta de clientes, identidad social y confirmación de correo. Guarda digests de
+ * desafío/código, limita intentos y emite sesiones propias.
+ */
+import { createHash, randomInt } from 'node:crypto';
+import { db } from '../../config/database.js';
+import { env } from '../../config/env.js';
+import { transaction } from '../../shared/transaction.js';
+import { ApiError } from '../../shared/errors.js';
+import { hashPassword, verifyPassword, newToken, normalizeEmail } from '../../security/crypto.js';
+import { sendVerification } from '../../integrations/mail.js';
+import { socialIdentity } from '../../integrations/auth0.js';
+
+// Resume el desafío para buscarlo sin persistir su valor original.
+export const digest = value => createHash('sha256').update(value).digest('hex');
+// Vincula el código al desafío para impedir su reutilización con otro token.
+export const codeDigest = (token, code) => digest(`${token}:${code}`);
+// Aplica la espera entre envíos, renueva el desafío y envía un código válido por diez minutos.
+const issueCode = async (connection, user) => {
+  const [[recent]] = await connection.execute("SELECT sent_at > TIMESTAMPADD(SECOND, -60, UTC_TIMESTAMP(6)) AS recent FROM tokens_autenticacion WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL", [user.id_usuario]);
+  if (Number(recent?.recent)) throw new ApiError(429, 'Esperá un minuto antes de pedir otro código.', 'CODE_COOLDOWN');
+  const verificationToken = newToken(), code = String(randomInt(0, 1000000)).padStart(6, '0');
+  await connection.execute(`INSERT INTO tokens_autenticacion (id_usuario, tipo, token, code_hash, expires_at)
+    VALUES (?, 'email_verification', ?, ?, TIMESTAMPADD(MINUTE, 10, UTC_TIMESTAMP(6)))
+    ON DUPLICATE KEY UPDATE token = ?, code_hash = ?, used_at = NULL,
+    created_at = UTC_TIMESTAMP(6), expires_at = TIMESTAMPADD(MINUTE, 10, UTC_TIMESTAMP(6)), sent_at = UTC_TIMESTAMP(6), attempts = 0`,
+    [user.id_usuario, digest(verificationToken), codeDigest(verificationToken, code), digest(verificationToken), codeDigest(verificationToken, code)]);
+  await sendVerification(user.email, code);
+  return { verificationToken, email: user.email, expiresIn: 600 };
+};
+// Persiste una sesión propia y devuelve el Bearer con su tiempo de vida.
+const session = async (connection, user) => {
+  const token = newToken();
+  // El acceso social respeta el mismo reemplazo del dispositivo de trabajo que el local.
+  if (user.role === 'encargado') await connection.execute(`UPDATE sesiones_usuario SET revoked_at = UTC_TIMESTAMP(6)
+    WHERE id_usuario = ? AND check_in_mode = FALSE AND revoked_at IS NULL`, [user.id_usuario]);
+  await connection.execute(`INSERT INTO sesiones_usuario (id_usuario, token, expires_at)
+    VALUES (?, ?, TIMESTAMPADD(HOUR, ?, UTC_TIMESTAMP(6)))`, [user.id_usuario, token, env.SESSION_HOURS]);
+  return { token, tokenType: 'Bearer', expiresIn: env.SESSION_HOURS * 3600 };
+};
+// Crea la cuenta cliente y acepta el correo ya verificado por la identidad externa.
+async function createClient(input, identity) {
+  const password = await hashPassword(identity ? newToken() : input.password);
+  return transaction(async connection => {
+    const [[role]] = await connection.execute("SELECT id_rol FROM rol WHERE nombre = 'cliente' LOCK IN SHARE MODE");
+    if (!role) throw new ApiError(503, 'El rol cliente no está configurado.');
+    const email = identity?.email ?? normalizeEmail(input.email);
+    const verified = identity?.emailVerified === true;
+    const [result] = await connection.execute(`INSERT INTO usuarios (nombre, apellido, email, dni, password, id_rol, email_verified, auth0_sub)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [input.firstName, input.lastName, email, input.dni, password, role.id_rol, verified, identity?.subject ?? null]);
+    const user = { id_usuario: result.insertId, email };
+    return verified ? session(connection, user) : issueCode(connection, user);
+  });
+}
+export const registrationService = {
+  register: input => createClient(input),
+  // Retoma la confirmación de una cuenta local después de verificar sus credenciales.
+  async start(input) {
+    return transaction(async connection => {
+      const [[user]] = await connection.execute('SELECT * FROM usuarios WHERE email = ? FOR UPDATE', [normalizeEmail(input.email)]);
+      if (!user?.disponible || !await verifyPassword(input.password, user.password)) throw new ApiError(401, 'Correo o contraseña incorrectos.', 'INVALID_CREDENTIALS');
+      if (user.email_verified) throw new ApiError(409, 'El correo ya está confirmado.');
+      return issueCode(connection, user);
+    });
+  },
+  // Localiza la cuenta por el desafío y reemplaza el código respetando la espera entre envíos.
+  async resend({ verificationToken }) {
+    return transaction(async connection => {
+      const [[user]] = await connection.execute(`SELECT u.* FROM usuarios u JOIN tokens_autenticacion v ON v.id_usuario = u.id_usuario
+        WHERE v.token = ? AND v.tipo = 'email_verification' AND v.used_at IS NULL FOR UPDATE`, [digest(verificationToken)]);
+      if (!user?.disponible || user.email_verified) throw new ApiError(422, 'La verificación ya no está disponible.');
+      return issueCode(connection, user);
+    });
+  },
+  // Confirma el correo y emite sesión en una transacción; conserva el conteo de intentos fallidos.
+  async verify({ verificationToken, code }) {
+    const result = await transaction(async connection => {
+      // Bloquear usuario antes de cambiar su verificación o emitir una sesión.
+      const [[user]] = await connection.execute(`SELECT u.* FROM usuarios u JOIN tokens_autenticacion v ON v.id_usuario = u.id_usuario
+        WHERE v.token = ? AND v.tipo = 'email_verification' AND v.used_at IS NULL FOR UPDATE`, [digest(verificationToken)]);
+      if (!user?.disponible || user.email_verified) return null;
+      const [[verification]] = await connection.execute(`SELECT *, expires_at > UTC_TIMESTAMP(6) AS valid
+        FROM tokens_autenticacion WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL FOR UPDATE`, [user.id_usuario]);
+      if (!Number(verification.valid) || verification.attempts >= 5) return null;
+      if (verification.code_hash !== codeDigest(verificationToken, code)) {
+        // Se devuelve null para confirmar el incremento; lanzar aquí revertiría el intento fallido.
+        await connection.execute("UPDATE tokens_autenticacion SET attempts = attempts + 1 WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL", [user.id_usuario]);
+        return null;
+      }
+      await connection.execute('UPDATE usuarios SET email_verified = TRUE WHERE id_usuario = ?', [user.id_usuario]);
+      await connection.execute("UPDATE tokens_autenticacion SET used_at = UTC_TIMESTAMP(6) WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL", [user.id_usuario]);
+      return session(connection, user);
+    });
+    // El error se emite después del commit para conservar el límite de intentos.
+    if (!result) throw new ApiError(422, 'Código incorrecto, vencido o bloqueado. Solicitá uno nuevo.', 'INVALID_CODE');
+    return result;
+  },
+  // Resuelve la identidad externa sin exigir datos personales adicionales.
+  async social(input) {
+    const identity = await socialIdentity(input.idToken);
+    const [[found]] = await db.execute('SELECT id_usuario FROM usuarios WHERE auth0_sub = ?', [identity.subject]);
+    const [[existing]] = found ? [[null]] : await db.execute('SELECT id_usuario FROM usuarios WHERE email = ?', [identity.email]);
+    if (found || existing) return transaction(async connection => {
+      // Conserva el orden de bloqueo del login local y de la edición de roles.
+      await connection.query('SELECT id_rol FROM rol ORDER BY id_rol FOR UPDATE');
+      const [[user]] = await connection.execute(`SELECT u.*, r.nombre AS role FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
+        WHERE u.id_usuario = ? FOR UPDATE`, [(found ?? existing).id_usuario]);
+      if (!user?.disponible) throw new ApiError(403, 'La cuenta no está disponible.');
+      if (user.role === 'checkin') throw new ApiError(403, 'Ingresá con la cuenta del encargado.');
+      // Una identidad conocida tiene prioridad sobre el correo. Revalida bajo bloqueo.
+      if (found && user.auth0_sub !== identity.subject)
+        throw new ApiError(401, 'La identidad social cambió. Volvé a ingresar.', 'INVALID_SOCIAL_IDENTITY');
+      // El correo del token firmado debe estar verificado para acceder a otra cuenta.
+      // No cambia contraseña ni auth0_sub: conserva login local, recuperación y otros proveedores.
+      if (!found && (identity.emailVerified !== true || normalizeEmail(user.email) !== identity.email))
+        throw new ApiError(401, 'Verificá el correo en el proveedor o ingresá con tu método habitual.', 'SOCIAL_EMAIL_UNVERIFIED');
+      // Retoma cuentas creadas antes de aceptar la verificación del proveedor.
+      if (!user.email_verified && identity.emailVerified === true && normalizeEmail(user.email) === identity.email) {
+        await connection.execute('UPDATE usuarios SET email_verified = TRUE WHERE id_usuario = ?', [user.id_usuario]);
+        await connection.execute("UPDATE tokens_autenticacion SET used_at = UTC_TIMESTAMP(6) WHERE id_usuario = ? AND tipo = 'email_verification' AND used_at IS NULL", [user.id_usuario]);
+        user.email_verified = true;
+      }
+      return user.email_verified ? session(connection, user) : issueCode(connection, user);
+    });
+    return createClient({ firstName: identity.firstName ?? '', lastName: identity.lastName ?? '', dni: null }, identity);
+  },
+};

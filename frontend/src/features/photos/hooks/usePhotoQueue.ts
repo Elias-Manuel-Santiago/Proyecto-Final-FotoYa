@@ -4,7 +4,7 @@
  * la confirmación del servidor.
  */
 import { useState } from 'react';
-import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { randomUUID } from 'expo-crypto';
 import type { PhotoFile } from '../../../domain/models';
 import { useAction } from '../../../hooks/useAction';
@@ -24,19 +24,24 @@ export function usePhotoQueue() {
   // Agrega archivos con UUID estable evitando repetir la misma selección por URI y nombre.
   function select() {
     void action.run(async () => {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/jpeg', 'image/png', 'image/webp'],
-        multiple: true,
-        copyToCacheDirectory: true,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        quality: 1,
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       });
       if (result.canceled) return;
       const selected: QueuedPhoto[] = result.assets.map((asset) => ({
         // Esta clave se conserva al reintentar: el servidor reconoce una carga ya confirmada.
         key: randomUUID(),
-        name: asset.name,
+        name:
+          asset.fileName ??
+          asset.uri.split('/').pop()?.split('?')[0] ??
+          'foto.jpg',
         uri: asset.uri,
         mimeType: asset.mimeType,
-        size: asset.size,
+        size: asset.fileSize,
         file: asset.file,
         status: 'selected',
       }));
