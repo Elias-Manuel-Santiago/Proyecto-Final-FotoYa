@@ -71,17 +71,18 @@ function EmployeeDetails() {
           Estado: {target.active ? 'Activo' : 'Inactivo'}
         </Text>
       </View>
-      {target.roleId !== 'client' && can(employee, 'attendance.read') && (
-        <Link
-          href={{
-            pathname: '/attendance',
-            params: { employeeId: target.id },
-          }}
-          style={[styles.card, styles.text]}
-        >
-          Consultar horarios
-        </Link>
-      )}
+      {!['client', 'secretary'].includes(target.roleId) &&
+        can(employee, 'attendance.read') && (
+          <Link
+            href={{
+              pathname: '/attendance',
+              params: { employeeId: target.id },
+            }}
+            style={[styles.card, styles.text]}
+          >
+            Consultar horarios
+          </Link>
+        )}
       <Feedback error={action.error} success={action.success} />
       {manageable && (
         <>

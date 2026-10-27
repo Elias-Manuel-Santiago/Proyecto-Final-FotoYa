@@ -65,3 +65,11 @@ test('Storage exige URL del proyecto y clave API de servidor, sin claves S3 ni p
     });
   }
 });
+
+
+test('secretario no accede a asistencia aunque conserve permisos anteriores', () => {
+  const secretary = actor('secretario', { permissions: ['attendance.read', 'attendance.self', 'reports.read'] });
+  for (const permission of ['attendance.read', 'attendance.self'])
+    assert.throws(() => assertPermission(secretary, permission), { status: 403 });
+  assert.doesNotThrow(() => assertPermission(secretary, 'reports.read'));
+});

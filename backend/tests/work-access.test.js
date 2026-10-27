@@ -14,7 +14,7 @@ const check = (role, path, overrides = {}, auth = false) => {
   return allowed;
 };
 test('empleados fuera de jornada solo conservan acceso a su cuenta', () => {
-  for (const role of ['secretario', 'editor', 'camarografo', 'vendedor']) {
+  for (const role of ['editor', 'camarografo', 'vendedor']) {
     assert.equal(check(role, '/me', { working: false }, true), true);
     assert.equal(check(role, '/password/change', { working: false }, true), true);
     for (const path of ['/photos/query', '/sales/create', '/attendance/mine', '/catalog/query', '/users/query']) {
@@ -22,7 +22,7 @@ test('empleados fuera de jornada solo conservan acceso a su cuenta', () => {
       assert.equal(check(role, path, { working: true }), true);
     }
   }
-  for (const role of ['dueno', 'encargado', 'cliente']) assert.equal(check(role, '/photos/query'), true);
+  for (const role of ['dueno', 'encargado', 'secretario', 'cliente']) assert.equal(check(role, '/photos/query'), true);
 });
 test('la sesión Check-in del encargado impide volver al sistema o cerrar sin contraseña', () => {
   const kiosk = { kioskMode: true };

@@ -27,7 +27,7 @@ import type {
   LocationEventInput,
   StationUpdateInput,
 } from '../domain/models';
-import { canWork } from '../domain/permissions';
+import { can, canWork, type Permission } from '../domain/permissions';
 import { businessDate, periodError, utcInstant } from '../domain/dates';
 import { errorMessage } from '../domain/format';
 import { ApiClient } from './api-client';
@@ -313,7 +313,7 @@ export class HttpFotoYaRepository {
         attendance: [],
       };
     // Consulta los permisos efectivos del perfil recién recibido.
-    const has = (permission: string) => actor.permissions?.includes(permission);
+    const has = (permission: Permission) => can(actor, permission);
     const inScope = (row: { stationId: string | number | null }) =>
       actor.roleId !== 'manager' || String(row.stationId) === actor.stationId;
     const stationId =

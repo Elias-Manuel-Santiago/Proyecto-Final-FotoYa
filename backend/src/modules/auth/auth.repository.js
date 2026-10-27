@@ -17,7 +17,7 @@ export const authRepository = {
       EXISTS(SELECT 1 FROM sesiones_usuario k WHERE k.id_usuario = u.id_usuario AND k.check_in_mode = TRUE
         AND k.revoked_at IS NULL AND k.expires_at > UTC_TIMESTAMP(6)) AS checkInActive,
       EXISTS(SELECT 1 FROM horarios h JOIN dias d ON d.id_dias = h.id_dias
-        WHERE h.id_usuario = u.id_usuario AND h.check_out IS NULL AND h.closed_at IS NULL AND (r.nombre = 'secretario' OR d.id_puesto = u.id_puesto)) AS working
+        WHERE h.id_usuario = u.id_usuario AND h.check_out IS NULL AND h.closed_at IS NULL AND d.id_puesto = u.id_puesto) AS working
       FROM sesiones_usuario s
       JOIN usuarios u ON u.id_usuario = s.id_usuario JOIN rol r ON r.id_rol = u.id_rol
       WHERE s.token = ? AND s.revoked_at IS NULL AND s.expires_at > UTC_TIMESTAMP(6) AND u.disponible = 1 AND u.email_verified = 1

@@ -69,8 +69,6 @@ export const rolePermissions: Record<RoleId, readonly Permission[]> = {
     'catalog.read',
     'reports.read',
     'employees.read',
-    'attendance.read',
-    'attendance.self',
     'sales.read',
   ],
   editor: [
@@ -98,6 +96,9 @@ const globalRoles: readonly RoleId[] = ['owner', 'secretary'];
 export function can(employee: Employee, permission: Permission) {
   return (
     employee.active &&
+    !(
+      employee.roleId === 'secretary' && permission.startsWith('attendance.')
+    ) &&
     canWork(employee) &&
     !employee.kioskMode &&
     (employee.permissions ?? rolePermissions[employee.roleId]).includes(
@@ -109,7 +110,7 @@ export function can(employee: Employee, permission: Permission) {
 // Exige jornada abierta a los roles que la necesitan.
 export function canWork(employee: Employee) {
   return (
-    !['secretary', 'editor', 'cameraman', 'seller'].includes(employee.roleId) ||
+    !['editor', 'cameraman', 'seller'].includes(employee.roleId) ||
     employee.working === true
   );
 }

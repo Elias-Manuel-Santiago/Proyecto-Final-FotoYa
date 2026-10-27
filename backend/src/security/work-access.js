@@ -6,7 +6,7 @@
 import { ApiError } from '../shared/errors.js';
 
 // Determina qué roles necesitan registrar entrada para operar.
-export const requiresAttendance = role => ['secretario', 'editor', 'camarografo', 'vendedor'].includes(role);
+export const requiresAttendance = role => ['editor', 'camarografo', 'vendedor'].includes(role);
 
 // Se aplica también a peticiones directas y a sesiones abiertas en otros dispositivos.
 // Restringe las rutas según kiosco y jornada después de autenticar al actor.

@@ -66,3 +66,20 @@ test('Dueño y Secretario navegan ciudades, eventos y puestos; otros roles no ve
       assert.equal(links.includes(href), ['owner', 'secretary'].includes(role));
   }
 });
+
+test('Secretario opera sin jornada y no ve horarios ni asistencia, incluso con permisos anteriores', () => {
+  for (const permissions of [
+    undefined,
+    ['reports.read', 'employees.read', 'attendance.read', 'attendance.self'],
+  ]) {
+    const links = navigationFor({
+      ...employee('secretary'),
+      working: false,
+      permissions,
+    }).map((link) => link.href);
+    assert(links.includes('/reports'));
+    assert(links.includes('/employees'));
+    assert(!links.includes('/attendance'));
+    assert(!links.includes('/my-attendance'));
+  }
+});

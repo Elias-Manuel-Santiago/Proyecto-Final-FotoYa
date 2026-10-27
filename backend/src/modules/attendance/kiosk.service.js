@@ -104,7 +104,7 @@ export const kioskService = {
         WHERE h.id_usuario = u.id_usuario AND h.check_out IS NULL AND h.closed_at IS NULL AND d.id_puesto = ?
         ORDER BY h.id_horario DESC LIMIT 1) AS attendanceId
       FROM usuarios u JOIN rol r ON r.id_rol = u.id_rol
-      WHERE u.disponible = 1 AND (u.id_puesto = ? OR r.nombre = 'secretario') AND r.nombre NOT IN ('cliente', 'dueno', 'checkin')
+      WHERE u.disponible = 1 AND u.id_puesto = ? AND r.nombre NOT IN ('cliente', 'dueno', 'secretario', 'checkin')
       ORDER BY u.nombre, u.apellido, u.id_usuario LIMIT ? OFFSET ?`, [actor.stationId, actor.stationId, String(input.limit), String(input.offset)]);
     return rows.map(row => ({ ...row, working: row.attendanceId !== null }));
   },
@@ -122,7 +122,7 @@ export const kioskService = {
         WHERE u.id_usuario = ? FOR UPDATE`, [input.userId]);
       const valid = await verifyPassword(input.password, employee?.password ?? dummyHash);
       if (!valid || !employee?.disponible || employee.email !== normalizeEmail(input.email) ||
-        (employee.role !== 'secretario' && employee.stationId !== actor.stationId) || ['cliente', 'dueno', 'checkin'].includes(employee.role))
+        employee.stationId !== actor.stationId || ['cliente', 'dueno', 'secretario', 'checkin'].includes(employee.role))
         throw new ApiError(401, 'Ingresá el mail y la contraseña del empleado seleccionado.', 'INVALID_CREDENTIALS');
       const [open] = await connection.execute(`SELECT h.id_horario AS id, d.id_puesto AS stationId
         FROM horarios h JOIN dias d ON d.id_dias = h.id_dias

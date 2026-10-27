@@ -9,7 +9,7 @@ import { ApiError } from '../shared/errors.js';
 export const globalScope = actor => ['dueno', 'secretario'].includes(actor.role);
 // Interrumpe la operación si el permiso no figura entre los permisos efectivos del actor.
 export function assertPermission(actor, permission) {
-  if (!actor.permissions.includes(permission)) throw new ApiError(403, 'No tenés permiso para esta operación.', 'FORBIDDEN');
+  if ((actor.role === 'secretario' && permission.startsWith('attendance.')) || !actor.permissions.includes(permission)) throw new ApiError(403, 'No tenés permiso para esta operación.', 'FORBIDDEN');
 }
 // Adapta la comprobación de permisos a la cadena de middlewares de Express.
 export const permit = permission => (req, res, next) => {

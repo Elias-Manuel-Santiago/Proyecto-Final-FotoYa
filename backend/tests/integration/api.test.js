@@ -1004,7 +1004,7 @@ integration('fallo al enviar correo revierte el registro y permite reintentar', 
   assert.equal((await call('auth/register', input, 'anon')).status, 200);
 });
 
-integration('secretario sin puesto: migración, altas, jornada y check-in en cualquier puesto', async () => {
+integration('secretario sin puesto ni asistencia: migración, altas y acceso sin jornada', async () => {
   await db.execute('UPDATE usuarios SET id_puesto=1 WHERE id_usuario=?', [users.secretario]);
   const [history] = await db.execute('SELECT * FROM horarios WHERE id_usuario=?', [users.secretario]);
   await migrate(db, env);
@@ -1024,16 +1024,17 @@ integration('secretario sin puesto: migración, altas, jornada y check-in en cua
     const headers = { Authorization: `Bearer ${kioskTokens[station]}` };
     const directory = await http.post('/api/attendance/kiosk/employees', {}, { headers });
     assert.equal(directory.status, 200);
-    assert(directory.data.data.some(row => row.id === id));
+    assert(!directory.data.data.some(row => row.id === id));
     const credentials = { userId: id, email: 'secretaria-global@example.com', password: 'Test-password-1234' };
-    const checkedIn = await http.post('/api/attendance/kiosk/mark', { ...credentials, action: 'check-in', attendanceId: null }, { headers });
-    assert.equal(checkedIn.status, 200);
-    const listed = await http.post('/api/attendance/kiosk/employees', {}, { headers });
-    const current = listed.data.data.find(row => row.id === id);
-    assert.equal(current.working, true);
-    assert.equal((await authRepository.actor(session)).working, true);
-    const checkedOut = await http.post('/api/attendance/kiosk/mark', { ...credentials, action: 'check-out', attendanceId: current.attendanceId }, { headers });
-    assert.equal(checkedOut.status, 200);
+    for (const action of ['check-in', 'check-out']) {
+      const marked = await http.post('/api/attendance/kiosk/mark', { ...credentials, action, attendanceId: null }, { headers });
+      assert.equal(marked.status, 401);
+    }
+    const ownHeaders = { Authorization: `Bearer ${session}` };
+    assert.equal((await authRepository.actor(session)).working, false);
+    assert.equal((await http.post('/api/reports/query', period, { headers: ownHeaders })).status, 200);
+    for (const endpoint of ['query', 'mine'])
+      assert.equal((await http.post(`/api/attendance/${endpoint}`, period, { headers: ownHeaders })).status, 403);
   }
 });
 

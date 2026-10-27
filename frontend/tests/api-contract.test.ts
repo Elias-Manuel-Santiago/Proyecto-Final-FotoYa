@@ -593,7 +593,7 @@ test('informes conservan NULL y días inconsistentes aunque el saldo agregado se
   assert.equal(totalMetrics(rows).percentage, null);
 });
 
-test('filtros de ciudad/evento usan IDs del catálogo y asistencia propia usa puesto histórico', async () => {
+test('filtros de ciudad/evento usan IDs del catálogo y secretario no consulta asistencia', async () => {
   const { repo, requests } = fixture('secretario');
   const data = await repo.snapshot(
     { ...period, city: 'Ciudad', event: 'Evento' },
@@ -604,11 +604,8 @@ test('filtros de ciudad/evento usan IDs del catálogo y asistencia propia usa pu
   assert.equal(report.body.eventId, '3');
   assert(!('city' in report.body));
   assert(!('event' in report.body));
-  assert(requests.some((row) => row.path === 'attendance/mine'));
-  assert(!requests.some((row) => row.path === 'attendance/query'));
-  assert.equal(data.attendance[0].stationId, '2');
-  assert.equal(data.attendance[0].checkOut, null);
-  assert.equal(data.attendance[0].closedAt, '2026-10-16T02:00:00Z');
+  assert(!requests.some((row) => row.path.startsWith('attendance/')));
+  assert.deepEqual(data.attendance, []);
 });
 
 test('fechas MySQL se interpretan como UTC y los períodos respetan 367 días', () => {
@@ -695,13 +692,7 @@ test('check-in conserva la sesión y envía credenciales del empleado y estado e
 });
 
 test('sin check-in o en modo check-in el snapshot solo consulta el perfil', async () => {
-  for (const role of [
-    'editor',
-    'camarografo',
-    'vendedor',
-    'secretario',
-    'encargado',
-  ]) {
+  for (const role of ['editor', 'camarografo', 'vendedor', 'encargado']) {
     const { repo, requests } = fixture(role, {
       'auth/me': {
         ...actor(role),
@@ -988,4 +979,22 @@ test('snapshot del encargado descarta catálogos ajenos y fija su puesto aunque 
     assert.equal(request.body.cityId, undefined);
     assert.equal(request.body.eventId, undefined);
   }
+});
+
+test('secretario sin jornada carga sus consultas y omite asistencia con permisos anteriores', async () => {
+  const { repo, requests } = fixture('secretario', {
+    'auth/me': {
+      ...actor('secretario', [
+        ...backendPermissions.secretario,
+        'attendance.read',
+        'attendance.self',
+      ]),
+      working: false,
+    },
+  });
+  const data = await repo.snapshot();
+  assert(requests.some((row) => row.path === 'reports/query'));
+  assert(requests.some((row) => row.path === 'users/query'));
+  assert(!requests.some((row) => row.path.startsWith('attendance/')));
+  assert.deepEqual(data.attendance, []);
 });

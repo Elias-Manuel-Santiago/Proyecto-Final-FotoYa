@@ -115,3 +115,5 @@ En la aplicación SPA, agregar el origen web exacto (por ejemplo `http://localho
 El dueño dispone de **Clientes**, con búsqueda por correo o DNI, páginas de 20 y confirmación de baja en un modal. El listado no muestra el ID interno. Los permisos efectivos se reciben del backend; una baja oculta al cliente del listado y bloquea su acceso conservando el historial.
 
 La persistencia web requiere acceso a localStorage y comparte el alcance del origen del navegador; una vulnerabilidad XSS podría exponer el token. En móvil se debe regenerar la build de desarrollo para incorporar expo-secure-store. Las pruebas automatizadas cubren recuperación de los siete roles, check-in, revocación, cierre sin conexión y fallos temporales; no sustituyen una prueba en dispositivo.
+
+El Secretario usa la aplicación sin check-in/check-out y no tiene secciones de horarios ni asistencia. Tampoco figura en la nómina del kiosco. Ejecutar `npm run db:migrate` en `backend` para retirar los permisos anteriores; se conserva el historial existente.
