@@ -38,6 +38,7 @@ export default function WorkspaceLayout() {
       )}
       <Stack
         screenOptions={{
+          title: 'Foto Ya',
           headerShown: false,
           contentStyle: { backgroundColor: colors.background },
         }}

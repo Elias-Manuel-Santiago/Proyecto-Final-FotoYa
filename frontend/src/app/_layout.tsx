@@ -44,6 +44,7 @@ function AppNavigator() {
   return (
     <Stack
       screenOptions={{
+        title: 'Foto Ya',
         headerShown: false,
         contentStyle: { backgroundColor: colors.background },
       }}
